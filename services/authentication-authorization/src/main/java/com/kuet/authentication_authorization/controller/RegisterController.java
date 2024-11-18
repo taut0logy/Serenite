@@ -18,4 +18,10 @@ public class RegisterController {
     {
         return registerService.register(user);
     }
+
+    @PostMapping("/login")
+    public String login(@RequestBody Users user)
+    {
+        return registerService.verify(user);
+    }
 }

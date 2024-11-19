@@ -1,11 +1,13 @@
 package com.kuet.meet.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.apache.catalina.User;
 
 @Data
-@Builder
+
 public class Users {
     private String username;
     private String email;

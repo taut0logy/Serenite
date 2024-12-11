@@ -27,12 +27,13 @@ export const CardWrapper = ({
         <Header label={headerLabel} />
       </CardHeader>
       <CardContent>{children}</CardContent>
-      {showSocial && (
         <CardFooter className="flex flex-col items-center space-y-4">
-          <Social />
+          
+      {showSocial && (
+          <Social />      )}
+
           <BackButton label={backButtonLabel} href={backButtonHref} />
         </CardFooter>
-      )}
     </Card>
   );
 };

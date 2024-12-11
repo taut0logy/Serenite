@@ -14,6 +14,7 @@ import { getUserByEmail } from "@/data/user";
 import { db } from "@/lib/db";
 import { sendVerificationEmail, sendTwoFactorTokenEmail } from "@/lib/mail";
 import { getTwoFactorConfirmationByUserId } from "@/data/two-factor-confirmation";
+import { UserRole } from "@prisma/client";
 
 export const login = async (values: z.infer<typeof LoginSchema>) => {
   const validatedFields = LoginSchema.parse(values);
@@ -100,25 +101,49 @@ export const login = async (values: z.infer<typeof LoginSchema>) => {
 
   try {
     await signIn("credentials", {
-      email, password,
-      redirectTo: DEFAULT_LOGIN_REDIRECT
+      email,
+      password,
+      redirectTo: getRedirectPathByRole(existingUser.role),
     });
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
         case "CredentialsSignin":
           return { error: "Invalid credentials" };
-
         default:
-          return { error: "Something went wrong !" };
-
+          return { error: "Something went wrong!" };
       }
     }
 
     throw error;
-
-
-
   }
+};
 
+
+/**
+ * Get the redirect path based on the user role
+ * @param {UserRole} role
+ * @returns {string}
+ */
+const getRedirectPathByRole = (role: UserRole): string => {
+  switch (role) {
+    case "USER":
+      return "/user/dashboard";
+    case "PREMIUM_USER":
+      return "/premium-user/dashboard";
+    case "SUPER_ADMIN":
+      return "/super-admin/dashboard";
+    case "FAQ_MANAGER":
+      return "/faq-manager/dashboard";
+    case "REPORT_MANAGER":
+      return "/report-manager/dashboard";
+    case "CONSULTANT_MANAGER":
+      return "/consultant-manager/dashboard";
+    case "CONSULTANT":
+      return "/consultant/dashboard";
+    case "GENERAL_MANAGER":
+      return "/general-manager/dashboard";
+    default:
+      return DEFAULT_LOGIN_REDIRECT;
+  }
 };

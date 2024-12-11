@@ -2,13 +2,15 @@
 
 import { db } from "@/lib/db";
 import { getUserByEmail } from "@/data/user";
-import { getVerificationTokenByEmail } from "@/data/verification-token";
+import { getVerificationTokenByEmail, getVerificationTokenByToken } from "@/data/verification-token";
 
 export const newVerification = async (token:string) => {
-  const existingToken = await getVerificationTokenByEmail(token);
+  const existingToken = await getVerificationTokenByToken(token);
+
+
 
   if(!existingToken){
-    return { error: "Token does nto exist!" };
+    return { error: "Token does not exist!" };
   }
   const hasExpired = new Date() > new Date(existingToken.expires);
 

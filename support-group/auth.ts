@@ -5,7 +5,7 @@ import { db } from "@/lib/db"
 import authConfig from "@/auth.config"
 import { UserRole } from "@prisma/client";
 
-declare module "@auth/core"{
+declare module "@auth/core" {
   interface Session {
 
   }
@@ -22,14 +22,36 @@ export const {
     error: "/auth/error",
   },
   events: {
-    async linkAccount({user}){
+    async linkAccount({ user }) {
       await db.user.update({
-        where: {id: user.id},
-        data:{emailVerified: new Date()}
+        where: { id: user.id },
+        data: { emailVerified: new Date() }
       })
     }
   },
   callbacks: {
+
+    async signIn({ user, account }) {
+      if (account?.provider !== "credentials") return true;
+      //newly added
+      if (!user?.id) {
+        console.error("User ID is missing.");
+        return false;
+      }
+
+      const existingUser = await getUserById(user.id);
+
+      //prevent sign in without email verification
+
+      if (!existingUser?.emailVerified) { return false; }
+
+      // add 2fa check 
+
+      return true;
+    }
+
+
+    ,
     async session({ session, token }) {
 
       if (token.sub && session.user) {

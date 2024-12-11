@@ -6,6 +6,7 @@ import { generateVerificationToken } from "@/lib/tokens";
 
 import { db } from "@/lib/db";
 import { getUserByEmail, getUserByUsername } from "@/data/user";
+import { sendVerificationEmail } from "@/lib/mail";
 
 
 export const register = async (values: z.infer<typeof RegisterSchema>) => {
@@ -38,14 +39,14 @@ export const register = async (values: z.infer<typeof RegisterSchema>) => {
       username,
       password: hashedPassword,
     }
-    
+
   });
 
-    const verificationToken = await generateVerificationToken(email);
+  const verificationToken = await generateVerificationToken(email);
+  await sendVerificationEmail(verificationToken.email, verificationToken.token,);
 
 
-  return { success : "Verification Token sent!" };
+  return { success: "Confirmation mail sent!" };
 
 
-  return { success: "Email sent!" };
 };

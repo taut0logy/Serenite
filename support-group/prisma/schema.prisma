@@ -27,9 +27,13 @@ model User {
   username      String?   @unique
   email         String?   @unique
   emailVerified DateTime? @map("email_verified")
-  image         String?
+  avatar        String?
   password      String?
   role          UserRole  @default(USER)
+  division               String?                 
+  district               String?                 
+  upzilla                String?  
+  mobile       String?  @unique              
   accounts      Account[]
   isTwoFactorEnabled Boolean @default(false)
   twoFactorConfirmation TwoFactorConfirmation?

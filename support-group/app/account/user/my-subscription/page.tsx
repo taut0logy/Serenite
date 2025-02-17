@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation"; // Update this import
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ const plans: SubscriptionPlan[] = [
 export default function Subscription() {
   const [isYearly, setIsYearly] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const router = useRouter(); // No change needed here
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f0f4ff] to-[#f9fafb] dark:from-[#1e1b4b] dark:to-[#171923]">
@@ -163,7 +165,10 @@ export default function Subscription() {
                     <Button 
                       className={`w-full ${plan.isPopular ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
                       variant={plan.isPopular ? "default" : "outline"}
-                      onClick={() => setSelectedPlan(plan.id)}
+                      onClick={() => {
+                        setSelectedPlan(plan.id);
+                        router.push('/account/user/my-subscription/payment'); // No change needed here
+                      }}
                     >
                       {plan.isPopular ? 'Upgrade Now' : 'Get Started'}
                     </Button>

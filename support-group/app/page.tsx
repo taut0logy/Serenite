@@ -1,30 +1,20 @@
-import { LoginButton } from "@/components/auth/login-button";
 import { Button } from "@/components/ui/button";
-
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuIndicator,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-  NavigationMenuViewport,
-} from "@/components/ui/navigation-menu";
+import { HeroSection } from "@/components/sections/hero";
+import { FeaturesSection } from "@/components/sections/features";
+import { HowItWorksSection } from "@/components/sections/how-it-works";
+import { TestimonialsSection } from "@/components/sections/testimonials";
+import { FaqSection } from "@/components/sections/faq";
+import { CtaSection } from "@/components/sections/cta";
 
 export default function Home() {
   return (
-    <main className="flex h-full flex-row items-center justify-evenly bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-400 to-blue-800">
-      <div>
-        <p className="text-white text-xl">Home Page</p>
-        
-        
-      </div>
-
-      {/* Login Button */}
-      <LoginButton>
-        <Button variant="secondary" size="lg">Sign in</Button>
-      </LoginButton>
-    </main>
+    <div className="w-full">
+      <HeroSection />
+      <FeaturesSection />
+      <HowItWorksSection />
+      <TestimonialsSection />
+      <FaqSection />
+      <CtaSection />
+    </div>
   );
 }

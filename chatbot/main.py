@@ -1,23 +1,34 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict
 from chatbot_service import ChatbotService
+from kyc import KYCService
 from datetime import datetime
+import json
+import logging
 
 app = FastAPI()
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this in production
+    allow_origins=["http://localhost:3000"],  # Your frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize chatbot service
+# Initialize services
 chatbot_service = ChatbotService()
+kyc_service = KYCService()
+
+# Enhanced logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class ChatRequest(BaseModel):
     message: str
@@ -25,6 +36,15 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+
+class VerificationResult(BaseModel):
+    verified: bool
+    confidence: float
+    details: List[dict]
+
+class VerifyRequest(BaseModel):
+    id_photo_path: str
+    selfie_paths: List[str]
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -66,6 +86,74 @@ async def health_check():
 @app.get("/")
 async def root():
     return {"message": "Chatbot API is running"}
+
+@app.post("/kyc/upload-id")
+async def upload_id_photo(
+    user_id: str = Form(...),
+    id_photo: UploadFile = File(...)
+):
+    """Upload ID photo for KYC verification"""
+    try:
+        # Log the upload attempt
+        logger.info(f"Receiving ID photo upload for user: {user_id}")
+        logger.info(f"File details - Filename: {id_photo.filename}, Content-Type: {id_photo.content_type}")
+        
+        # Read file contents
+        contents = await id_photo.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Empty file received")
+            
+        logger.info(f"Successfully read {len(contents)} bytes from uploaded file")
+        
+        # Save the image
+        file_path = await kyc_service.save_image(contents, user_id, "id")
+        logger.info(f"Successfully saved ID photo to: {file_path}")
+        
+        return {"status": "success", "file_path": file_path}
+    except Exception as e:
+        logger.error(f"Error in upload_id_photo: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/kyc/upload-selfies")
+async def upload_selfies(
+    user_id: str = Form(...),
+    selfies: UploadFile = File(...)
+):
+    """Upload selfie for KYC verification"""
+    try:
+        logger.info(f"Receiving selfie upload for user: {user_id}")
+        logger.info(f"File details - Filename: {selfies.filename}, Content-Type: {selfies.content_type}")
+        
+        # Read file contents
+        contents = await selfies.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Empty file received")
+            
+        logger.info(f"Successfully read {len(contents)} bytes from uploaded file")
+        
+        # Save the image
+        file_path = await kyc_service.save_image(contents, user_id, "selfie")
+        logger.info(f"Successfully saved selfie to: {file_path}")
+        
+        return {"status": "success", "file_paths": [file_path]}
+    except Exception as e:
+        logger.error(f"Error in upload_selfies: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/kyc/verify")
+async def verify_identity(request: VerifyRequest):
+    try:
+        result = await kyc_service.verify_face_match(
+            request.id_photo_path,
+            request.selfie_paths
+        )
+        
+        # Clean up uploaded files after verification
+        kyc_service.cleanup_images([request.id_photo_path] + request.selfie_paths)
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

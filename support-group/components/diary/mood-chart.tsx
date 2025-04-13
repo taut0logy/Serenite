@@ -1,6 +1,7 @@
 'use client';
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { format } from 'date-fns';
 
 // Define the data structure needed for the chart
 interface MoodData {
@@ -43,8 +44,13 @@ const moodToValue = (mood: string): number => {
 };
 
 export function MoodChart({ data = [], fullSize = false }: MoodChartProps) {
-  // If no data is provided, use mock data
-  const chartData = data.length > 0 ? data : [
+  // Validate dates and filter out invalid ones
+  const validData = data.filter(item => 
+    item.date instanceof Date && !isNaN(item.date.getTime())
+  );
+
+  // If no valid data is provided, use mock data
+  const chartData = validData.length > 0 ? validData : [
     { date: new Date('2024-01-01'), mood: 'Neutral', confidence: 0.5 },
     { date: new Date('2024-01-02'), mood: 'Happy', confidence: 0.7 },
     { date: new Date('2024-01-03'), mood: 'Anxious', confidence: 0.4 },
@@ -55,18 +61,21 @@ export function MoodChart({ data = [], fullSize = false }: MoodChartProps) {
   // Transform data for better visualization
   const normalizedData = chartData.map(item => {
     const moodValue = moodToValue(item.mood);
+    
+    // Ensure we have a valid date
+    const dateObj = item.date instanceof Date && !isNaN(item.date.getTime()) 
+      ? item.date 
+      : new Date();
+    
     return {
-      date: item.date,
+      date: dateObj,
       mood: item.mood,
       moodValue,
       confidence: item.confidence,
       // Normalize to 0-1 range for the chart
       normalizedMood: (moodValue + 1) / 2,
-      // Format date
-      formattedDate: item.date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
-      })
+      // Format date safely
+      formattedDate: format(dateObj, 'MMM dd')
     };
   });
 
@@ -87,6 +96,15 @@ export function MoodChart({ data = [], fullSize = false }: MoodChartProps) {
     }
     return null;
   };
+
+  // Show a message if no data or all dates are invalid
+  if (normalizedData.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground">No mood data available</p>
+      </div>
+    );
+  }
 
   return (
     <div className={fullSize ? "h-full" : "h-[200px]"}>

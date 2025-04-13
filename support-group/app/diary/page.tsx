@@ -13,7 +13,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
+
+// Function to safely parse date strings in "dd-MM-yyyy" format
+function parseDate(dateString: string): Date {
+  try {
+    console.log("Parsing date:", dateString);
+    // Try to parse using date-fns
+    const parsedDate = parse(dateString, 'dd-MM-yyyy', new Date());
+    console.log("Parsed date result:", parsedDate);
+    return parsedDate;
+  } catch (error) {
+    console.error('Failed to parse date:', dateString, error);
+    // Return current date if parsing fails
+    return new Date();
+  }
+}
 
 export default function DiaryPage() {
   // Use a hardcoded user ID for now - this can be replaced with actual auth later
@@ -41,10 +56,19 @@ export default function DiaryPage() {
         userId: userId,
         limit: 10
       });
-      setRecentEntries(results);
+      
+      console.log("Recent entries loaded:", results);
+      
+      if (results && Array.isArray(results)) {
+        setRecentEntries(results);
+      } else {
+        console.warn("Received unexpected format for recent entries:", results);
+        setRecentEntries([]);
+      }
     } catch (error) {
       console.error('Error loading recent entries:', error);
       toast.error('Failed to load recent entries');
+      setRecentEntries([]);
     }
   };
 
@@ -239,7 +263,7 @@ export default function DiaryPage() {
                 </CardHeader>
                 <CardContent>
                   <MoodChart data={recentEntries.map(entry => ({
-                    date: new Date(entry.date),
+                    date: parseDate(entry.date),
                     mood: entry.mood,
                     confidence: entry.confidence
                   }))} />
@@ -317,7 +341,7 @@ export default function DiaryPage() {
               <div className="h-[400px]">
                 <MoodChart 
                   data={recentEntries.map(entry => ({
-                    date: new Date(entry.date),
+                    date: parseDate(entry.date),
                     mood: entry.mood,
                     confidence: entry.confidence
                   }))}

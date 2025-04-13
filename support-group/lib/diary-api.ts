@@ -3,71 +3,51 @@ import axios from 'axios';
 // Define the base URL for the API
 const API_BASE_URL = process.env.NEXT_PUBLIC_DIARY_API_URL || 'http://localhost:8000';
 
+// Configure axios for handling CORS
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: false, // Set to true if you need to pass cookies
+});
+
 // Type definitions matching the FastAPI models
 export interface DiaryEntry {
   content: string;
-  timestamp?: Date;
+  date: string;
+  user_id: string;
 }
 
-export interface Emotion {
-  name: string;
+export interface StoredDiaryEntry {
+  id: string;
+  content: string;
+  date: string;
+  user_id: string;
+  mood: string;
+  analysis: string;
+  confidence: number;
+  created_at: string;
+}
+
+export interface MoodAnalysisResult {
+  mood: string;
+  analysis: string;
   confidence: number;
 }
 
-export interface MoodAnalysis {
-  overall_mood: string;
-  sentiment_score: number;
-  primary_emotions: Emotion[];
-  energy_level: string;
-  key_themes: string[];
-}
-
-export interface EntrySummary {
-  summary: string;
-  key_points: string[];
-  action_items?: string[];
-}
-
-export interface ReflectionPrompt {
-  prompt: string;
-  reason: string;
-}
-
-export interface DiaryEntryAnalysis {
-  entry_id: string;
-  timestamp: Date;
-  content: string;
-  mood_analysis: MoodAnalysis;
-  summary: EntrySummary;
-  reflection_prompts: ReflectionPrompt[];
-  tags: string[];
-}
-
-export interface SearchQuery {
+export interface SearchParams {
   query: string;
+  userId: string;
   limit?: number;
 }
 
-export interface SearchResult {
-  entry_id: string;
-  timestamp: Date;
-  content: string;
-  summary: string;
-  relevance_score: number;
-}
-
-export interface MoodTrend {
-  date: string;
-  mood: number;
-  primary_emotion: string;
-}
-
 // API client
-const diaryApi = {
+export const diaryApi = {
   // Analyze a diary entry
-  analyzeEntry: async (entry: DiaryEntry): Promise<DiaryEntryAnalysis> => {
+  analyzeEntry: async (entry: DiaryEntry): Promise<MoodAnalysisResult> => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/analyze-entry`, entry);
+      const response = await api.post('/analyze', entry);
       return response.data;
     } catch (error) {
       console.error('Error analyzing diary entry:', error);
@@ -75,27 +55,32 @@ const diaryApi = {
     }
   },
 
-  // Search for entries
-  searchEntries: async (query: SearchQuery): Promise<SearchResult[]> => {
+  // Store a diary entry
+  storeEntry: async (entry: DiaryEntry): Promise<StoredDiaryEntry> => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/search`, query);
+      const response = await api.post('/store', entry);
+      return response.data;
+    } catch (error) {
+      console.error('Error storing diary entry:', error);
+      throw error;
+    }
+  },
+
+  // Search for entries
+  searchEntries: async (params: SearchParams): Promise<StoredDiaryEntry[]> => {
+    try {
+      const { query, userId, limit = 5 } = params;
+      const response = await api.get('/search', {
+        params: {
+          query,
+          user_id: userId,
+          limit
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error searching entries:', error);
       throw error;
     }
-  },
-
-  // Get mood trends
-  getMoodTrends: async (): Promise<MoodTrend[]> => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/mood-trends`);
-      return response.data;
-    } catch (error) {
-      console.error('Error getting mood trends:', error);
-      throw error;
-    }
-  },
-};
-
-export default diaryApi; 
+  }
+}; 

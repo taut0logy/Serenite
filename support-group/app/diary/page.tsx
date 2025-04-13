@@ -7,45 +7,75 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { MoodChart } from '@/components/diary/mood-chart';
 import { MoodAnalysis } from '@/components/diary/mood-analysis';
-import { EntrySummary } from '@/components/diary/entry-summary';
 import { ReflectionPrompts } from '@/components/diary/reflection-prompts';
-import diaryApi, { DiaryEntryAnalysis, MoodTrend } from '@/lib/diary-api';
+import { diaryApi, DiaryEntry, StoredDiaryEntry, MoodAnalysisResult } from '@/lib/diary-api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { format, parse } from 'date-fns';
+
+// Function to safely parse date strings in "dd-MM-yyyy" format
+function parseDate(dateString: string): Date {
+  try {
+    console.log("Parsing date:", dateString);
+    // Try to parse using date-fns
+    const parsedDate = parse(dateString, 'dd-MM-yyyy', new Date());
+    console.log("Parsed date result:", parsedDate);
+    return parsedDate;
+  } catch (error) {
+    console.error('Failed to parse date:', dateString, error);
+    // Return current date if parsing fails
+    return new Date();
+  }
+}
 
 export default function DiaryPage() {
+  // Use a hardcoded user ID for now - this can be replaced with actual auth later
+  const userId = "1"; // Default user ID for testing
+  
   const [entry, setEntry] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [currentEntry, setCurrentEntry] = useState<DiaryEntryAnalysis | null>(null);
+  const [currentAnalysis, setCurrentAnalysis] = useState<MoodAnalysisResult | null>(null);
+  const [storedEntry, setStoredEntry] = useState<StoredDiaryEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [moodTrends, setMoodTrends] = useState<MoodTrend[]>([]);
+  const [searchResults, setSearchResults] = useState<StoredDiaryEntry[]>([]);
+  const [recentEntries, setRecentEntries] = useState<StoredDiaryEntry[]>([]);
   const debouncedEntry = useDebounce(entry, 1000);
 
-  // Load mood trends on page load
+  // Load recent entries on page load
   useEffect(() => {
-    const loadMoodTrends = async () => {
-      try {
-        const trends = await diaryApi.getMoodTrends();
-        setMoodTrends(trends);
-      } catch (error) {
-        console.error('Error loading mood trends:', error);
-        toast.error('Failed to load mood trends');
-      }
-    };
-    
-    loadMoodTrends();
+    loadRecentEntries();
   }, []);
 
-  // Auto-save functionality
+  const loadRecentEntries = async () => {
+    try {
+      const results = await diaryApi.searchEntries({
+        query: "recent", // Using a generic term to get recent entries
+        userId: userId,
+        limit: 10
+      });
+      
+      console.log("Recent entries loaded:", results);
+      
+      if (results && Array.isArray(results)) {
+        setRecentEntries(results);
+      } else {
+        console.warn("Received unexpected format for recent entries:", results);
+        setRecentEntries([]);
+      }
+    } catch (error) {
+      console.error('Error loading recent entries:', error);
+      toast.error('Failed to load recent entries');
+      setRecentEntries([]);
+    }
+  };
+
+  // Auto-save functionality (visual indication only)
   useEffect(() => {
     if (debouncedEntry) {
       setIsSaving(true);
-      // We don't actually save on debounce, we just show the saving indicator
-      // The actual saving happens when the user clicks "Analyze Entry"
       setTimeout(() => setIsSaving(false), 1000);
     }
   }, [debouncedEntry]);
@@ -61,19 +91,51 @@ export default function DiaryPage() {
     try {
       const result = await diaryApi.analyzeEntry({
         content: entry,
-        timestamp: new Date()
+        date: format(new Date(), 'dd-MM-yyyy'),
+        user_id: userId
       });
-      setCurrentEntry(result);
-      toast.success('Entry analyzed successfully');
       
-      // Update mood trends after new entry
-      const trends = await diaryApi.getMoodTrends();
-      setMoodTrends(trends);
+      setCurrentAnalysis(result);
+      toast.success('Entry analyzed successfully');
     } catch (error) {
       console.error('Error analyzing entry:', error);
       toast.error('Failed to analyze entry');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Save the diary entry
+  const saveEntry = async () => {
+    if (!entry.trim()) {
+      toast.error('Please write something before saving');
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const result = await diaryApi.storeEntry({
+        content: entry,
+        date: format(new Date(), 'dd-MM-yyyy'),
+        user_id: userId
+      });
+      
+      setStoredEntry(result);
+      setCurrentAnalysis({
+        mood: result.mood,
+        analysis: result.analysis,
+        confidence: result.confidence
+      });
+      
+      toast.success('Entry saved successfully');
+      
+      // Refresh recent entries
+      loadRecentEntries();
+    } catch (error) {
+      console.error('Error saving entry:', error);
+      toast.error('Failed to save entry');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -87,8 +149,10 @@ export default function DiaryPage() {
     try {
       const results = await diaryApi.searchEntries({
         query: searchQuery,
+        userId: userId,
         limit: 5
       });
+      
       setSearchResults(results);
       if (results.length === 0) {
         toast.info('No entries found matching your search');
@@ -125,40 +189,95 @@ export default function DiaryPage() {
                   />
                   <div className="mt-4 flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">
-                      {isSaving ? 'Saving...' : 'Auto-saved'}
+                      {isSaving ? 'Saving...' : 'Ready to save'}
                     </span>
-                    <Button 
-                      onClick={analyzeEntry} 
-                      disabled={isAnalyzing || !entry.trim()}
-                    >
-                      {isAnalyzing ? 'Analyzing...' : 'Analyze Entry'}
-                    </Button>
+                    <div className="space-x-2">
+                      <Button 
+                        onClick={analyzeEntry} 
+                        variant="outline"
+                        disabled={isAnalyzing || !entry.trim()}
+                      >
+                        {isAnalyzing ? 'Analyzing...' : 'Analyze Only'}
+                      </Button>
+                      <Button 
+                        onClick={saveEntry} 
+                        disabled={isSaving || !entry.trim()}
+                      >
+                        {isSaving ? 'Saving...' : 'Save Entry'}
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Mood Analysis Section */}
-              <MoodAnalysis entry={currentEntry} />
+              {currentAnalysis && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Mood Analysis</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium">Detected Mood</h3>
+                        <p className="text-2xl font-bold">{currentAnalysis.mood}</p>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          Confidence: {Math.round(currentAnalysis.confidence * 100)}%
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <h3 className="font-medium">Analysis</h3>
+                        <p className="text-sm">{currentAnalysis.analysis}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Sidebar */}
             <div className="space-y-6">
-              {/* Entry Summary */}
-              <EntrySummary entry={currentEntry} />
+              {/* Last Saved Entry */}
+              {storedEntry && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Last Saved Entry</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm font-medium">{storedEntry.date}</div>
+                    <div className="mt-2 text-sm">
+                      <strong>Mood:</strong> {storedEntry.mood}
+                    </div>
+                    <div className="mt-4 line-clamp-4 text-sm text-muted-foreground">
+                      {storedEntry.content}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Mood Chart */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Mood Trends</CardTitle>
+                  <CardTitle>Recent Mood Trends</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <MoodChart data={moodTrends} />
+                  <MoodChart data={recentEntries.map(entry => ({
+                    date: parseDate(entry.date),
+                    mood: entry.mood,
+                    confidence: entry.confidence
+                  }))} />
                 </CardContent>
               </Card>
 
               {/* Reflection Prompts */}
               <ReflectionPrompts 
-                prompts={currentEntry?.reflection_prompts?.map(p => p.prompt) || []}
+                prompts={[
+                  "What made me feel this way today?",
+                  "What's one thing I'm grateful for right now?",
+                  "What could I do tomorrow to improve my mood?",
+                  "How does this feeling compare to yesterday?"
+                ]}
                 onSelectPrompt={(prompt) => setEntry(entry => `${entry}\n\n${prompt}`)}
               />
             </div>
@@ -174,7 +293,7 @@ export default function DiaryPage() {
               <div className="flex w-full max-w-md items-center space-x-2 mb-6">
                 <Input 
                   type="text" 
-                  placeholder="Search by meaning, e.g. 'days I felt happy about work'" 
+                  placeholder="Search by meaning, e.g. 'days I felt happy'" 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && searchEntries()}
@@ -187,13 +306,18 @@ export default function DiaryPage() {
               
               <div className="space-y-4">
                 {searchResults.map((result) => (
-                  <Card key={result.entry_id}>
+                  <Card key={result.id}>
                     <CardContent className="pt-4">
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(result.timestamp).toLocaleDateString()}
-                      </p>
-                      <p className="text-sm font-medium mt-2">{result.summary}</p>
-                      <p className="text-sm mt-2 line-clamp-3">{result.content}</p>
+                      <div className="flex justify-between items-center">
+                        <p className="text-sm text-muted-foreground">
+                          {result.date}
+                        </p>
+                        <p className="text-sm font-medium bg-primary/10 px-2 py-1 rounded-full">
+                          {result.mood}
+                        </p>
+                      </div>
+                      <p className="text-sm mt-2">{result.content}</p>
+                      <p className="text-xs text-muted-foreground mt-2">{result.analysis}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -215,7 +339,33 @@ export default function DiaryPage() {
             </CardHeader>
             <CardContent>
               <div className="h-[400px]">
-                <MoodChart data={moodTrends} fullSize />
+                <MoodChart 
+                  data={recentEntries.map(entry => ({
+                    date: parseDate(entry.date),
+                    mood: entry.mood,
+                    confidence: entry.confidence
+                  }))}
+                  fullSize 
+                />
+              </div>
+              
+              <div className="mt-6 space-y-4">
+                <h3 className="font-medium">Recent Entries</h3>
+                {recentEntries.slice(0, 5).map((entry) => (
+                  <Card key={entry.id}>
+                    <CardContent className="pt-4">
+                      <div className="flex justify-between items-center">
+                        <p className="text-sm text-muted-foreground">
+                          {entry.date}
+                        </p>
+                        <p className="text-sm font-medium bg-primary/10 px-2 py-1 rounded-full">
+                          {entry.mood}
+                        </p>
+                      </div>
+                      <p className="text-sm mt-2 line-clamp-2">{entry.content}</p>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </CardContent>
           </Card>

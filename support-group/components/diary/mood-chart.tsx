@@ -1,44 +1,87 @@
 'use client';
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { MoodTrend } from '@/lib/diary-api';
+
+// Define the data structure needed for the chart
+interface MoodData {
+  date: Date;
+  mood: string;
+  confidence: number;
+}
 
 interface MoodChartProps {
-  data?: MoodTrend[];
+  data?: MoodData[];
   fullSize?: boolean;
 }
+
+// Map mood strings to numeric values for chart visualization
+const moodToValue = (mood: string): number => {
+  const moodMap: Record<string, number> = {
+    'Happy': 1.0,
+    'Excited': 0.8,
+    'Calm': 0.6,
+    'Content': 0.5,
+    'Neutral': 0.5,
+    'Mixed': 0.0,
+    'Tired': -0.3,
+    'Anxious': -0.6,
+    'Sad': -0.8,
+    'Angry': -0.9,
+    'Depressed': -1.0
+  };
+  
+  // Default to neutral if mood not found in map
+  // Convert to lowercase for case-insensitive matching
+  const normalizedMood = mood.toLowerCase();
+  for (const [key, value] of Object.entries(moodMap)) {
+    if (normalizedMood.includes(key.toLowerCase())) {
+      return value;
+    }
+  }
+  
+  return 0; // Default to neutral
+};
 
 export function MoodChart({ data = [], fullSize = false }: MoodChartProps) {
   // If no data is provided, use mock data
   const chartData = data.length > 0 ? data : [
-    { date: '2024-01-01', mood: 0.5, primary_emotion: 'content' },
-    { date: '2024-01-02', mood: 0.7, primary_emotion: 'happy' },
-    { date: '2024-01-03', mood: 0.4, primary_emotion: 'anxious' },
-    { date: '2024-01-04', mood: 0.8, primary_emotion: 'excited' },
-    { date: '2024-01-05', mood: 0.6, primary_emotion: 'calm' },
+    { date: new Date('2024-01-01'), mood: 'Neutral', confidence: 0.5 },
+    { date: new Date('2024-01-02'), mood: 'Happy', confidence: 0.7 },
+    { date: new Date('2024-01-03'), mood: 'Anxious', confidence: 0.4 },
+    { date: new Date('2024-01-04'), mood: 'Excited', confidence: 0.8 },
+    { date: new Date('2024-01-05'), mood: 'Calm', confidence: 0.6 },
   ];
 
-  // Transform negative sentiment to the 0-1 range for better visualization
-  const normalizedData = chartData.map(item => ({
-    ...item,
-    // Convert mood from -1...1 to 0...1 for visualization
-    normalizedMood: (item.mood + 1) / 2,
-    // Format date
-    formattedDate: new Date(item.date).toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric' 
-    })
-  }));
+  // Transform data for better visualization
+  const normalizedData = chartData.map(item => {
+    const moodValue = moodToValue(item.mood);
+    return {
+      date: item.date,
+      mood: item.mood,
+      moodValue,
+      confidence: item.confidence,
+      // Normalize to 0-1 range for the chart
+      normalizedMood: (moodValue + 1) / 2,
+      // Format date
+      formattedDate: item.date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      })
+    };
+  });
 
-  // Custom tooltip to show emotion and original mood value
+  // Sort by date
+  normalizedData.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  // Custom tooltip to show mood and confidence
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
         <div className="bg-background border rounded p-2 shadow-sm">
           <p className="font-medium">{data.formattedDate}</p>
-          <p>Mood: {data.mood.toFixed(2)}</p>
-          <p>Emotion: {data.primary_emotion}</p>
+          <p>Mood: {data.mood}</p>
+          <p>Confidence: {Math.round(data.confidence * 100)}%</p>
         </div>
       );
     }
@@ -56,7 +99,15 @@ export function MoodChart({ data = [], fullSize = false }: MoodChartProps) {
           />
           <YAxis 
             domain={[0, 1]} 
-            tickFormatter={(value) => ((value * 2) - 1).toFixed(1)}
+            tickFormatter={(value) => {
+              // Convert back to -1 to 1 scale for display
+              const moodValue = (value * 2) - 1;
+              if (moodValue > 0.7) return "Happy";
+              if (moodValue > 0.3) return "Good";
+              if (moodValue > -0.3) return "Neutral";
+              if (moodValue > -0.7) return "Bad";
+              return "Sad";
+            }}
             tick={{ fontSize: 12 }}
           />
           <Tooltip content={<CustomTooltip />} />

@@ -1,9 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { DiaryEntryAnalysis } from '@/lib/diary-api';
+import { MoodAnalysisResult } from '@/lib/diary-api';
 
 interface MoodAnalysisProps {
-  entry: DiaryEntryAnalysis | null;
+  entry: MoodAnalysisResult | null;
 }
 
 export function MoodAnalysis({ entry }: MoodAnalysisProps) {
@@ -11,39 +11,69 @@ export function MoodAnalysis({ entry }: MoodAnalysisProps) {
     return null;
   }
 
-  // Get the mood analysis data
-  const { mood_analysis } = entry;
-
-  // Helper function to get color based on sentiment
-  const getSentimentColor = (score: number) => {
-    if (score > 0.3) return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
-    if (score < -0.3) return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+  // Helper function to get color based on mood
+  const getMoodColor = (mood: string) => {
+    const normalizedMood = mood.toLowerCase();
+    
+    if (normalizedMood.includes('happy') || normalizedMood.includes('excited') || normalizedMood.includes('joy')) {
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+    }
+    
+    if (normalizedMood.includes('sad') || normalizedMood.includes('depressed') || normalizedMood.includes('anxious') || normalizedMood.includes('angry')) {
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+    }
+    
     return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
   };
+
+  // Helper function to map mood to sentiment score (for visualization)
+  const moodToSentiment = (mood: string): number => {
+    const normalizedMood = mood.toLowerCase();
+    
+    if (normalizedMood.includes('happy') || normalizedMood.includes('excited') || normalizedMood.includes('joy')) {
+      return 0.7;
+    }
+    
+    if (normalizedMood.includes('calm') || normalizedMood.includes('content')) {
+      return 0.3;
+    }
+    
+    if (normalizedMood.includes('sad') || normalizedMood.includes('depressed') || normalizedMood.includes('anxious')) {
+      return -0.7;
+    }
+    
+    if (normalizedMood.includes('angry') || normalizedMood.includes('frustrated')) {
+      return -0.5;
+    }
+    
+    return 0; // Neutral
+  };
+
+  const sentimentScore = moodToSentiment(entry.mood);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Emotional Analysis</CardTitle>
+        <CardTitle>Mood Analysis</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           <div>
-            <h3 className="text-sm font-medium mb-2">Overall Mood</h3>
+            <h3 className="text-sm font-medium mb-2">Detected Mood</h3>
             <Badge 
               variant="outline" 
-              className={`text-lg ${getSentimentColor(mood_analysis.sentiment_score)}`}
+              className={`text-lg ${getMoodColor(entry.mood)}`}
             >
-              {mood_analysis.overall_mood}
+              {entry.mood}
             </Badge>
             <div className="mt-2">
               <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
                 <div 
-                  className={`h-full ${mood_analysis.sentiment_score > 0 ? 'bg-green-500' : 'bg-red-500'}`}
+                  className={`h-full ${sentimentScore > 0 ? 'bg-green-500' : 'bg-red-500'}`}
                   style={{ 
-                    width: `${Math.abs(mood_analysis.sentiment_score) * 100}%`,
-                    marginLeft: mood_analysis.sentiment_score < 0 ? 0 : '50%',
-                    marginRight: mood_analysis.sentiment_score > 0 ? 0 : '50%',
+                    width: `${Math.abs(sentimentScore) * 100}%`,
+                    marginLeft: sentimentScore < 0 ? 0 : '50%',
+                    marginRight: sentimentScore > 0 ? 0 : '50%',
                   }}
                 ></div>
               </div>
@@ -56,39 +86,25 @@ export function MoodAnalysis({ entry }: MoodAnalysisProps) {
           </div>
           
           <div>
-            <h3 className="text-sm font-medium mb-2">Detected Emotions</h3>
-            <div className="flex flex-wrap gap-2">
-              {mood_analysis.primary_emotions.map((emotion) => (
-                <Badge 
-                  key={emotion.name} 
-                  variant="secondary"
-                  className="flex items-center gap-1"
-                >
-                  {emotion.name}
-                  <span className="text-xs opacity-70">
-                    {Math.round(emotion.confidence * 100)}%
-                  </span>
-                </Badge>
-              ))}
+            <h3 className="text-sm font-medium mb-2">Confidence</h3>
+            <div className="flex items-center gap-2">
+              <div className="h-2 flex-1 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-500"
+                  style={{ width: `${entry.confidence * 100}%` }}
+                ></div>
+              </div>
+              <span className="text-sm font-medium">
+                {Math.round(entry.confidence * 100)}%
+              </span>
             </div>
           </div>
 
           <div>
-            <h3 className="text-sm font-medium mb-2">Energy Level</h3>
-            <Badge variant="outline">
-              {mood_analysis.energy_level}
-            </Badge>
-          </div>
-          
-          <div>
-            <h3 className="text-sm font-medium mb-2">Key Themes</h3>
-            <div className="flex flex-wrap gap-2">
-              {mood_analysis.key_themes.map((theme) => (
-                <Badge key={theme} variant="outline">
-                  {theme}
-                </Badge>
-              ))}
-            </div>
+            <h3 className="text-sm font-medium mb-2">Analysis</h3>
+            <p className="text-sm text-muted-foreground">
+              {entry.analysis}
+            </p>
           </div>
         </div>
       </CardContent>

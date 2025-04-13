@@ -1,11 +1,26 @@
-from typing import Dict, List, TypedDict, Annotated
+from typing import Dict, List, TypedDict, Annotated, Optional
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
+import logging
 from dotenv import load_dotenv
+import cassio
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.vectorstores.cassandra import Cassandra
+from datetime import datetime
+import uuid
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -13,18 +28,76 @@ load_dotenv()
 # Initialize FastAPI app
 app = FastAPI(title="Diary Mood Analysis API")
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins in development
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# Error handling middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    try:
+        logger.info(f"Request path: {request.url.path}, method: {request.method}")
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Request failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e)}
+        )
+
 # Initialize Groq chat model
 groq_api_key = os.getenv("GROQ_API_KEY")
 if not groq_api_key:
+    logger.error("GROQ_API_KEY not found in environment variables")
     raise ValueError("GROQ_API_KEY not found in environment variables")
 
+# Initialize AstraDB connection
+ASTRA_DB_APPLICATION_TOKEN = os.getenv("ASTRA_DB_APPLICATION_TOKEN")
+ASTRA_DB_ID = os.getenv("ASTRA_DB_ID")
+if not ASTRA_DB_APPLICATION_TOKEN or not ASTRA_DB_ID:
+    logger.error("AstraDB credentials not found in environment variables")
+    raise ValueError("AstraDB credentials not found in environment variables")
+
+# Initialize cassio
+try:
+    cassio.init(token=ASTRA_DB_APPLICATION_TOKEN, database_id=ASTRA_DB_ID)
+    logger.info("Successfully initialized cassio with AstraDB")
+except Exception as e:
+    logger.error(f"Failed to initialize cassio: {str(e)}")
+    raise
+
+# Initialize embeddings
+try:
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    logger.info("Successfully initialized HuggingFace embeddings")
+except Exception as e:
+    logger.error(f"Failed to initialize embeddings: {str(e)}")
+    raise
+
+# Initialize vector store
+try:
+    astra_vector_store = Cassandra(
+        embedding=embeddings,
+        table_name="diary_entries",
+        session=None,
+        keyspace=None
+    )
+    logger.info("Successfully initialized Cassandra vector store")
+except Exception as e:
+    logger.error(f"Failed to initialize vector store: {str(e)}")
+    raise
 
 model = ChatGroq(
     groq_api_key=groq_api_key,
     model_name="llama3-70b-8192",
     temperature=0.7
 )
-
 
 # Define state types
 class AgentState(TypedDict):
@@ -37,6 +110,14 @@ class AgentState(TypedDict):
 class DiaryEntry(BaseModel):
     content: str
     date: str
+    user_id: str
+
+class StoredDiaryEntry(DiaryEntry):
+    id: str
+    mood: str
+    analysis: str
+    confidence: float
+    created_at: datetime
 
 class MoodAnalysis(BaseModel):
     mood: str
@@ -113,15 +194,21 @@ workflow.add_node("analyze_mood", analyze_mood)
 
 # Add edges
 workflow.add_edge("analyze_mood", END)
-workflow.set_entry_point("analyze_mood")  # Set the entry point
+workflow.set_entry_point("analyze_mood")
 
 # Compile the graph
 app.state.graph = workflow.compile()
 
 # FastAPI endpoints
+@app.options("/analyze")
+async def analyze_options():
+    """Handle OPTIONS request for CORS preflight."""
+    return {}
+
 @app.post("/analyze", response_model=MoodAnalysis)
 async def analyze_diary(entry: DiaryEntry):
     """Analyze a diary entry and return mood analysis."""
+    logger.info(f"Analyzing diary entry for user_id: {entry.user_id}")
     try:
         # Initialize state with all required fields
         initial_state = {
@@ -132,20 +219,121 @@ async def analyze_diary(entry: DiaryEntry):
         }
         
         # Run the graph
+        logger.info("Invoking mood analysis graph")
         result = app.state.graph.invoke(initial_state)
         
         # Create response
-        return MoodAnalysis(
+        response = MoodAnalysis(
             mood=result.get("mood", "neutral"),
             analysis=result.get("analysis", "Unable to analyze mood"),
             confidence=result.get("confidence", 0.5)
         )
+        logger.info(f"Analysis complete. Mood: {response.mood}, Confidence: {response.confidence}")
+        return response
     except Exception as e:
+        logger.error(f"Error in mood analysis: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error in mood analysis: {str(e)}"
         )
 
+@app.options("/store")
+async def store_options():
+    """Handle OPTIONS request for CORS preflight."""
+    return {}
+
+@app.post("/store", response_model=StoredDiaryEntry)
+async def store_diary_entry(entry: DiaryEntry):
+    """Store a diary entry in AstraDB with mood analysis."""
+    logger.info(f"Storing diary entry for user_id: {entry.user_id}")
+    try:
+        # Analyze mood
+        logger.info("Analyzing mood for entry")
+        mood_analysis = await analyze_diary(entry)
+        
+        # Create document for vector store
+        doc_id = str(uuid.uuid4())
+        document = {
+            "id": doc_id,
+            "content": entry.content,
+            "date": entry.date,
+            "user_id": entry.user_id,
+            "mood": mood_analysis.mood,
+            "analysis": mood_analysis.analysis,
+            "confidence": mood_analysis.confidence,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        # Store in AstraDB
+        logger.info(f"Storing entry in AstraDB with ID: {doc_id}")
+        astra_vector_store.add_texts(
+            texts=[entry.content],
+            metadatas=[document]
+        )
+        
+        # Return stored entry
+        stored_entry = StoredDiaryEntry(
+            content=entry.content,
+            date=entry.date,
+            user_id=entry.user_id,
+            id=doc_id,
+            mood=mood_analysis.mood,
+            analysis=mood_analysis.analysis,
+            confidence=mood_analysis.confidence,
+            created_at=datetime.utcnow()
+        )
+        logger.info(f"Entry stored successfully with ID: {doc_id}")
+        return stored_entry
+    except Exception as e:
+        logger.error(f"Error storing diary entry: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error storing diary entry: {str(e)}"
+        )
+
+@app.options("/search")
+async def search_options():
+    """Handle OPTIONS request for CORS preflight."""
+    return {}
+
+@app.get("/search", response_model=List[StoredDiaryEntry])
+async def search_diary_entries(query: str, user_id: str, limit: int = 5):
+    """Search diary entries using semantic search."""
+    logger.info(f"Searching entries for user_id: {user_id}, query: {query}, limit: {limit}")
+    try:
+        # Search in vector store
+        logger.info("Performing similarity search in vector store")
+        results = astra_vector_store.similarity_search_with_score(
+            query=query,
+            k=limit,
+            filter={"user_id": user_id}
+        )
+        
+        # Format results
+        entries = []
+        for doc, score in results:
+            metadata = doc.metadata
+            entries.append(StoredDiaryEntry(
+                id=metadata["id"],
+                content=doc.page_content,
+                date=metadata["date"],
+                user_id=metadata["user_id"],
+                mood=metadata["mood"],
+                analysis=metadata["analysis"],
+                confidence=metadata["confidence"],
+                created_at=datetime.fromisoformat(metadata["created_at"])
+            ))
+        
+        logger.info(f"Search complete. Found {len(entries)} entries.")
+        return entries
+    except Exception as e:
+        logger.error(f"Error searching diary entries: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error searching diary entries: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
+    logger.info("Starting Diary Mood Analysis API server")
     uvicorn.run(app, host="0.0.0.0", port=8000)

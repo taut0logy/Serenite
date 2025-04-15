@@ -10,10 +10,10 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  // withCredentials should be false for cross-origin requests without cookies
+  // withCredentials must be false for cross-origin requests without cookies
   withCredentials: false,
-  // Add timeout to prevent hanging requests
-  timeout: 10000,
+  // Reduced timeout to prevent long waiting periods
+  timeout: 8000,
 });
 
 // Type definitions matching the FastAPI models
@@ -41,17 +41,29 @@ export interface BreathingPattern {
 
 // Default breathing exercise to use when API fails
 const DEFAULT_EXERCISE: BreathingPattern = {
-  name: "Basic Calming Breath",
-  description: "A simple breathing technique to restore calm and balance.",
+  name: "Basic Box Breathing Technique",
+  description: "A simple 4-4-4-4 box breathing technique to calm your nervous system and improve focus.",
   steps: [
-    {action: "inhale", duration: 4, instruction: "Breathe in through your nose"},
-    {action: "hold", duration: 2, instruction: "Hold your breath briefly"},
-    {action: "exhale", duration: 6, instruction: "Exhale slowly through your mouth"},
-    {action: "hold", duration: 0, instruction: "Continue to the next breath"}
+    {action: "inhale", duration: 4, instruction: "Breathe in slowly through your nose, filling your lungs completely"},
+    {action: "hold", duration: 4, instruction: "Hold your breath and feel the energy in your body"},
+    {action: "exhale", duration: 4, instruction: "Exhale slowly through your mouth, releasing all tension"},
+    {action: "hold", duration: 4, instruction: "Keep your lungs empty and pause before the next breath"}
   ],
   duration_minutes: 5,
-  benefits: ["Reduces anxiety", "Increases focus", "Promotes relaxation"],
-  suitable_for: ["Everyone", "Beginners", "People experiencing stress"]
+  benefits: ["Reduces anxiety", "Increases focus", "Balances energy", "Promotes relaxation", "Improves mental clarity"],
+  suitable_for: ["Everyone", "Beginners", "People experiencing stress", "Before meditation", "During work breaks"]
+};
+
+// Utility to check if API is available
+const checkApiAvailability = async (): Promise<boolean> => {
+  try {
+    // Simple OPTIONS request to check if API is responding
+    await axios.options(API_BASE_URL, { timeout: 2000 });
+    return true;
+  } catch (error) {
+    console.warn('Breathing API not available, using offline mode');
+    return false;
+  }
 };
 
 // API client
@@ -59,15 +71,26 @@ export const breathingApi = {
   // Generate a breathing exercise
   generateExercise: async (state: EmotionalState): Promise<BreathingPattern> => {
     try {
+      // Check if API is available first
+      const isApiAvailable = await checkApiAvailability();
+      if (!isApiAvailable) {
+        console.info('Using default exercise due to API unavailability');
+        return DEFAULT_EXERCISE;
+      }
+      
       console.log('Sending request to:', `${API_BASE_URL}/generate_exercise`);
-      console.log('With data:', state);
       
       const response = await api.post('/generate_exercise', state);
+      
+      // Validate the response data before returning
+      if (!response.data || !response.data.steps || !Array.isArray(response.data.steps)) {
+        console.warn('Invalid response from API, using default exercise');
+        return DEFAULT_EXERCISE;
+      }
+      
       return response.data;
     } catch (error) {
       console.error('Error generating breathing exercise:', error);
-      
-      // Return default exercise instead of throwing, to make app more resilient
       console.warn('Falling back to default exercise');
       return DEFAULT_EXERCISE;
     }

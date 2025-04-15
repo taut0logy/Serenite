@@ -13,7 +13,7 @@ const api = axios.create({
   // withCredentials must be false for cross-origin requests without cookies
   withCredentials: false,
   // Reduced timeout to prevent long waiting periods
-  timeout: 8000,
+  timeout: 10000,
 });
 
 // Type definitions matching the FastAPI models
@@ -41,7 +41,7 @@ export interface BreathingPattern {
 
 // Default breathing exercise to use when API fails
 const DEFAULT_EXERCISE: BreathingPattern = {
-  name: "Basic Box Breathing Technique",
+  name: "Box Breathing Technique",
   description: "A simple 4-4-4-4 box breathing technique to calm your nervous system and improve focus.",
   steps: [
     {action: "inhale", duration: 4, instruction: "Breathe in slowly through your nose, filling your lungs completely"},
@@ -57,8 +57,11 @@ const DEFAULT_EXERCISE: BreathingPattern = {
 // Utility to check if API is available
 const checkApiAvailability = async (): Promise<boolean> => {
   try {
-    // Simple OPTIONS request to check if API is responding
-    await axios.options(API_BASE_URL, { timeout: 2000 });
+    // Simple HEAD request to check if API is responding (OPTIONS can be blocked by CORS)
+    await axios.head(`${API_BASE_URL}/generate_exercise`, { 
+      timeout: 2000,
+      validateStatus: () => true // Accept any status to prevent throwing
+    });
     return true;
   } catch (error) {
     console.warn('Breathing API not available, using offline mode');
@@ -71,8 +74,17 @@ export const breathingApi = {
   // Generate a breathing exercise
   generateExercise: async (state: EmotionalState): Promise<BreathingPattern> => {
     try {
-      // Check if API is available first
-      const isApiAvailable = await checkApiAvailability();
+      // Check if API is available first - but don't wait too long
+      let isApiAvailable = false;
+      try {
+        isApiAvailable = await Promise.race([
+          checkApiAvailability(),
+          new Promise<boolean>(resolve => setTimeout(() => resolve(false), 2500))
+        ]);
+      } catch (e) {
+        isApiAvailable = false;
+      }
+      
       if (!isApiAvailable) {
         console.info('Using default exercise due to API unavailability');
         return DEFAULT_EXERCISE;
@@ -80,11 +92,30 @@ export const breathingApi = {
       
       console.log('Sending request to:', `${API_BASE_URL}/generate_exercise`);
       
-      const response = await api.post('/generate_exercise', state);
+      // Use Promise.race to implement a client-side timeout as a backup
+      const response = await Promise.race([
+        api.post('/generate_exercise', state),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Client timeout')), 8000)
+        )
+      ]) as { data: BreathingPattern };
       
       // Validate the response data before returning
       if (!response.data || !response.data.steps || !Array.isArray(response.data.steps)) {
         console.warn('Invalid response from API, using default exercise');
+        return DEFAULT_EXERCISE;
+      }
+      
+      // Additional validation to ensure all steps have proper actions and durations
+      const validActions = ['inhale', 'hold', 'exhale'];
+      const isValid = response.data.steps.every(step => 
+        validActions.includes(step.action) && 
+        typeof step.duration === 'number' && 
+        step.duration >= 0
+      );
+      
+      if (!isValid) {
+        console.warn('Invalid step data in response, using default exercise');
         return DEFAULT_EXERCISE;
       }
       

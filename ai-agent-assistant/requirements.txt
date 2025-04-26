@@ -37,5 +37,9 @@ librosa>=0.10.0
 scikit-learn>=1.2.2
 sounddevice>=0.4.6
 scipy>=1.10.1
-uvicorn
+uvicorn>=0.23.0
 langchain_astradb
+# Added for FastAPI backend
+fastapi>=0.104.0
+python-multipart>=0.0.6
+httpx>=0.24.1

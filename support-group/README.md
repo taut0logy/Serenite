@@ -1,36 +1,100 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mental Health Chatbot Assistant
+
+A modern web application offering a ChatGPT-like interface for mental health support, with emotion detection capabilities and an emotion journal.
+
+## Features
+
+- **AI-Powered Chat Interface**: Chat with an AI mental health assistant that provides support, resources, and guidance
+- **Emotion Detection**: Capture facial expressions and voice tone to detect emotions
+- **Emotion Journal**: Track your emotional states over time
+- **Mental Health Resources**: Access to crisis resources and mental health organizations
+
+## Technology Stack
+
+- **Frontend**: Next.js with React
+- **Backend**: FastAPI Python backend
+- **Emotion Analysis**: Computer vision and audio processing for emotion detection
+
+## Project Structure
+
+```
+support-group/
+├── app/
+│   └── mental-health-assistant/
+│       ├── page.jsx               # Main chat interface
+│       ├── layout.jsx             # Layout for the mental health assistant
+│       └── resources/
+│           └── page.jsx           # Mental health resources page
+├── components/
+│   ├── ChatMessage.jsx            # Component for individual chat messages
+│   └── EmotionJournal.jsx         # Component for emotion journal functionality
+├── public/                        # Static assets
+└── README.md                      # Project documentation
+```
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Node.js 14+ and npm/yarn
+- Python 3.8+
+- pip (Python package manager)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository:
+   ```
+   git clone <repository-url>
+   cd support-group
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Install frontend dependencies:
+   ```
+   npm install
+   # or
+   yarn install
+   ```
 
-## Learn More
+3. Install backend dependencies:
+   ```
+   cd ../ai-agent-assistant
+   pip install -r requirements.txt
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+4. Start the backend server:
+   ```
+   python app.py
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+5. Start the frontend development server:
+   ```
+   cd ../support-group
+   npm run dev
+   # or
+   yarn dev
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+6. Open your browser and navigate to `http://localhost:3000/mental-health-assistant`
 
-## Deploy on Vercel
+## API Endpoints
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The backend provides the following endpoints:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/chat` - Chat with the mental health assistant
+- `/detect-face-emotion` - Analyze facial emotion from uploaded image
+- `/analyze-voice` - Analyze voice tone from uploaded audio
+- `/emotion-journal/add` - Add entry to emotion journal
+- `/emotion-journal` - Get emotion journal entries with pattern analysis
+- `/emotion-insights/{emotion_type}/{emotion}` - Get insights for specific emotions
+- `/resources` - Access mental health resources for Bangladesh
+
+## Usage
+
+1. **Chat Interface**: Type your message in the input box and press enter or click the send button
+2. **Emotion Detection**: Click the camera icon to upload an image for facial emotion detection
+3. **Voice Analysis**: Click the microphone icon to record your voice for tone analysis
+4. **Emotion Journal**: Click the journal button to view and add entries to your emotion journal
+
+## Note
+
+This application is designed for educational and supportive purposes only. It is not a replacement for professional mental health care. If you or someone you know is in crisis, please contact local emergency services or a mental health crisis helpline.

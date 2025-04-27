@@ -5,15 +5,23 @@ import {
   Send, 
   Mic, 
   Camera, 
-  Menu, 
+  MenuIcon, 
   X, 
   Upload, 
   Settings,
-  BookOpen,
+  Sparkles,
   Info,
+  MessageSquare,
+  Calendar,
+  BarChart,
+  PlusCircle,
+  MoonStar,
+  SunMedium,
+  AlertCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTheme } from 'next-themes';
 
 // Import Shadcn UI components
 import { Button } from "@/components/ui/button";
@@ -23,6 +31,8 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Import custom components
 import ChatMessageShadcn from '@/components/ChatMessageShadcn';
@@ -37,7 +47,7 @@ export default function MentalHealthAssistant() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [agentState, setAgentState] = useState(null);
-  const [sidebarContent, setSidebarContent] = useState('journal'); // 'journal', 'insights', 'settings', 'resources'
+  const [sidebarTab, setSidebarTab] = useState('journal'); // 'journal', 'insights', 'settings', 'resources'
   const [faceEmotion, setFaceEmotion] = useState(null);
   const [voiceEmotion, setVoiceEmotion] = useState(null);
   const [includeFaceEmotion, setIncludeFaceEmotion] = useState(false);
@@ -49,6 +59,7 @@ export default function MentalHealthAssistant() {
   const [showAgentReasoning, setShowAgentReasoning] = useState(true);
   const [emotionConfidence, setEmotionConfidence] = useState(null);
   const [mixedEmotionalSignals, setMixedEmotionalSignals] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -56,6 +67,7 @@ export default function MentalHealthAssistant() {
   const router = useRouter();
   const recordingTimerRef = useRef(null);
   const inputRef = useRef(null);
+  const { theme, setTheme } = useTheme();
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -83,6 +95,7 @@ export default function MentalHealthAssistant() {
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
+    setIsSheetOpen(false); // Close sheet when sending message
 
     try {
       // Prepare request with emotions if available
@@ -409,24 +422,27 @@ export default function MentalHealthAssistant() {
 
   // Helper to render the sidebar content
   const renderSidebarContent = () => {
-    switch (sidebarContent) {
+    switch (sidebarTab) {
       case 'journal':
         return <EmotionJournal />;
       case 'insights':
         return <EmotionInsights />;
       case 'settings':
         return (
-          <div className="p-4 space-y-6">
-            <h3 className="text-lg font-semibold">Assistant Settings</h3>
+          <div className="p-5 space-y-6">
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-semibold">Assistant Settings</h3>
+              <p className="text-sm text-muted-foreground">Customize your experience</p>
+            </div>
             
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <label htmlFor="show-reasoning" className="text-sm font-medium">
                     Show Thinking Process
                   </label>
-                  <p className="text-sm text-muted-foreground">
-                    See how the assistant analyzes your messages
+                  <p className="text-xs text-muted-foreground">
+                    View how the assistant analyzes your messages
                   </p>
                 </div>
                 <Switch
@@ -436,35 +452,80 @@ export default function MentalHealthAssistant() {
                 />
               </div>
               
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">
+                    Theme Settings
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Choose light or dark mode
+                  </p>
+                </div>
+                <div className="flex space-x-1">
+                  <Button 
+                    variant={theme === 'light' ? 'default' : 'outline'} 
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => setTheme('light')}
+                  >
+                    <SunMedium className="h-3.5 w-3.5 mr-1" />
+                    Light
+                  </Button>
+                  <Button 
+                    variant={theme === 'dark' ? 'default' : 'outline'} 
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => setTheme('dark')}
+                  >
+                    <MoonStar className="h-3.5 w-3.5 mr-1" />
+                    Dark
+                  </Button>
+                </div>
+              </div>
+              
               <Separator />
               
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold">About</h4>
-                <p className="text-sm text-muted-foreground">
-                  This mental health assistant uses AI to provide support and information.
-                  It is not a replacement for professional mental health services.
-                </p>
+                <div className="bg-muted/50 rounded-lg p-3 text-xs leading-relaxed text-muted-foreground border border-muted/30">
+                  <p className="mb-2">This mental health assistant uses AI to provide support and information.</p>
+                  <p className="font-medium text-foreground/90">It is not a replacement for professional mental health services.</p>
+                </div>
               </div>
             </div>
           </div>
         );
       case 'resources':
         return (
-          <div className="p-4 space-y-6">
-            <h3 className="text-lg font-semibold">Mental Health Resources</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Access helpful resources for mental health support
-            </p>
+          <div className="p-5 space-y-6">
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-semibold">Mental Health Resources</h3>
+              <p className="text-sm text-muted-foreground">Support services for mental wellbeing</p>
+            </div>
             
             <div className="space-y-4">
-              <div className="rounded-lg border p-3">
-                <h4 className="font-medium mb-2">Crisis Support</h4>
-                <p className="text-sm mb-2">National Mental Health Helpline (Bangladesh): 01688-709965</p>
-                <p className="text-sm">Kaan Pete Roi (Emotional Support): 9612119911</p>
+              <div className="rounded-lg border p-4 bg-card">
+                <h4 className="font-medium mb-2 flex items-center">
+                  <AlertCircle className="h-4 w-4 text-red-500 mr-2" />
+                  Crisis Support
+                </h4>
+                <div className="space-y-2">
+                  <div className="bg-muted/40 rounded p-2 text-sm">
+                    <p className="font-medium">National Mental Health Helpline (Bangladesh)</p>
+                    <p className="text-muted-foreground">01688-709965</p>
+                  </div>
+                  <div className="bg-muted/40 rounded p-2 text-sm">
+                    <p className="font-medium">Kaan Pete Roi (Emotional Support)</p>
+                    <p className="text-muted-foreground">9612119911</p>
+                  </div>
+                </div>
               </div>
               
-              <Link href="/mental-health-assistant/resources">
-                <Button className="w-full">View All Resources</Button>
+              <Link href="/mental-health-assistant/resources" className="block">
+                <Button className="w-full">
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  View All Resources
+                </Button>
               </Link>
             </div>
           </div>
@@ -475,74 +536,89 @@ export default function MentalHealthAssistant() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col h-screen bg-muted/30 dark:bg-gray-950">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 py-3 px-4 sm:px-6">
-        <div className="flex justify-between items-center max-w-7xl mx-auto">
+      <header className="bg-background border-b py-3 px-4 sm:px-6 sticky top-0 z-10 shadow-sm">
+        <div className="flex justify-between items-center max-w-6xl mx-auto">
           <div className="flex items-center space-x-4">
-            <Sheet>
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <MenuIcon className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-[300px] sm:w-[380px] p-0">
-                <SheetHeader className="px-4 py-3 border-b">
-                  <SheetTitle>Mental Health Tools</SheetTitle>
+              <SheetContent side="left" className="w-[320px] sm:w-[380px] p-0 border-r">
+                <SheetHeader className="px-5 py-3 border-b flex flex-row justify-between items-center">
+                  <div className="flex items-center space-x-2">
+                    <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-md p-1">
+                      <Sparkles className="h-5 w-5 text-white" />
+                    </div>
+                    <SheetTitle>Wellness Tools</SheetTitle>
+                  </div>
+                  <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setIsSheetOpen(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
                 </SheetHeader>
                 
-                <div className="border-b border-border">
-                  <div className="flex p-1">
-                    <Button
-                      variant={sidebarContent === 'journal' ? 'secondary' : 'ghost'}
-                      className="flex-1 justify-start rounded-sm text-sm"
-                      onClick={() => setSidebarContent('journal')}
-                    >
-                      Journal
-                    </Button>
-                    <Button
-                      variant={sidebarContent === 'insights' ? 'secondary' : 'ghost'}
-                      className="flex-1 justify-start rounded-sm text-sm"
-                      onClick={() => setSidebarContent('insights')}
-                    >
-                      Insights
-                    </Button>
-                    <Button
-                      variant={sidebarContent === 'settings' ? 'secondary' : 'ghost'}
-                      className="flex-1 justify-start rounded-sm text-sm"
-                      onClick={() => setSidebarContent('settings')}
-                    >
-                      Settings
-                    </Button>
-                    <Button
-                      variant={sidebarContent === 'resources' ? 'secondary' : 'ghost'}
-                      className="flex-1 justify-start rounded-sm text-sm"
-                      onClick={() => setSidebarContent('resources')}
-                    >
-                      Resources
-                    </Button>
+                <Tabs defaultValue={sidebarTab} className="w-full" onValueChange={setSidebarTab}>
+                  <div className="px-1 py-2 border-b">
+                    <TabsList className="w-full grid grid-cols-4 h-9">
+                      <TabsTrigger value="journal" className="text-xs">
+                        <Calendar className="h-3.5 w-3.5 mr-1" />
+                        Journal
+                      </TabsTrigger>
+                      <TabsTrigger value="insights" className="text-xs">
+                        <BarChart className="h-3.5 w-3.5 mr-1" />
+                        Insights
+                      </TabsTrigger>
+                      <TabsTrigger value="settings" className="text-xs">
+                        <Settings className="h-3.5 w-3.5 mr-1" />
+                        Settings
+                      </TabsTrigger>
+                      <TabsTrigger value="resources" className="text-xs">
+                        <Info className="h-3.5 w-3.5 mr-1" />
+                        Resources
+                      </TabsTrigger>
+                    </TabsList>
                   </div>
-                </div>
-                
-                <ScrollArea className="flex-1 h-[calc(100vh-7rem)]">
-                  {renderSidebarContent()}
-                </ScrollArea>
+                  
+                  <ScrollArea className="flex-1 h-[calc(100vh-8rem)]">
+                    <TabsContent value={sidebarTab} className="mt-0">
+                      {renderSidebarContent()}
+                    </TabsContent>
+                  </ScrollArea>
+                </Tabs>
               </SheetContent>
             </Sheet>
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Mental Health Assistant</h1>
+            
+            <div className="flex flex-col">
+              <h1 className="text-lg font-semibold tracking-tight">Mental Health Assistant</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">AI-powered emotional support and guidance</p>
+            </div>
           </div>
           
-          <div className="flex items-center">
+          <div className="flex items-center gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" className="rounded-full h-9 w-9" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                    {theme === 'dark' ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link href="/mental-health-assistant/resources">
-                    <Button variant="ghost" size="icon">
-                      <Info className="h-5 w-5" />
+                    <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
+                      <Info className="h-4 w-4" />
                     </Button>
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent>Resources</TooltipContent>
+                <TooltipContent>Help & Resources</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -551,8 +627,8 @@ export default function MentalHealthAssistant() {
 
       {/* Main Chat Area */}
       <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-[calc(100vh-8rem)] px-4 py-4">
-          <div className="max-w-3xl mx-auto space-y-4">
+        <ScrollArea className="h-[calc(100vh-9rem)] px-4 py-4">
+          <div className="max-w-3xl mx-auto space-y-3 pb-1">
             {messages.map((message, index) => (
               <div key={index}>
                 {message.role === 'function' ? (
@@ -568,9 +644,9 @@ export default function MentalHealthAssistant() {
             {isLoading && !isRecording && (
               <div className="flex justify-center my-4">
                 <div className="flex space-x-2">
-                  <div className="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce [animation-delay:-0.3s]"></div>
-                  <div className="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce [animation-delay:-0.15s]"></div>
-                  <div className="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce"></div>
+                  <div className="h-2 w-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]"></div>
+                  <div className="h-2 w-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]"></div>
+                  <div className="h-2 w-2 rounded-full bg-primary/60 animate-bounce"></div>
                 </div>
               </div>
             )}
@@ -579,7 +655,7 @@ export default function MentalHealthAssistant() {
             {isRecording && (
               <div className="flex justify-center items-center space-x-2 my-4">
                 <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse"></div>
-                <span className="text-sm">Recording... {recordingTime}s</span>
+                <span className="text-sm font-medium">Recording... {recordingTime}s</span>
               </div>
             )}
           </div>
@@ -587,59 +663,81 @@ export default function MentalHealthAssistant() {
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
+      <div className="border-t bg-background px-4 py-3 shadow-sm">
         <div className="max-w-3xl mx-auto">
           {/* Emotion indicators */}
-          {(faceEmotion || voiceEmotion) && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              {faceEmotion && (
-                <div className={`inline-flex items-center ${includeFaceEmotion ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'} border rounded-full px-2 py-1`}>
-                  <input
-                    id="include-face"
-                    type="checkbox"
-                    checked={includeFaceEmotion}
-                    onChange={() => setIncludeFaceEmotion(!includeFaceEmotion)}
-                    className="h-3 w-3 mr-2"
-                  />
-                  <label htmlFor="include-face" className="text-xs flex items-center cursor-pointer">
-                    <Camera className="h-3 w-3 mr-1" />
-                    <span>Face: {faceEmotion.emotion} ({Math.round(faceEmotion.score * 100)}%)</span>
-                  </label>
-                </div>
-              )}
-              {voiceEmotion && (
-                <div className={`inline-flex items-center ${includeVoiceEmotion ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'} border rounded-full px-2 py-1`}>
-                  <input
-                    id="include-voice"
-                    type="checkbox"
-                    checked={includeVoiceEmotion}
-                    onChange={() => setIncludeVoiceEmotion(!includeVoiceEmotion)}
-                    className="h-3 w-3 mr-2"
-                  />
-                  <label htmlFor="include-voice" className="text-xs flex items-center cursor-pointer">
-                    <Mic className="h-3 w-3 mr-1" />
-                    <span>Voice: {voiceEmotion.emotion} ({Math.round(voiceEmotion.score * 100)}%)</span>
-                  </label>
+          {(faceEmotion || voiceEmotion || emotionConfidence) && (
+            <div className="mb-3">
+              <div className="flex flex-wrap gap-2 mb-2">
+                {faceEmotion && (
+                  <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs border shadow-sm ${
+                    includeFaceEmotion 
+                      ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/50 dark:border-blue-900/50 dark:text-blue-300' 
+                      : 'bg-muted/50 border-border'
+                  }`}>
+                    <input
+                      id="include-face"
+                      type="checkbox"
+                      checked={includeFaceEmotion}
+                      onChange={() => setIncludeFaceEmotion(!includeFaceEmotion)}
+                      className="h-3 w-3 mr-2 rounded-sm"
+                    />
+                    <label htmlFor="include-face" className="flex items-center cursor-pointer select-none">
+                      <Camera className="h-3 w-3 mr-1.5" />
+                      <span className="font-medium mr-1">Face:</span> 
+                      <span>{faceEmotion.emotion}</span>
+                      <Badge variant="outline" className="ml-1.5 py-0 h-4 text-[10px] px-1 font-normal">
+                        {Math.round(faceEmotion.score * 100)}%
+                      </Badge>
+                    </label>
+                  </div>
+                )}
+                
+                {voiceEmotion && (
+                  <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs border shadow-sm ${
+                    includeVoiceEmotion 
+                      ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950/50 dark:border-green-900/50 dark:text-green-300' 
+                      : 'bg-muted/50 border-border'
+                  }`}>
+                    <input
+                      id="include-voice"
+                      type="checkbox"
+                      checked={includeVoiceEmotion}
+                      onChange={() => setIncludeVoiceEmotion(!includeVoiceEmotion)}
+                      className="h-3 w-3 mr-2 rounded-sm"
+                    />
+                    <label htmlFor="include-voice" className="flex items-center cursor-pointer select-none">
+                      <Mic className="h-3 w-3 mr-1.5" />
+                      <span className="font-medium mr-1">Voice:</span>
+                      <span>{voiceEmotion.emotion}</span>
+                      <Badge variant="outline" className="ml-1.5 py-0 h-4 text-[10px] px-1 font-normal">
+                        {Math.round(voiceEmotion.score * 100)}%
+                      </Badge>
+                    </label>
+                  </div>
+                )}
+              </div>
+              
+              {/* Confidence indicator */}
+              {emotionConfidence && (
+                <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs ${
+                  emotionConfidence === 'high' 
+                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900/60' 
+                    : emotionConfidence === 'medium' 
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60'
+                    : 'bg-muted/50 text-muted-foreground border-muted'
+                } border shadow-sm`}>
+                  <AlertCircle className="h-3 w-3 mr-1.5" />
+                  <span className="mr-1.5">
+                    {mixedEmotionalSignals ? 'Mixed emotional signals detected' : 'Emotion analysis:'}
+                  </span>
+                  <span className="font-medium">{emotionConfidence}</span>
                 </div>
               )}
             </div>
           )}
           
-          {/* Confidence indicator */}
-          {emotionConfidence && (
-            <div className={`mb-2 text-xs px-2 py-0.5 rounded-full inline-flex items-center ${
-              emotionConfidence === 'high' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200' :
-              emotionConfidence === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200' : 
-              'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-            }`}>
-              <span className="mr-1 text-xs">
-                {mixedEmotionalSignals ? 'Mixed emotional signals detected' : 'Emotion confidence:'}
-              </span>
-              <span className="font-medium text-xs">{emotionConfidence}</span>
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit} className="flex space-x-2">
+          <form onSubmit={handleSubmit} className="flex gap-2">
             <div className="flex-1 relative">
               <Input
                 ref={inputRef}
@@ -647,7 +745,7 @@ export default function MentalHealthAssistant() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={isLoading || isRecording}
-                className="pr-24"
+                className="pr-24 py-5 shadow-sm bg-background border-muted"
               />
               
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex space-x-1">
@@ -658,11 +756,11 @@ export default function MentalHealthAssistant() {
                         type="button" 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8" 
+                        className={`h-8 w-8 rounded-full ${includeFaceEmotion ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30' : ''}`}
                         onClick={captureImage}
                         disabled={isLoading || isRecording}
                       >
-                        <Camera className={`h-4 w-4 ${includeFaceEmotion ? 'text-blue-500' : ''}`} />
+                        <Camera className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Analyze facial emotion</TooltipContent>
@@ -676,7 +774,7 @@ export default function MentalHealthAssistant() {
                         type="button" 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8" 
+                        className="h-8 w-8 rounded-full" 
                         onClick={toggleAudioUploadMode}
                         disabled={isLoading || isRecording}
                       >
@@ -694,7 +792,7 @@ export default function MentalHealthAssistant() {
                         type="button" 
                         variant={isRecording ? "destructive" : "ghost"} 
                         size="icon" 
-                        className={`h-8 w-8 ${includeVoiceEmotion ? 'text-green-500' : ''}`} 
+                        className={`h-8 w-8 rounded-full ${includeVoiceEmotion && !isRecording ? 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30' : ''}`}
                         onClick={handleVoiceButton}
                         disabled={isLoading && !isRecording}
                       >
@@ -710,11 +808,18 @@ export default function MentalHealthAssistant() {
             <Button 
               type="submit" 
               size="icon"
+              className="h-10 w-10 rounded-full shadow-sm"
               disabled={isLoading || isRecording || (!input.trim() && !faceEmotion && !voiceEmotion)}
             >
               <Send className="h-4 w-4" />
             </Button>
           </form>
+          
+          <div className="mt-2 text-center">
+            <p className="text-[10px] text-muted-foreground">
+              Messages are private and will not be shared • <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
+            </p>
+          </div>
         </div>
       </div>
 

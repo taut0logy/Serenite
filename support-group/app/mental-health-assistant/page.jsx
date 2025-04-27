@@ -22,6 +22,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import { v4 as uuidv4 } from 'uuid';
 
 // Import Shadcn UI components
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ export default function MentalHealthAssistant() {
   const [emotionConfidence, setEmotionConfidence] = useState(null);
   const [mixedEmotionalSignals, setMixedEmotionalSignals] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [userId, setUserId] = useState(null);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -81,6 +83,16 @@ export default function MentalHealthAssistant() {
         clearInterval(recordingTimerRef.current);
       }
     };
+  }, []);
+
+  // Initialize userId from localStorage or create a new one
+  useEffect(() => {
+    let storedUserId = localStorage.getItem('mental_health_assistant_user_id');
+    if (!storedUserId) {
+      storedUserId = uuidv4();
+      localStorage.setItem('mental_health_assistant_user_id', storedUserId);
+    }
+    setUserId(storedUserId);
   }, []);
 
   const scrollToBottom = () => {
@@ -420,6 +432,50 @@ export default function MentalHealthAssistant() {
     }
   };
 
+  // Handle feedback submission
+  const handleFeedbackSubmit = async (feedbackData) => {
+    try {
+      // Find the user message that preceded this assistant message
+      const assistantMessageIndex = feedbackData.messageIndex;
+      let userMessageContent = '';
+      
+      // Look for the closest user message before this assistant message
+      for (let i = assistantMessageIndex - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          userMessageContent = messages[i].content;
+          break;
+        }
+      }
+      
+      const feedbackPayload = {
+        user_id: userId,
+        timestamp: new Date().toISOString(),
+        assistant_message: feedbackData.messageContent,
+        user_message: userMessageContent,
+        helpful: feedbackData.helpful,
+        improvement: feedbackData.improvement,
+        message_id: feedbackData.messageId
+      };
+      
+      // Submit the feedback to the server
+      const response = await fetch('http://localhost:8000/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(feedbackPayload),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to submit feedback');
+      }
+      
+      console.log('Feedback submitted successfully');
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+    }
+  };
+
   // Helper to render the sidebar content
   const renderSidebarContent = () => {
     switch (sidebarTab) {
@@ -480,6 +536,21 @@ export default function MentalHealthAssistant() {
                     <MoonStar className="h-3.5 w-3.5 mr-1" />
                     Dark
                   </Button>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              {/* Admin section */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold">Admin Tools</h4>
+                <div className="space-y-2">
+                  <Link href="/mental-health-assistant/feedback">
+                    <Button variant="outline" className="w-full justify-start" size="sm">
+                      <BarChart className="h-3.5 w-3.5 mr-2" />
+                      Feedback Dashboard
+                    </Button>
+                  </Link>
                 </div>
               </div>
               
@@ -634,7 +705,11 @@ export default function MentalHealthAssistant() {
                 {message.role === 'function' ? (
                   <ThinkingProcess content={message.content} />
                 ) : (
-                  <ChatMessageShadcn message={message} />
+                  <ChatMessageShadcn 
+                    message={message} 
+                    messageIndex={index}
+                    onFeedbackSubmit={handleFeedbackSubmit}
+                  />
                 )}
               </div>
             ))}

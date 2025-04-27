@@ -93,6 +93,37 @@ export default function MentalHealthAssistant() {
       localStorage.setItem('mental_health_assistant_user_id', storedUserId);
     }
     setUserId(storedUserId);
+    
+    // Load chat history when component mounts
+    const loadChatHistory = async () => {
+      if (storedUserId) {
+        try {
+          const response = await fetch(`http://localhost:8000/chat/history/${storedUserId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.messages && data.messages.length > 0) {
+              // Add default welcome message if it doesn't exist
+              const hasWelcomeMessage = data.messages.some(
+                msg => msg.role === 'assistant' && msg.content.includes('How can I help you today')
+              );
+              
+              if (!hasWelcomeMessage) {
+                data.messages.unshift({
+                  role: 'assistant',
+                  content: 'Hello! I\'m your mental health assistant. How can I help you today?'
+                });
+              }
+              
+              setMessages(data.messages);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading chat history:', error);
+        }
+      }
+    };
+    
+    loadChatHistory();
   }, []);
 
   const scrollToBottom = () => {
@@ -117,7 +148,8 @@ export default function MentalHealthAssistant() {
         include_face_emotion: includeFaceEmotion && faceEmotion !== null,
         face_emotion: includeFaceEmotion ? faceEmotion : null,
         include_voice_emotion: includeVoiceEmotion && voiceEmotion !== null,
-        voice_emotion: includeVoiceEmotion ? voiceEmotion : null
+        voice_emotion: includeVoiceEmotion ? voiceEmotion : null,
+        user_id: userId // Include the user ID to maintain chat history
       };
 
       // Make API request
@@ -476,6 +508,37 @@ export default function MentalHealthAssistant() {
     }
   };
 
+  // Add this function to handle clearing the chat history
+  const clearChatHistory = async () => {
+    if (!userId) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8000/chat/history/${userId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Reset messages to just the welcome message
+        setMessages([
+          { role: 'assistant', content: 'Hello! I\'m your mental health assistant. How can I help you today?' }
+        ]);
+        
+        // Reset agent state
+        setAgentState(null);
+        
+        // Clear emotions
+        setFaceEmotion(null);
+        setVoiceEmotion(null);
+        setIncludeFaceEmotion(false);
+        setIncludeVoiceEmotion(false);
+        setEmotionConfidence(null);
+        setMixedEmotionalSignals(false);
+      }
+    } catch (error) {
+      console.error('Error clearing chat history:', error);
+    }
+  };
+
   // Helper to render the sidebar content
   const renderSidebarContent = () => {
     switch (sidebarTab) {
@@ -551,6 +614,27 @@ export default function MentalHealthAssistant() {
                       Feedback Dashboard
                     </Button>
                   </Link>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              {/* Chat history section */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold">Chat History</h4>
+                <div className="space-y-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full justify-start text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={clearChatHistory}
+                  >
+                    <X className="h-3.5 w-3.5 mr-2" />
+                    Clear Chat History
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground">
+                    This will delete all your conversation history with the assistant.
+                  </p>
                 </div>
               </div>
               

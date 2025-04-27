@@ -16,6 +16,10 @@ import librosa
 import json
 from PIL import Image
 
+# Import langchain memory components
+from langchain.memory import ChatMessageHistory
+from langchain.schema import HumanMessage, AIMessage, SystemMessage
+
 # Import from our mental health assistant module
 from mental_health_assistant.mental_health_assistant import chat_with_mental_health_assistant
 from mental_health_assistant.emotion_detection import (
@@ -53,6 +57,7 @@ class ChatRequest(BaseModel):
     face_emotion: Optional[Dict[str, Any]] = None
     include_voice_emotion: bool = False
     voice_emotion: Optional[Dict[str, Any]] = None
+    user_id: Optional[str] = None  # Added user_id to identify the conversation
 
 class ChatResponse(BaseModel):
     messages: List[Dict[str, Any]]
@@ -87,6 +92,7 @@ class Feedback(BaseModel):
 # In-memory storage (replace with database in production)
 emotion_journal = []
 feedback_data = []  # Store feedback data in memory
+chat_histories = {}  # Store chat histories per user
 
 @app.get("/")
 async def root():
@@ -99,12 +105,39 @@ async def chat(request: ChatRequest):
     
     If emotion data is included, it will be incorporated into the conversation.
     """
-    # Get response from assistant
-    result = None
+    global chat_histories
     
-    # If we have emotion data, add it directly to the agent state instead of modifying the message
+    # Check for user ID - required for memory management
+    user_id = request.user_id
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID is required for chat history")
+    
+    # Retrieve or create chat history for this user
+    if user_id not in chat_histories:
+        chat_histories[user_id] = ChatMessageHistory()
+    
+    # Get the chat history
+    history = chat_histories[user_id]
+    
+    # Initialize agent state if needed
     if request.agent_state is None:
         request.agent_state = {}
+    
+    # Check if we should add message history to the agent state
+    if "messages" not in request.agent_state:
+        # Convert langchain ChatMessageHistory to the format our assistant expects
+        converted_messages = []
+        for msg in history.messages:
+            if isinstance(msg, HumanMessage):
+                converted_messages.append({"type": "human", "content": msg.content})
+            elif isinstance(msg, AIMessage):
+                converted_messages.append({"type": "ai", "content": msg.content})
+            elif isinstance(msg, SystemMessage):
+                converted_messages.append({"type": "system", "content": msg.content})
+        
+        # Add messages to agent state if there's history
+        if converted_messages:
+            request.agent_state["message_history"] = converted_messages
     
     # Add facial emotion data to state if selected
     if request.include_face_emotion and request.face_emotion:
@@ -120,24 +153,78 @@ async def chat(request: ChatRequest):
             "score": request.voice_emotion.get("score", 0.0)
         }
     
+    # Add user message to history
+    history.add_user_message(request.message)
+    
     # Pass the original message and updated state to the assistant
     result = chat_with_mental_health_assistant(request.message, request.agent_state)
     
     # Format response
     formatted_messages = []
+    assistant_response = None
+    
     if "messages" in result:
         for msg in result["messages"]:
             if hasattr(msg, 'type') and msg.type == 'human':
                 formatted_messages.append({"role": "user", "content": msg.content})
             elif hasattr(msg, 'type') and msg.type == 'ai':
                 formatted_messages.append({"role": "assistant", "content": msg.content})
+                assistant_response = msg.content  # Save the assistant's response
             elif hasattr(msg, 'type') and msg.type == 'function':
                 formatted_messages.append({"role": "function", "content": msg.content, "name": msg.name})
+    
+    # Add assistant response to history if we found one
+    if assistant_response:
+        history.add_ai_message(assistant_response)
+    
+    # Store updated chat history
+    chat_histories[user_id] = history
+    
+    # Limit memory usage (keep only the most recent 100 users' chat histories)
+    if len(chat_histories) > 100:
+        oldest_keys = sorted(chat_histories.keys())[:-100]
+        for key in oldest_keys:
+            chat_histories.pop(key, None)
     
     return {
         "messages": formatted_messages,
         "agent_state": result
     }
+
+@app.get("/chat/history/{user_id}")
+async def get_chat_history(user_id: str):
+    """
+    Get the chat history for a specific user
+    """
+    global chat_histories
+    
+    if user_id not in chat_histories:
+        return {"messages": []}
+    
+    history = chat_histories[user_id]
+    formatted_messages = []
+    
+    for msg in history.messages:
+        if isinstance(msg, HumanMessage):
+            formatted_messages.append({"role": "user", "content": msg.content})
+        elif isinstance(msg, AIMessage):
+            formatted_messages.append({"role": "assistant", "content": msg.content})
+        elif isinstance(msg, SystemMessage):
+            formatted_messages.append({"role": "system", "content": msg.content})
+    
+    return {"messages": formatted_messages}
+
+@app.delete("/chat/history/{user_id}")
+async def clear_chat_history(user_id: str):
+    """
+    Clear the chat history for a specific user
+    """
+    global chat_histories
+    
+    if user_id in chat_histories:
+        chat_histories[user_id] = ChatMessageHistory()
+    
+    return {"status": "success", "message": "Chat history cleared"}
 
 @app.post("/detect-face-emotion", response_model=EmotionDetectionResult)
 async def detect_emotion(file: UploadFile = File(...)):

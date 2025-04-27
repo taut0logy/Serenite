@@ -1092,7 +1092,6 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
         state["immediate_resources_needed"] = True
     
     # Add reasoning as a function message if reasoning is visible
-    new_messages = []  # Create a new list for messages to add
     if state.get("reasoning_visible", True):
         reasoning_message = f"""
         💭 **Live Thinking Process**
@@ -1123,12 +1122,13 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
         
         Considering the overall context and intensity, I would assess this as a **{parsed_response.get('crisis_level', 'low')}** level situation.
         
-        {parsed_response.get('reasoning', '')}
+        {parsed_response.get('crisis_justification', '')}
         
         Now, let me think about how best to respond...
         """
         
-        new_messages.append(
+        # Append directly to state messages instead of returning a new list
+        state["messages"].append(
             FunctionMessage(
                 name="thinking_process", 
                 content=reasoning_message
@@ -1140,8 +1140,8 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
         "emotion_analysis": parsed_response,
         "combined_emotion_profile": combined_profile,
         "immediate_resources_needed": parsed_response.get("needs_immediate_resources", False) or 
-                                      parsed_response.get("crisis_level") in ["high", "very_high"],
-        "messages": new_messages
+                                      parsed_response.get("crisis_level") in ["high", "very_high"]
+        # Don't return messages to avoid duplication
     }
 
 def determine_response_strategy(state: AgentState) -> Dict:
@@ -1219,7 +1219,6 @@ def determine_response_strategy(state: AgentState) -> Dict:
     state["response_strategy"] = parsed_response
     
     # Add reasoning as a function message if reasoning is visible
-    new_messages = []
     if state.get("reasoning_visible", True):
         reasoning_message = f"""
         💭 **Continuing My Thought Process**
@@ -1236,7 +1235,8 @@ def determine_response_strategy(state: AgentState) -> Dict:
         Let me gather any information that might help...
         """
         
-        new_messages.append(
+        # Append directly to state messages
+        state["messages"].append(
             FunctionMessage(
                 name="thinking_process", 
                 content=reasoning_message
@@ -1245,8 +1245,8 @@ def determine_response_strategy(state: AgentState) -> Dict:
     
     # Return updates to state
     return {
-        "response_strategy": parsed_response,
-        "messages": new_messages
+        "response_strategy": parsed_response
+        # Don't return messages to avoid duplication
     }
 
 def provide_crisis_resources(state: AgentState) -> Dict:
@@ -1476,7 +1476,6 @@ def generate_response(state: AgentState) -> Dict:
     response = llm.invoke(formatted_messages)
     
     # Start with reasoning if enabled
-    new_messages = []
     if state.get("reasoning_visible", True):
         final_reasoning = f"""
         💭 **Finalizing My Response**
@@ -1507,9 +1506,11 @@ def generate_response(state: AgentState) -> Dict:
         {"I've found some helpful resources that I'll share with you." if tool_results else "I'll focus on direct support for now."}
         
         Here's my response:
+        {response.content}
         """
         
-        new_messages.append(
+        # Append directly to state messages
+        state["messages"].append(
             FunctionMessage(
                 name="thinking_process", 
                 content=final_reasoning
@@ -1569,9 +1570,10 @@ def generate_response(state: AgentState) -> Dict:
     if references:
         content += "\n\nReferences:\n" + "\n".join(references)
     
-    new_messages.append(AIMessage(content=content))
+    # Append directly to state messages
+    state["messages"].append(AIMessage(content=content))
     
-    return {"messages": new_messages}
+    return {}  # Return empty dict since we've updated state directly
 
 def update_user_preferences(state: AgentState) -> Dict:
     """Update user preferences based on their messages."""
@@ -1628,16 +1630,15 @@ def explain_tool_selection(state: AgentState) -> Dict:
         Searching...
         """
         
-        return {
-            "messages": [
+        # Append directly to state messages
+        state["messages"].append(
                 FunctionMessage(
                     name="thinking_process", 
                     content=tools_reasoning
                 )
-            ]
-        }
+        )
     
-    return {"messages": []}
+    return {}
 
 def track_mood(state: AgentState) -> Dict:
     """Track user's mood over time and identify patterns."""

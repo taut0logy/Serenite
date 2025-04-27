@@ -115,39 +115,15 @@ export default function MentalHealthAssistant() {
         setMixedEmotionalSignals(profile.mixed_signals || false);
       }
       
+      // Add only the assistant's response messages to chat, not user messages
       // Filter to only include assistant and function messages, since we already added the user message
-      let formattedMessages = data.messages
+      const formattedMessages = data.messages
         .filter(msg => msg.role === 'assistant' || msg.role === 'function')
         .map(msg => ({
           role: msg.role,
           content: msg.content,
           name: msg.name
         }));
-      
-      // Deduplicate thinking process messages that might be similar
-      const functionMessages = formattedMessages.filter(msg => msg.role === 'function');
-      const assistantMessages = formattedMessages.filter(msg => msg.role === 'assistant');
-      
-      // Only keep the last function message of each type (by name)
-      const dedupedFunctionMessages = [];
-      const seenFunctionNames = new Set();
-      
-      // Process function messages in reverse (newest first)
-      for (let i = functionMessages.length - 1; i >= 0; i--) {
-        const msg = functionMessages[i];
-        if (!seenFunctionNames.has(msg.name)) {
-          dedupedFunctionMessages.unshift(msg); // Add to front to maintain order
-          seenFunctionNames.add(msg.name);
-        }
-      }
-      
-      // For assistant messages, only keep the last one if there are multiple
-      const dedupedAssistantMessages = assistantMessages.length > 0 
-        ? [assistantMessages[assistantMessages.length - 1]] 
-        : [];
-      
-      // Combine deduped messages in the right order
-      formattedMessages = [...dedupedFunctionMessages, ...dedupedAssistantMessages];
       
       // Filter out function messages if user has disabled agent reasoning
       const messagesToAdd = showAgentReasoning 

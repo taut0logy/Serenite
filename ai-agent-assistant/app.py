@@ -14,7 +14,10 @@ import os
 import datetime
 import librosa
 import json
+import requests
 from PIL import Image
+# Remove googletrans import
+# from googletrans import Translator
 
 # Import langchain memory components
 from langchain.memory import ChatMessageHistory
@@ -43,6 +46,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Remove translator initialization
+# translator = Translator()
 
 # Data models
 class ChatMessage(BaseModel):
@@ -88,6 +94,18 @@ class Feedback(BaseModel):
     helpful: bool
     improvement: Optional[str] = None
     message_id: Optional[Union[int, str]] = None
+
+# Translation request model
+class TranslationRequest(BaseModel):
+    text: str
+    target_language: str = "bn"  # Default to Bengali/Bangla
+
+# Translation response model
+class TranslationResponse(BaseModel):
+    original_text: str
+    translated_text: str
+    source_language: str
+    target_language: str
 
 # In-memory storage (replace with database in production)
 emotion_journal = []
@@ -619,6 +637,39 @@ async def get_feedback_analytics():
             for date, stats in sorted(daily_stats.items())
         ]
     }
+
+@app.post("/translate", response_model=TranslationResponse)
+async def translate_text(request: TranslationRequest):
+    """
+    Translate text from one language to another using Google Translate API directly
+    """
+    try:
+        # Use public Google Translate API directly with requests
+        # This is more stable and doesn't have dependency conflicts
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={request.target_language}&dt=t&q={requests.utils.quote(request.text)}"
+        
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Translation service unavailable")
+        
+        # Parse the response from Google
+        result = response.json()
+        
+        # Extract translated text from the nested response structure
+        translated_text = ''.join([sentence[0] for sentence in result[0]])
+        
+        # Get detected source language if available
+        source_language = result[2] if len(result) > 2 else "auto"
+        
+        return TranslationResponse(
+            original_text=request.text,
+            translated_text=translated_text,
+            source_language=source_language,
+            target_language=request.target_language
+        )
+    except Exception as e:
+        # Handle errors
+        raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True) 

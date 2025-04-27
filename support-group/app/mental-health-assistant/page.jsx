@@ -40,6 +40,8 @@ import ChatMessageShadcn from '@/components/ChatMessageShadcn';
 import ThinkingProcess from '@/components/ThinkingProcess';
 import EmotionJournal from '../../components/EmotionJournal';
 import EmotionInsights from '../../components/EmotionInsights';
+import FacialEmotionCapture from '@/components/FacialEmotionCapture';
+import VoiceEmotionCapture from '@/components/VoiceEmotionCapture';
 
 export default function MentalHealthAssistant() {
   const [messages, setMessages] = useState([
@@ -62,6 +64,8 @@ export default function MentalHealthAssistant() {
   const [mixedEmotionalSignals, setMixedEmotionalSignals] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -238,7 +242,25 @@ export default function MentalHealthAssistant() {
   };
 
   const captureImage = async () => {
-    fileInputRef.current?.click();
+    // Open the facial emotion capture modal instead of file input
+    setIsFaceModalOpen(true);
+  };
+
+  const handleFaceEmotionDetected = (emotionData) => {
+    setFaceEmotion(emotionData);
+    setIncludeFaceEmotion(true);
+    
+    // Notify user
+    setMessages(prev => [
+      ...prev, 
+      { 
+        role: 'system', 
+        content: `Detected facial emotion: ${emotionData.emotion} (confidence: ${Math.round(emotionData.score * 100)}%)` 
+      }
+    ]);
+
+    // Add emotion to journal
+    addEmotionToJournal(emotionData.emotion, emotionData.score, "Captured from camera facial expression", "face");
   };
 
   const handleImageUpload = async (e) => {
@@ -428,16 +450,25 @@ export default function MentalHealthAssistant() {
   };
 
   const handleVoiceButton = () => {
-    if (audioUploadMode) {
-      toggleAudioUploadMode();
-      return;
-    }
+    // Open the voice emotion capture modal
+    setIsVoiceModalOpen(true);
+  };
+
+  const handleVoiceEmotionDetected = (emotionData) => {
+    setVoiceEmotion(emotionData);
+    setIncludeVoiceEmotion(true);
     
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
+    // Notify user
+    setMessages(prev => [
+      ...prev, 
+      { 
+        role: 'system', 
+        content: `Detected voice emotion: ${emotionData.emotion} (confidence: ${Math.round(emotionData.score * 100)}%)` 
+      }
+    ]);
+
+    // Add emotion to journal
+    addEmotionToJournal(emotionData.emotion, emotionData.score, "Detected from voice recording", "voice");
   };
 
   const addEmotionToJournal = async (emotion, score, note, source) => {
@@ -537,6 +568,11 @@ export default function MentalHealthAssistant() {
     } catch (error) {
       console.error('Error clearing chat history:', error);
     }
+  };
+
+  // Add a function for uploading facial images directly
+  const uploadFacialImage = () => {
+    fileInputRef.current?.click();
   };
 
   // Helper to render the sidebar content
@@ -922,7 +958,25 @@ export default function MentalHealthAssistant() {
                         <Camera className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Analyze facial emotion</TooltipContent>
+                    <TooltipContent>Use camera for facial emotion</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full" 
+                        onClick={uploadFacialImage}
+                        disabled={isLoading || isRecording}
+                      >
+                        <Upload className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Upload facial image</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
 
@@ -958,7 +1012,7 @@ export default function MentalHealthAssistant() {
                         <Mic className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{isRecording ? "Stop recording" : "Record voice"}</TooltipContent>
+                    <TooltipContent>{isRecording ? "Stop recording" : "Record voice for emotion detection"}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -981,6 +1035,20 @@ export default function MentalHealthAssistant() {
           </div>
         </div>
       </div>
+
+      {/* FacialEmotionCapture component */}
+      <FacialEmotionCapture 
+        isOpen={isFaceModalOpen}
+        onClose={() => setIsFaceModalOpen(false)}
+        onEmotionDetected={handleFaceEmotionDetected}
+      />
+      
+      {/* VoiceEmotionCapture component */}
+      <VoiceEmotionCapture 
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        onEmotionDetected={handleVoiceEmotionDetected}
+      />
 
       {/* Hidden file inputs */}
       <input

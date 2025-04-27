@@ -88,26 +88,29 @@ async def chat(request: ChatRequest):
     
     If emotion data is included, it will be incorporated into the conversation.
     """
-    # Build context with emotions if included
-    context = request.message
-    emotions_added = []
-    
-    # Add facial emotion if selected
-    if request.include_face_emotion and request.face_emotion:
-        emotion = request.face_emotion.get("emotion")
-        emotions_added.append(f"facial expression: {emotion}")
-    
-    # Add voice emotion if selected
-    if request.include_voice_emotion and request.voice_emotion:
-        emotion = request.voice_emotion.get("emotion")
-        emotions_added.append(f"voice tone: {emotion}")
-    
-    # Add emotions to context if any were selected
-    if emotions_added:
-        context = f"{request.message} [Detected {', '.join(emotions_added)}]"
-    
     # Get response from assistant
-    result = chat_with_mental_health_assistant(context, request.agent_state)
+    result = None
+    
+    # If we have emotion data, add it directly to the agent state instead of modifying the message
+    if request.agent_state is None:
+        request.agent_state = {}
+    
+    # Add facial emotion data to state if selected
+    if request.include_face_emotion and request.face_emotion:
+        request.agent_state["facial_emotion"] = {
+            "emotion": request.face_emotion.get("emotion", ""),
+            "score": request.face_emotion.get("score", 0.0)
+        }
+    
+    # Add voice emotion data to state if selected
+    if request.include_voice_emotion and request.voice_emotion:
+        request.agent_state["voice_emotion"] = {
+            "emotion": request.voice_emotion.get("emotion", ""),
+            "score": request.voice_emotion.get("score", 0.0)
+        }
+    
+    # Pass the original message and updated state to the assistant
+    result = chat_with_mental_health_assistant(request.message, request.agent_state)
     
     # Format response
     formatted_messages = []
@@ -147,6 +150,19 @@ async def detect_emotion(file: UploadFile = File(...)):
     if emotion.lower() in EMOTION_MENTAL_HEALTH_INSIGHTS:
         insights = EMOTION_MENTAL_HEALTH_INSIGHTS[emotion.lower()]
     
+    # Add to emotion journal automatically
+    try:
+        entry = EmotionJournalEntry(
+            emotion=emotion,
+            score=score,
+            note="Automatically detected from facial expression",
+            source="face",
+            timestamp=datetime.datetime.now()
+        )
+        await add_to_emotion_journal(entry)
+    except Exception as e:
+        print(f"Error adding to emotion journal: {str(e)}")
+    
     return {
         "emotion": emotion,
         "score": score,
@@ -174,6 +190,19 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
         insights = {}
         if emotion.lower() in VOICE_EMOTION_INSIGHTS:
             insights = VOICE_EMOTION_INSIGHTS[emotion.lower()]
+        
+        # Add to emotion journal automatically
+        try:
+            entry = EmotionJournalEntry(
+                emotion=emotion,
+                score=confidence,
+                note="Automatically detected from voice",
+                source="voice",
+                timestamp=datetime.datetime.now()
+            )
+            await add_to_emotion_journal(entry)
+        except Exception as e:
+            print(f"Error adding to emotion journal: {str(e)}")
         
         return {
             "emotion": emotion,

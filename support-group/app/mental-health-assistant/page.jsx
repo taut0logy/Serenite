@@ -36,6 +36,11 @@ export default function MentalHealthAssistant() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUploadMode, setAudioUploadMode] = useState(false);
   
+  // Add state variables for tracking agent reasoning and confidence levels
+  const [showAgentReasoning, setShowAgentReasoning] = useState(true);
+  const [emotionConfidence, setEmotionConfidence] = useState(null);
+  const [mixedEmotionalSignals, setMixedEmotionalSignals] = useState(false);
+  
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
@@ -103,14 +108,29 @@ export default function MentalHealthAssistant() {
       // Update agent state
       setAgentState(data.agent_state);
       
-      // Add assistant's response to chat
-      const assistantMessages = data.messages
-        .filter(msg => msg.role === 'assistant')
-        .map(msg => ({ role: 'assistant', content: msg.content }));
-      
-      if (assistantMessages.length > 0) {
-        setMessages(prev => [...prev, ...assistantMessages]);
+      // Extract emotion confidence and mixed signals information, if available
+      if (data.agent_state && data.agent_state.combined_emotion_profile) {
+        const profile = data.agent_state.combined_emotion_profile;
+        setEmotionConfidence(profile.confidence);
+        setMixedEmotionalSignals(profile.mixed_signals || false);
       }
+      
+      // Add only the assistant's response messages to chat, not user messages
+      // Filter to only include assistant and function messages, since we already added the user message
+      const formattedMessages = data.messages
+        .filter(msg => msg.role === 'assistant' || msg.role === 'function')
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          name: msg.name
+        }));
+      
+      // Filter out function messages if user has disabled agent reasoning
+      const messagesToAdd = showAgentReasoning 
+        ? formattedMessages 
+        : formattedMessages.filter(msg => msg.role !== 'function');
+      
+      setMessages(prev => [...prev, ...messagesToAdd]);
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, { 
@@ -125,6 +145,9 @@ export default function MentalHealthAssistant() {
       if (includeVoiceEmotion) setVoiceEmotion(null);
       setIncludeFaceEmotion(false);
       setIncludeVoiceEmotion(false);
+      // Reset emotion analysis data
+      setEmotionConfidence(null);
+      setMixedEmotionalSignals(false);
     }
   };
 
@@ -355,6 +378,47 @@ export default function MentalHealthAssistant() {
     }
   };
 
+  // Update the settings area to include agent reasoning toggle
+  const renderSettings = () => {
+    return (
+      <div className="p-4">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Assistant Settings</h3>
+        
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <label htmlFor="show-reasoning" className="text-gray-700">
+              Show assistant's reasoning process
+            </label>
+            <div className="relative inline-block w-10 mr-2 align-middle select-none">
+              <input
+                type="checkbox"
+                id="show-reasoning"
+                checked={showAgentReasoning}
+                onChange={() => setShowAgentReasoning(!showAgentReasoning)}
+                className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+              />
+              <label
+                htmlFor="show-reasoning"
+                className={`block overflow-hidden h-6 rounded-full cursor-pointer ${
+                  showAgentReasoning ? 'bg-blue-500' : 'bg-gray-300'
+                }`}
+              />
+            </div>
+          </div>
+          
+          <div className="mt-4">
+            <p className="text-sm text-gray-600 mb-2">About this setting:</p>
+            <p className="text-sm text-gray-500">
+              When enabled, you'll see the assistant's thinking process as it analyzes your emotions
+              and determines how to respond. This can provide transparency into how it's interpreting
+              your messages.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar */}
@@ -395,6 +459,16 @@ export default function MentalHealthAssistant() {
                 Insights
               </button>
               <button 
+                onClick={() => setSidebarContent('settings')}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md ${
+                  sidebarContent === 'settings' 
+                    ? 'bg-blue-50 text-blue-700' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Settings
+              </button>
+              <button 
                 onClick={() => setSidebarContent('resources')}
                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-md ${
                   sidebarContent === 'resources' 
@@ -411,6 +485,7 @@ export default function MentalHealthAssistant() {
           <div className="flex-1 overflow-y-auto">
             {sidebarContent === 'journal' && <EmotionJournal />}
             {sidebarContent === 'insights' && <EmotionInsights />}
+            {sidebarContent === 'settings' && renderSettings()}
             {sidebarContent === 'resources' && (
               <div className="p-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Mental Health Resources</h3>
@@ -459,8 +534,21 @@ export default function MentalHealthAssistant() {
         <div className="flex-1 flex flex-col bg-white shadow-sm rounded-lg my-4 mx-4 overflow-hidden">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+            {/* Render messages with improved styling for function (thinking) messages */}
             {messages.map((message, index) => (
-              <ChatMessage key={index} message={message} />
+              <div key={index}>
+                {message.role === 'function' ? (
+                  <div className={`p-3 rounded-lg bg-blue-50 border border-blue-100 text-sm text-blue-800 ${showAgentReasoning ? 'block' : 'hidden'}`}>
+                    <div className="mb-1 flex items-center">
+                      <span className="inline-block h-2 w-2 rounded-full bg-blue-400 mr-2"></span>
+                      <span className="font-medium text-blue-700">Assistant's Thinking Process</span>
+                    </div>
+                    <div className="whitespace-pre-line" dangerouslySetInnerHTML={{ __html: message.content }} />
+                  </div>
+                ) : (
+                  <ChatMessage message={message} />
+                )}
+              </div>
             ))}
             <div ref={messagesEndRef} />
             
@@ -486,6 +574,20 @@ export default function MentalHealthAssistant() {
 
           {/* Input area */}
           <div className="border-t border-gray-200 p-4 bg-white">
+            {/* Show emotion confidence indicator when available */}
+            {emotionConfidence && (
+              <div className={`mb-2 text-xs px-3 py-1 rounded-full inline-flex items-center ${
+                emotionConfidence === 'high' ? 'bg-green-100 text-green-800' :
+                emotionConfidence === 'medium' ? 'bg-yellow-100 text-yellow-800' : 
+                'bg-gray-100 text-gray-800'
+              }`}>
+                <span className="mr-1">
+                  {mixedEmotionalSignals ? 'Mixed emotional signals detected' : 'Emotion confidence:'}
+                </span>
+                <span className="font-medium">{emotionConfidence}</span>
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit} className="flex space-x-2">
               <div className="flex-1 relative">
                 <input
@@ -500,7 +602,7 @@ export default function MentalHealthAssistant() {
                   <button
                     type="button"
                     onClick={captureImage}
-                    className={`p-1 rounded-full hover:bg-gray-100 ${isLoading || isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`p-1 rounded-full hover:bg-gray-100 ${isLoading || isRecording ? 'opacity-50 cursor-not-allowed' : ''} ${includeFaceEmotion ? 'bg-blue-100 text-blue-600' : ''}`}
                     disabled={isLoading || isRecording}
                     title="Analyze facial emotion"
                   >
@@ -524,7 +626,7 @@ export default function MentalHealthAssistant() {
                       isRecording 
                         ? 'bg-red-100 hover:bg-red-200' 
                         : 'hover:bg-gray-100'
-                    } ${isLoading && !isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    } ${includeVoiceEmotion ? 'bg-green-100 text-green-600' : ''} ${isLoading && !isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={isLoading && !isRecording}
                     title={isRecording ? "Stop recording" : "Record voice"}
                   >
@@ -548,7 +650,7 @@ export default function MentalHealthAssistant() {
             {/* Emotion indicators */}
             <div className="mt-2 flex flex-wrap gap-2">
               {faceEmotion && (
-                <div className="flex items-center bg-blue-50 px-2 py-1 rounded-full">
+                <div className={`flex items-center ${includeFaceEmotion ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-300'} border px-2 py-1 rounded-full`}>
                   <input
                     id="include-face"
                     type="checkbox"
@@ -556,13 +658,14 @@ export default function MentalHealthAssistant() {
                     onChange={() => setIncludeFaceEmotion(!includeFaceEmotion)}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="include-face" className="ml-2 text-sm text-gray-700">
-                    Face: {faceEmotion.emotion} ({Math.round(faceEmotion.score * 100)}%)
+                  <label htmlFor="include-face" className="ml-2 text-sm text-gray-700 flex items-center">
+                    <CameraIcon className="h-3 w-3 mr-1" />
+                    <span>Face: {faceEmotion.emotion} ({Math.round(faceEmotion.score * 100)}%)</span>
                   </label>
                 </div>
               )}
               {voiceEmotion && (
-                <div className="flex items-center bg-green-50 px-2 py-1 rounded-full">
+                <div className={`flex items-center ${includeVoiceEmotion ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-300'} border px-2 py-1 rounded-full`}>
                   <input
                     id="include-voice"
                     type="checkbox"
@@ -570,8 +673,9 @@ export default function MentalHealthAssistant() {
                     onChange={() => setIncludeVoiceEmotion(!includeVoiceEmotion)}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="include-voice" className="ml-2 text-sm text-gray-700">
-                    Voice: {voiceEmotion.emotion} ({Math.round(voiceEmotion.score * 100)}%)
+                  <label htmlFor="include-voice" className="ml-2 text-sm text-gray-700 flex items-center">
+                    <MicrophoneIcon className="h-3 w-3 mr-1" />
+                    <span>Voice: {voiceEmotion.emotion} ({Math.round(voiceEmotion.score * 100)}%)</span>
                   </label>
                 </div>
               )}
@@ -595,6 +699,17 @@ export default function MentalHealthAssistant() {
         className="hidden"
         onChange={handleAudioUpload}
       />
+      
+      {/* Add global styles */}
+      <style jsx global>{`
+        .toggle-checkbox:checked {
+          right: 0;
+          border-color: #68D391;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+          background-color: #68D391;
+        }
+      `}</style>
     </div>
   );
 }

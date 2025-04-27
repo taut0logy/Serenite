@@ -35,6 +35,10 @@ class AgentState(TypedDict):
     self_care_recommendations: NotRequired[List[Dict[str, Any]]]
     last_professional_referral: NotRequired[str]  # Timestamp of last referral
     psychoeducation_topics_covered: NotRequired[List[str]]
+    # Enhanced emotion tracking
+    facial_emotion: NotRequired[Dict[str, Any]]
+    voice_emotion: NotRequired[Dict[str, Any]]
+    combined_emotion_profile: NotRequired[Dict[str, Any]]
 
 # Tools and utilities
 from langchain_community.tools import WikipediaQueryRun, ArxivQueryRun
@@ -962,7 +966,7 @@ def initialize_state(state: Dict) -> Dict:
     return state
 
 def analyze_emotion_and_needs(state: AgentState) -> Dict:
-    """Analyze the user's emotional state and needs with explicit reasoning."""
+    """Analyze the user's emotional state and needs with explicit reasoning, integrating multiple emotion sources."""
     messages = state["messages"]
     
     # Get the latest user message
@@ -971,19 +975,35 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
     
     latest_user_msg = [msg for msg in messages if isinstance(msg, HumanMessage)][-1].content
     
+    # First, check if we have facial or voice emotion data to incorporate
+    facial_emotion = state.get("facial_emotion", None)
+    voice_emotion = state.get("voice_emotion", None)
+    
+    # If we have external emotion data, integrate it into the analysis
+    emotion_context = ""
+    if facial_emotion or voice_emotion:
+        emotion_context = "Taking into account the following detected emotions: "
+        if facial_emotion:
+            emotion_context += f"facial expression: {facial_emotion.get('emotion')} ({facial_emotion.get('score', 0)*100:.0f}% confidence), "
+        if voice_emotion:
+            emotion_context += f"voice tone: {voice_emotion.get('emotion')} ({voice_emotion.get('score', 0):.0f}% confidence), "
+        emotion_context = emotion_context.rstrip(", ") + "."
+    
     # Structured emotion analysis with reasoning - using a direct approach instead of function calling
     emotion_analysis_prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="""You are a mental health professional who analyzes emotional content.
+        SystemMessage(content=f"""You are a mental health professional who analyzes emotional content.
         
         Analyze the message and provide a structured assessment in the following JSON format:
-        {
+        {{
             "primary_emotion": "one of [happy, sad, angry, anxious, neutral, hopeful, fearful, confused]",
             "emotion_justification": "why you believe this is the primary emotion",
             "crisis_level": "one of [low, medium, high, very_high]",
             "crisis_justification": "why you assessed this crisis level",
             "needs_immediate_resources": true/false,
             "reasoning": "your step-by-step reasoning process"
-        }
+        }}
+        
+        {emotion_context}
         
         Return ONLY the valid JSON object without any other text.
         """),
@@ -1029,8 +1049,43 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
                 "reasoning": "Analysis encountered technical difficulties"
             }
     
-    # Save the analysis to state
+    # Create a combined emotion profile
+    combined_profile = {
+        "text_emotion": parsed_response.get("primary_emotion", "neutral"),
+        "facial_emotion": facial_emotion.get("emotion", None) if facial_emotion else None,
+        "voice_emotion": voice_emotion.get("emotion", None) if voice_emotion else None,
+        "final_assessment": parsed_response.get("primary_emotion", "neutral"),
+        "confidence": "high" if facial_emotion or voice_emotion else "medium",
+        "mixed_signals": False
+    }
+    
+    # Check for mixed signals between the different emotion sources
+    if facial_emotion and voice_emotion:
+        face = facial_emotion.get("emotion", "").lower()
+        voice = voice_emotion.get("emotion", "").lower()
+        text = parsed_response.get("primary_emotion", "").lower()
+        
+        conflicting_emotions = False
+        positive_emotions = ["happy", "calm", "neutral", "hopeful"]
+        negative_emotions = ["sad", "angry", "anxious", "fearful", "disgust"]
+        
+        # Check for conflicts between positive and negative emotion categories
+        emotions_list = [e for e in [face, voice, text] if e]
+        has_positive = any(e in positive_emotions for e in emotions_list)
+        has_negative = any(e in negative_emotions for e in emotions_list)
+        
+        if has_positive and has_negative:
+            conflicting_emotions = True
+            combined_profile["mixed_signals"] = True
+            
+            # Prioritize text emotion in case of conflict, but note the discrepancy
+            combined_profile["final_assessment"] = text
+            combined_profile["confidence"] = "medium"
+            combined_profile["conflict_note"] = f"Detected conflicting signals: text suggests {text}, face suggests {face}, voice suggests {voice}"
+    
+    # Save the analysis and combined profile to state
     state["emotion_analysis"] = parsed_response
+    state["combined_emotion_profile"] = combined_profile
     
     # Set crisis flag if needed
     if parsed_response.get("needs_immediate_resources", False) or parsed_response.get("crisis_level") in ["high", "very_high"]:
@@ -1051,8 +1106,22 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
         Looking at how you've expressed yourself, I sense that your primary emotion is **{parsed_response.get('primary_emotion', 'unclear')}**.
         
         I'm noticing this because: {parsed_response.get('emotion_justification', '')}
+        """
         
-        Considering the overall context and intensity of your message, I would assess this as a **{parsed_response.get('crisis_level', 'low')}** level situation.
+        # Add information about additional emotion data if available
+        if facial_emotion or voice_emotion:
+            reasoning_message += "\n\nI'm also considering the emotional data from:"
+            if facial_emotion:
+                reasoning_message += f"\n- Your facial expression, which suggests **{facial_emotion.get('emotion')}**"
+            if voice_emotion:
+                reasoning_message += f"\n- Your voice tone, which suggests **{voice_emotion.get('emotion')}**"
+            
+            if combined_profile.get("mixed_signals", False):
+                reasoning_message += f"\n\nInterestingly, I'm noticing some mixed emotional signals here, which is completely normal. Humans often experience complex emotional states."
+        
+        reasoning_message += f"""
+        
+        Considering the overall context and intensity, I would assess this as a **{parsed_response.get('crisis_level', 'low')}** level situation.
         
         {parsed_response.get('reasoning', '')}
         
@@ -1069,6 +1138,7 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
     # Return updates to state
     return {
         "emotion_analysis": parsed_response,
+        "combined_emotion_profile": combined_profile,
         "immediate_resources_needed": parsed_response.get("needs_immediate_resources", False) or 
                                       parsed_response.get("crisis_level") in ["high", "very_high"],
         "messages": new_messages
@@ -1316,11 +1386,12 @@ def select_and_use_tools(state: AgentState) -> Dict:
     }
 
 def generate_response(state: AgentState) -> Dict:
-    """Generate a response based on all available information."""
+    """Generate a response based on all available information including enhanced emotion analysis."""
     messages = state["messages"]
     emotion_analysis = state.get("emotion_analysis", {})
     response_strategy = state.get("response_strategy", {})
     tool_results = state.get("tool_results", {})
+    combined_emotion = state.get("combined_emotion_profile", {})
     
     # Prepare response context
     emotion = emotion_analysis.get("primary_emotion", "neutral")
@@ -1334,6 +1405,28 @@ def generate_response(state: AgentState) -> Dict:
     - I should approach with: {approach}
     - Key points to address: {', '.join(key_points)}
     """
+    
+    # Add combined emotion context if available
+    if combined_emotion:
+        mixed_signals = combined_emotion.get("mixed_signals", False)
+        final_assessment = combined_emotion.get("final_assessment", emotion)
+        
+        if mixed_signals:
+            response_context += f"""
+            
+            EMOTIONAL CONTEXT:
+            - Text suggests: {combined_emotion.get('text_emotion')}
+            - Face suggests: {combined_emotion.get('facial_emotion')}
+            - Voice suggests: {combined_emotion.get('voice_emotion')}
+            - There are mixed emotional signals - respond with nuance and acknowledge this complexity
+            """
+        else:
+            response_context += f"""
+            
+            EMOTIONAL CONTEXT:
+            - Combined emotion assessment: {final_assessment}
+            - Confidence in this assessment: {combined_emotion.get('confidence', 'medium')}
+            """
     
     # Add tool results if available
     if tool_results:
@@ -1357,7 +1450,7 @@ def generate_response(state: AgentState) -> Dict:
         \n\n{response_context}
         
         IMPORTANT INSTRUCTIONS:
-        1. Keep your response brief and focused (max 3-4 sentences)
+        1. Keep your response brief and focused (max 3-4 sentences per paragraph)
         2. Be warm and empathetic but concise
         3. If you have videos or resources to share, include ONE most relevant link directly in your response
         4. Don't use unnecessary acknowledgments or extended explanations
@@ -1367,6 +1460,9 @@ def generate_response(state: AgentState) -> Dict:
            - For web search: "Source: [Title](url)"
            - For Wikipedia: "Source: Wikipedia article on [Topic]"
            - For academic research: "Source: [Paper Title] by [Authors]"
+        7. If there are mixed emotional signals, acknowledge this with empathy (e.g., "I notice you might be feeling a mix of emotions right now")
+        8. Respond authentically - avoid formulaic or overly clinical language
+        9. When appropriate, incorporate culturally relevant perspectives for Bangladesh
         """),
         MessagesPlaceholder(variable_name="history"),
         HumanMessage(content="Provide a brief, helpful response. Be concise and include references.")
@@ -1385,10 +1481,25 @@ def generate_response(state: AgentState) -> Dict:
         final_reasoning = f"""
         💭 **Finalizing My Response**
         
-        Now I'll craft a concise response that addresses your needs...
+        Now I'll craft a response that addresses your needs...
+        """
         
-        I want to acknowledge your feeling of **{emotion}** while being supportive.
+        # Add emotion-specific reasoning
+        if combined_emotion and combined_emotion.get("mixed_signals", False):
+            final_reasoning += f"""
+            I notice that there may be a complexity to what you're feeling:
+            - Your words suggest: {combined_emotion.get('text_emotion')}
+            - Your facial expression suggests: {combined_emotion.get('facial_emotion')}
+            - Your voice tone suggests: {combined_emotion.get('voice_emotion')}
+            
+            I'll acknowledge this emotional complexity with nuance.
+            """
+        else:
+            final_reasoning += f"""
+            I want to acknowledge your feeling of **{emotion}** while being supportive.
+            """
         
+        final_reasoning += f"""
         I'll focus on: {", ".join(key_points) if key_points else "providing empathetic support"} 
         
         My approach will be: **{approach}**
@@ -2604,14 +2715,73 @@ app = workflow.compile()
 
 # Function to interact with the agent
 def chat_with_mental_health_assistant(user_input: str, state: Optional[Dict] = None) -> Dict:
-    """Interact with the mental health assistant."""
+    """Interact with the mental health assistant with enhanced emotion processing."""
+    # Initialize state if it's None or ensure it has the messages key
     if state is None:
         state = {"messages": [SystemMessage(content=SYSTEM_MESSAGE)]}
+    elif "messages" not in state:
+        # If state exists but doesn't have messages key, initialize it
+        state["messages"] = [SystemMessage(content=SYSTEM_MESSAGE)]
+    
+    # Check if the user_input contains external emotion data indicators
+    import re
+    
+    # Extract facial emotion if present
+    face_emotion_match = re.search(r'\[Detected facial expression: ([^\]]+)\]', user_input)
+    if face_emotion_match:
+        emotion_text = face_emotion_match.group(1)
+        # Remove the marker from the input
+        user_input = user_input.replace(face_emotion_match.group(0), "").strip()
+        
+        # Try to extract confidence if available
+        confidence = 0.75  # Default confidence
+        confidence_match = re.search(r'(\d+)%', emotion_text)
+        if confidence_match:
+            confidence = float(confidence_match.group(1)) / 100
+            emotion_text = emotion_text.split("(")[0].strip()
+        
+        # Add to state
+        state["facial_emotion"] = {
+            "emotion": emotion_text,
+            "score": confidence
+        }
+    
+    # Extract voice emotion if present
+    voice_emotion_match = re.search(r'\[Detected voice tone: ([^\]]+)\]', user_input)
+    if voice_emotion_match:
+        emotion_text = voice_emotion_match.group(1)
+        # Remove the marker from the input
+        user_input = user_input.replace(voice_emotion_match.group(0), "").strip()
+        
+        # Try to extract confidence if available
+        confidence = 0.75  # Default confidence
+        confidence_match = re.search(r'(\d+)%', emotion_text)
+        if confidence_match:
+            confidence = float(confidence_match.group(1)) / 100
+            emotion_text = emotion_text.split("(")[0].strip()
+        
+        # Add to state
+        state["voice_emotion"] = {
+            "emotion": emotion_text,
+            "score": confidence
+        }
     
     # Add the user message to the state
     state["messages"].append(HumanMessage(content=user_input))
     
-    # Run the graph with the updated state
-    result = app.invoke(state)
-    
-    return result 
+    # Run the graph with the updated state and handle errors
+    try:
+        result = app.invoke(state)
+        return result
+    except Exception as e:
+        # Handle errors by providing a fallback response
+        error_message = f"An error occurred: {str(e)}"
+        print(error_message)  # Log the error
+        
+        # Create a graceful fallback response
+        fallback_state = state.copy()
+        fallback_state["messages"] = state["messages"] + [
+            AIMessage(content="I apologize, but I encountered an issue processing your request. "
+                             "Could you try rephrasing or asking something else?")
+        ]
+        return fallback_state

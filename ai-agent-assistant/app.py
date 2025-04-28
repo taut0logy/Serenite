@@ -42,6 +42,13 @@ from diary.diary import (
     search_diary_entries
 )
 
+# Import breathing exercise functionality
+from breathing_exercise.breathing_exercise import (
+    EmotionalState,
+    BreathingPattern,
+    generate_breathing_exercise
+)
+
 app = FastAPI(
     title="Bangladesh Mental Health Support Assistant API",
     description="API endpoints for the mental health support assistant",
@@ -728,6 +735,23 @@ async def search_diary(query: str, user_id: str, limit: int = 5):
         raise HTTPException(
             status_code=500,
             detail=f"Error searching diary entries: {str(e)}"
+        )
+
+# Add breathing exercise endpoints
+@app.options("/breathing/generate")
+async def breathing_options():
+    """Handle OPTIONS request for CORS preflight."""
+    return {}
+
+@app.post("/breathing/generate", response_model=BreathingPattern)
+async def breathing_exercise_endpoint(state: EmotionalState):
+    """Generate a breathing exercise based on the user's emotional state."""
+    try:
+        return generate_breathing_exercise(state)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating breathing exercise: {str(e)}"
         )
 
 if __name__ == "__main__":

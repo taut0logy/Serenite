@@ -32,6 +32,16 @@ from mental_health_assistant.emotion_detection import (
     VOICE_EMOTION_INSIGHTS
 )
 
+# Import diary functionality
+from diary.diary import (
+    DiaryEntry,
+    StoredDiaryEntry,
+    MoodAnalysis,
+    analyze_diary_entry,
+    store_diary_entry,
+    search_diary_entries
+)
+
 app = FastAPI(
     title="Bangladesh Mental Health Support Assistant API",
     description="API endpoints for the mental health support assistant",
@@ -670,6 +680,55 @@ async def translate_text(request: TranslationRequest):
     except Exception as e:
         # Handle errors
         raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
+
+# Add diary endpoints
+@app.options("/diary/analyze")
+async def analyze_options():
+    """Handle OPTIONS request for CORS preflight."""
+    return {}
+
+@app.post("/diary/analyze", response_model=MoodAnalysis)
+async def analyze_diary(entry: DiaryEntry):
+    """Analyze a diary entry and return mood analysis."""
+    try:
+        return analyze_diary_entry(entry)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error in mood analysis: {str(e)}"
+        )
+
+@app.options("/diary/store")
+async def store_options():
+    """Handle OPTIONS request for CORS preflight."""
+    return {}
+
+@app.post("/diary/store", response_model=StoredDiaryEntry)
+async def store_diary(entry: DiaryEntry):
+    """Store a diary entry in AstraDB with mood analysis."""
+    try:
+        return store_diary_entry(entry)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error storing diary entry: {str(e)}"
+        )
+
+@app.options("/diary/search")
+async def search_options():
+    """Handle OPTIONS request for CORS preflight."""
+    return {}
+
+@app.get("/diary/search", response_model=List[StoredDiaryEntry])
+async def search_diary(query: str, user_id: str, limit: int = 5):
+    """Search diary entries using semantic search."""
+    try:
+        return search_diary_entries(query, user_id, limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error searching diary entries: {str(e)}"
+        )
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True) 

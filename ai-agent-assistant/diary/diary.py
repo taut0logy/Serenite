@@ -2,9 +2,6 @@ from typing import Dict, List, TypedDict, Annotated, Optional
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
 import logging
@@ -24,32 +21,6 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-
-# Initialize FastAPI app
-app = FastAPI(title="Diary Mood Analysis API")
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins in development
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-# Error handling middleware
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    try:
-        logger.info(f"Request path: {request.url.path}, method: {request.method}")
-        response = await call_next(request)
-        return response
-    except Exception as e:
-        logger.error(f"Request failed: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": str(e)}
-        )
 
 # Initialize Groq chat model
 groq_api_key = os.getenv("GROQ_API_KEY")
@@ -106,7 +77,7 @@ class AgentState(TypedDict):
     analysis: str
     confidence: float
 
-# Define Pydantic models for API
+# Define Pydantic models
 class DiaryEntry(BaseModel):
     content: str
     date: str
@@ -197,16 +168,10 @@ workflow.add_edge("analyze_mood", END)
 workflow.set_entry_point("analyze_mood")
 
 # Compile the graph
-app.state.graph = workflow.compile()
+graph = workflow.compile()
 
-# FastAPI endpoints
-@app.options("/analyze")
-async def analyze_options():
-    """Handle OPTIONS request for CORS preflight."""
-    return {}
-
-@app.post("/analyze", response_model=MoodAnalysis)
-async def analyze_diary(entry: DiaryEntry):
+# Core functions for diary operations
+def analyze_diary_entry(entry: DiaryEntry) -> MoodAnalysis:
     """Analyze a diary entry and return mood analysis."""
     logger.info(f"Analyzing diary entry for user_id: {entry.user_id}")
     try:
@@ -220,7 +185,7 @@ async def analyze_diary(entry: DiaryEntry):
         
         # Run the graph
         logger.info("Invoking mood analysis graph")
-        result = app.state.graph.invoke(initial_state)
+        result = graph.invoke(initial_state)
         
         # Create response
         response = MoodAnalysis(
@@ -232,24 +197,15 @@ async def analyze_diary(entry: DiaryEntry):
         return response
     except Exception as e:
         logger.error(f"Error in mood analysis: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error in mood analysis: {str(e)}"
-        )
+        raise
 
-@app.options("/store")
-async def store_options():
-    """Handle OPTIONS request for CORS preflight."""
-    return {}
-
-@app.post("/store", response_model=StoredDiaryEntry)
-async def store_diary_entry(entry: DiaryEntry):
+def store_diary_entry(entry: DiaryEntry) -> StoredDiaryEntry:
     """Store a diary entry in AstraDB with mood analysis."""
     logger.info(f"Storing diary entry for user_id: {entry.user_id}")
     try:
         # Analyze mood
         logger.info("Analyzing mood for entry")
-        mood_analysis = await analyze_diary(entry)
+        mood_analysis = analyze_diary_entry(entry)
         
         # Create document for vector store
         doc_id = str(uuid.uuid4())
@@ -286,18 +242,9 @@ async def store_diary_entry(entry: DiaryEntry):
         return stored_entry
     except Exception as e:
         logger.error(f"Error storing diary entry: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error storing diary entry: {str(e)}"
-        )
+        raise
 
-@app.options("/search")
-async def search_options():
-    """Handle OPTIONS request for CORS preflight."""
-    return {}
-
-@app.get("/search", response_model=List[StoredDiaryEntry])
-async def search_diary_entries(query: str, user_id: str, limit: int = 5):
+def search_diary_entries(query: str, user_id: str, limit: int = 5) -> List[StoredDiaryEntry]:
     """Search diary entries using semantic search."""
     logger.info(f"Searching entries for user_id: {user_id}, query: {query}, limit: {limit}")
     try:
@@ -328,12 +275,4 @@ async def search_diary_entries(query: str, user_id: str, limit: int = 5):
         return entries
     except Exception as e:
         logger.error(f"Error searching diary entries: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error searching diary entries: {str(e)}"
-        )
-
-if __name__ == "__main__":
-    import uvicorn
-    logger.info("Starting Diary Mood Analysis API server")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        raise

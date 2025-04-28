@@ -14,6 +14,8 @@ from langchain_core.tools import tool
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.pydantic_v1 import BaseModel, Field
+from youtube_transcript_api import YouTubeTranscriptApi
+
 
 # The key fix: Add proper annotations for the state
 from langgraph.graph.message import add_messages
@@ -175,19 +177,35 @@ def search_mental_health_videos(query: str) -> str:
     except Exception as e:
         return f"Error searching for videos: {str(e)}"
 
+def extract_video_id(url: str) -> str:
+    """Extract the video ID from a YouTube URL."""
+    if "youtu.be" in url:
+        return url.split("/")[-1].split("?")[0]
+    elif "youtube.com" in url:
+        if "v=" in url:
+            return url.split("v=")[1].split("&")[0]
+        elif "embed" in url:
+            return url.split("/")[-1].split("?")[0]
+    # If URL is already just an ID
+    return url
+
 @tool
 def get_youtube_transcript_and_summary(url: str) -> Dict[str, str]:
     """Fetch and summarize content from a YouTube video."""
     try:
-        loader = YoutubeLoader.from_youtube_url(
-            url, add_video_info=True, language=["en"]
-        )
-        docs = loader.load()
+        video_id = extract_video_id(url)
         
-        if not docs:
-            return {"transcript": "", "summary": "Could not extract content from this video."}
+        # Use YouTubeTranscriptApi to get transcript
+        ytt_api = YouTubeTranscriptApi()
+        fetched_transcript = ytt_api.fetch(video_id)
         
-        transcript = docs[0].page_content[:2000] + "..." if len(docs[0].page_content) > 2000 else docs[0].page_content
+        # Convert transcript to text
+        transcript_text = ""
+        for snippet in fetched_transcript:
+            transcript_text += snippet.text + " "
+        
+        # Trim transcript if too long
+        transcript = transcript_text[:2000] + "..." if len(transcript_text) > 2000 else transcript_text
         
         # Generate summary with reasoning
         summary_prompt = ChatPromptTemplate.from_messages([
@@ -198,8 +216,12 @@ def get_youtube_transcript_and_summary(url: str) -> Dict[str, str]:
         formatted_messages = summary_prompt.format_messages()
         summary_response = llm.invoke(formatted_messages)
         
+        # Try to get video title (would need additional API in production)
+        # For now using ID as placeholder
+        title = f"YouTube Video (ID: {video_id})"
+        
         return {
-            "title": docs[0].metadata.get("title", "Video"),
+            "title": title,
             "transcript": transcript,
             "summary": summary_response.content
         }
@@ -218,21 +240,26 @@ def generate_video_blog(url: str) -> Dict[str, str]:
         A dictionary containing the blog title, content, and key points
     """
     try:
-        # Load the YouTube video content
-        loader = YoutubeLoader.from_youtube_url(
-            url, add_video_info=True, language=["en"]
-        )
-        docs = loader.load()
+        video_id = extract_video_id(url)
         
-        if not docs:
+        # Get transcript
+        ytt_api = YouTubeTranscriptApi()
+        fetched_transcript = ytt_api.fetch(video_id)
+        
+        # Convert transcript to text
+        transcript_text = ""
+        for snippet in fetched_transcript:
+            transcript_text += snippet.text + " "
+        
+        if not transcript_text:
             return {
                 "title": "Unable to Generate Blog",
                 "content": "Could not extract content from this video.",
                 "key_points": []
             }
         
-        transcript = docs[0].page_content
-        video_title = docs[0].metadata.get("title", "Mental Health Video")
+        # For now using ID as title placeholder
+        video_title = f"YouTube Video (ID: {video_id})"
         
         # Create blog post generation prompt
         blog_prompt = ChatPromptTemplate.from_messages([
@@ -253,7 +280,7 @@ def generate_video_blog(url: str) -> Dict[str, str]:
             VIDEO TITLE: {video_title}
             
             TRANSCRIPT:
-            {transcript[:3000]}... [transcript continues]
+            {transcript_text[:3000]}... [transcript continues]
             
             Generate a complete, well-structured blog post that captures the key insights and advice from this video.
             """)
@@ -263,7 +290,7 @@ def generate_video_blog(url: str) -> Dict[str, str]:
         formatted_messages = blog_prompt.format_messages()
         blog_response = llm.invoke(formatted_messages)
         
-        # Extract key points (would be more sophisticated in production)
+        # Extract key points
         content = blog_response.content
         
         # Find key points section (often at the end with bullet points)

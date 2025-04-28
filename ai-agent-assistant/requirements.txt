@@ -43,3 +43,5 @@ langchain_astradb
 fastapi>=0.104.0
 python-multipart>=0.0.6
 httpx>=0.24.1
+googletrans
+requests>=2.25.0

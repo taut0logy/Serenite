@@ -36,6 +36,7 @@ import {
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HeartPulse, Clock, Activity, Info } from 'lucide-react';
+import axios from 'axios';
 
 export default function BreathingExercisePage() {
   // User input state
@@ -99,12 +100,38 @@ export default function BreathingExercisePage() {
         return;
       }
       
-      setExercise(result);
-      generateBreathingData(result.steps);
+      // Ensure the exercise duration matches the available time
+      const adjustedExercise = {
+        ...result,
+        duration_minutes: Math.min(result.duration_minutes, timeAvailable)
+      };
+      
+      setExercise(adjustedExercise);
+      generateBreathingData(adjustedExercise.steps);
       toast.success('Breathing exercise generated!');
     } catch (error) {
       console.error('Error generating exercise:', error);
-      toast.error('Failed to generate exercise, using fallback');
+      
+      // Provide more detailed error feedback
+      if (error instanceof Error) {
+        if (error.message.includes('Network Error') || (axios.isAxiosError(error) && error.code === 'ERR_NETWORK')) {
+          toast.error(
+            <div className="space-y-2">
+              <p className="font-bold">Network Error</p>
+              <p>Could not connect to the breathing exercise server.</p>
+              <p className="text-sm text-muted-foreground">Please check your internet connection and try again.</p>
+            </div>
+          );
+        } else if (error.message.includes('timeout')) {
+          toast.error('Request timed out: Please try again');
+        } else if (error.message.includes('Missing required fields')) {
+          toast.error(error.message);
+        } else {
+          toast.error(`Error: ${error.message}`);
+        }
+      } else {
+        toast.error('Failed to generate exercise, using fallback');
+      }
       
       // Local fallback if the API completely fails
       const fallbackExercise = getLocalDefaultExercise();
@@ -126,7 +153,7 @@ export default function BreathingExercisePage() {
     }
 
     const validActions = ['inhale', 'hold', 'exhale'] as const;
-    return exercise.steps.every(step => 
+    return exercise.steps.every((step: BreathingStep) => 
       validActions.includes(step.action) &&
       typeof step.duration === 'number' &&
       step.duration >= 0 &&
@@ -307,7 +334,7 @@ export default function BreathingExercisePage() {
             console.log(`To: Step ${nextIdx} (${exercise.steps[nextIdx].action})`);
             console.log(`Duration: ${nextDuration}s`);
             console.log(`Total steps in sequence: ${exercise.steps.length}`);
-            console.log(`Sequence: ${exercise.steps.map(s => s.action).join(' -> ')}`);
+            console.log(`Sequence: ${exercise.steps.map((s: BreathingStep) => s.action).join(' -> ')}`);
             console.log(`==========================`);
             
             return nextIdx;
@@ -581,7 +608,7 @@ export default function BreathingExercisePage() {
                           Benefits
                         </h3>
                         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {exercise.benefits.map((benefit, index) => (
+                          {exercise.benefits.map((benefit: string, index: number) => (
                             <li key={index} className="flex items-start gap-2">
                               <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs mt-0.5">
                                 ✓
@@ -602,7 +629,7 @@ export default function BreathingExercisePage() {
                           Suitable For
                         </h3>
                         <ul className="space-y-1.5">
-                          {exercise.suitable_for.map((person, index) => (
+                          {exercise.suitable_for.map((person: string, index: number) => (
                             <li key={index} className="text-sm text-muted-foreground border border-primary/10 rounded-full px-3 py-1 inline-block m-1">
                               {person}
                             </li>
@@ -620,7 +647,7 @@ export default function BreathingExercisePage() {
                         Breathing Pattern Steps
                       </h3>
                       <div className="grid gap-2.5">
-                        {exercise.steps.map((step, index) => (
+                        {exercise.steps.map((step: BreathingStep, index: number) => (
                           <motion.div 
                             key={index} 
                             className={`p-3 rounded-lg shadow-sm transition-all duration-300 ${

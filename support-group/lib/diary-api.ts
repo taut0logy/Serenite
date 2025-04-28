@@ -47,7 +47,7 @@ export const diaryApi = {
   // Analyze a diary entry
   analyzeEntry: async (entry: DiaryEntry): Promise<MoodAnalysisResult> => {
     try {
-      const response = await api.post('/analyze', entry);
+      const response = await api.post('/diary/analyze', entry);
       return response.data;
     } catch (error) {
       console.error('Error analyzing diary entry:', error);
@@ -58,7 +58,7 @@ export const diaryApi = {
   // Store a diary entry
   storeEntry: async (entry: DiaryEntry): Promise<StoredDiaryEntry> => {
     try {
-      const response = await api.post('/store', entry);
+      const response = await api.post('/diary/store', entry);
       return response.data;
     } catch (error) {
       console.error('Error storing diary entry:', error);
@@ -70,7 +70,7 @@ export const diaryApi = {
   searchEntries: async (params: SearchParams): Promise<StoredDiaryEntry[]> => {
     try {
       const { query, userId, limit = 5 } = params;
-      const response = await api.get('/search', {
+      const response = await api.get('/diary/search', {
         params: {
           query,
           user_id: userId,

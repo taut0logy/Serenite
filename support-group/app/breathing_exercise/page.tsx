@@ -75,22 +75,33 @@ export default function BreathingExercisePage() {
     
     setIsLoading(true);
     try {
+      console.log('Generating exercise with state:', emotionalState);
       const result = await breathingApi.generateExercise(emotionalState);
-      setExercise(result);
+      console.log('Received exercise result:', result);
       
-      // Immediate fallback in the UI if result contains no steps or empty steps
-      if (!result.steps || result.steps.length === 0) {
-        toast.error('Error with breathing pattern, using fallback exercise');
+      if (!result || !result.steps || result.steps.length === 0) {
+        console.error('Invalid exercise result:', result);
+        toast.error('Error generating exercise, using fallback');
+        const fallbackExercise = getLocalDefaultExercise();
+        setExercise(fallbackExercise);
+        generateBreathingData(fallbackExercise.steps);
+        return;
+      }
+
+      // Validate the exercise structure
+      const isValidExercise = validateExerciseStructure(result);
+      if (!isValidExercise) {
+        console.error('Invalid exercise structure:', result);
+        toast.error('Error with exercise format, using fallback');
         const fallbackExercise = getLocalDefaultExercise();
         setExercise(fallbackExercise);
         generateBreathingData(fallbackExercise.steps);
         return;
       }
       
-      toast.success('Breathing exercise generated!');
-      
-      // Generate visualization data from the breathing pattern
+      setExercise(result);
       generateBreathingData(result.steps);
+      toast.success('Breathing exercise generated!');
     } catch (error) {
       console.error('Error generating exercise:', error);
       toast.error('Failed to generate exercise, using fallback');
@@ -104,20 +115,64 @@ export default function BreathingExercisePage() {
     }
   };
   
+  // Validate exercise structure
+  const validateExerciseStructure = (exercise: BreathingPattern): boolean => {
+    if (!exercise.name || !exercise.description || !exercise.steps || !exercise.benefits || !exercise.suitable_for) {
+      return false;
+    }
+
+    if (!Array.isArray(exercise.steps) || exercise.steps.length === 0) {
+      return false;
+    }
+
+    const validActions = ['inhale', 'hold', 'exhale'] as const;
+    return exercise.steps.every(step => 
+      validActions.includes(step.action) &&
+      typeof step.duration === 'number' &&
+      step.duration >= 0 &&
+      typeof step.instruction === 'string' &&
+      step.instruction.length > 0
+    );
+  };
+  
   // Local fallback exercise
   const getLocalDefaultExercise = (): BreathingPattern => {
     return {
-      name: "Box Breathing Technique",
-      description: "A simple 4-4-4-4 box breathing technique to calm your nervous system and improve focus.",
+      name: "Calm Relief",
+      description: "A gentle, slow breathing exercise to reduce stress and alleviate headaches.",
       steps: [
-        {action: "inhale", duration: 4, instruction: "Breathe in slowly through your nose, filling your lungs completely"},
-        {action: "hold", duration: 4, instruction: "Hold your breath and feel the energy in your body"},
-        {action: "exhale", duration: 4, instruction: "Exhale slowly through your mouth, releasing all tension"},
-        {action: "hold", duration: 4, instruction: "Keep your lungs empty and pause before the next breath"}
+        {
+          action: "inhale",
+          duration: 4,
+          instruction: "Breathe in slowly through your nose, feeling the air fill your lungs"
+        },
+        {
+          action: "hold",
+          duration: 2,
+          instruction: "Hold your breath, allowing your body to relax"
+        },
+        {
+          action: "exhale",
+          duration: 6,
+          instruction: "Exhale slowly through your mouth, releasing tension and stress"
+        },
+        {
+          action: "hold",
+          duration: 2,
+          instruction: "Hold before breathing in again, feeling calm and centered"
+        }
       ],
       duration_minutes: 5,
-      benefits: ["Reduces anxiety", "Increases focus", "Balances energy", "Promotes relaxation", "Improves mental clarity"],
-      suitable_for: ["Everyone", "Beginners", "People experiencing stress", "Before meditation", "During work breaks"]
+      benefits: [
+        "Reduces stress and anxiety",
+        "Alleviates physical tension and headaches",
+        "Promotes relaxation and calmness"
+      ],
+      suitable_for: [
+        "People experiencing stress and anxiety",
+        "Those who need a quick relaxation break",
+        "Individuals prone to headaches and physical tension"
+      ]
     };
   };
   
@@ -318,6 +373,55 @@ export default function BreathingExercisePage() {
         return ['rgba(168, 85, 247, 0.1)', 'rgba(168, 85, 247, 0.8)'];
       default:
         return ['rgba(156, 163, 175, 0.1)', 'rgba(156, 163, 175, 0.6)'];
+    }
+  };
+  
+  // Update the template click handler
+  const handleTemplateClick = async (template: { title: string; emotion: string; level: number }) => {
+    // Set state
+    setDescription(template.emotion);
+    setStressLevel(template.level);
+    setTimeAvailable(5);
+    
+    // Generate exercise immediately
+    const emotionalState = {
+      description: template.emotion,
+      stress_level: template.level,
+      time_available: 5
+    };
+    
+    // Call generateExercise immediately
+    setIsLoading(true);
+    try {
+      console.log('Generating exercise from template:', emotionalState);
+      const result = await breathingApi.generateExercise(emotionalState);
+      console.log('Received template exercise result:', result);
+      
+      if (!result || !result.steps || result.steps.length === 0) {
+        console.error('Invalid template exercise result:', result);
+        toast.error('Error generating exercise from template');
+        return;
+      }
+
+      // Validate the exercise structure
+      const isValidExercise = validateExerciseStructure(result);
+      if (!isValidExercise) {
+        console.error('Invalid exercise structure:', result);
+        toast.error('Error with exercise format, using fallback');
+        const fallbackExercise = getLocalDefaultExercise();
+        setExercise(fallbackExercise);
+        generateBreathingData(fallbackExercise.steps);
+        return;
+      }
+      
+      setExercise(result);
+      generateBreathingData(result.steps);
+      toast.success(`Created ${template.title} exercise!`);
+    } catch (error) {
+      console.error('Error generating exercise from template:', error);
+      toast.error('Failed to generate exercise from template');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -932,35 +1036,7 @@ export default function BreathingExercisePage() {
               <Card 
                 key={i} 
                 className="cursor-pointer hover:shadow-md transition-all duration-300 hover:-translate-y-1 border-primary/20 hover:border-primary" 
-                onClick={() => {
-                  // Set state
-                  setDescription(template.emotion);
-                  setStressLevel(template.level);
-                  setTimeAvailable(5);
-                  
-                  // Generate exercise immediately
-                  const emotionalState = {
-                    description: template.emotion,
-                    stress_level: template.level,
-                    time_available: 5
-                  };
-                  
-                  // Call generateExercise immediately
-                  setIsLoading(true);
-                  breathingApi.generateExercise(emotionalState)
-                    .then(result => {
-                      setExercise(result);
-                      generateBreathingData(result.steps);
-                      toast.success(`Created ${template.title} exercise!`);
-                    })
-                    .catch(error => {
-                      console.error('Error generating exercise:', error);
-                      toast.error('Failed to generate exercise');
-                    })
-                    .finally(() => {
-                      setIsLoading(false);
-                    });
-                }}
+                onClick={() => handleTemplateClick(template)}
               >
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{template.title}</CardTitle>

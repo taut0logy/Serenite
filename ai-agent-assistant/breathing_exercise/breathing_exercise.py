@@ -1,6 +1,4 @@
 from typing import Dict, List, TypedDict, Optional, Any, Annotated
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import logging
@@ -15,19 +13,6 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-
-# Initialize FastAPI app
-app = FastAPI(title="Breathing Exercise Generator API")
-
-# Improved CORS middleware configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["Content-Type", "Content-Length"],
-)
 
 # Initialize Groq chat model
 groq_api_key = os.getenv("GROQ_API_KEY")
@@ -46,7 +31,7 @@ class AgentState(TypedDict):
     emotional_state: str
     breathing_exercise: Dict
 
-# Define Pydantic models for API
+# Define Pydantic models
 class EmotionalState(BaseModel):
     description: str
     stress_level: int  # 1-10
@@ -153,10 +138,10 @@ workflow.add_edge("generate_exercise", END)
 workflow.set_entry_point("generate_exercise")
 
 # Compile the graph
-app.state.graph = workflow.compile()
+graph = workflow.compile()
 
-@app.post("/generate_exercise", response_model=BreathingPattern)
-async def breathing_exercise_endpoint(state: EmotionalState):
+# Core function for breathing exercise generation
+def generate_breathing_exercise(state: EmotionalState) -> BreathingPattern:
     """Generate a breathing exercise based on the user's emotional state."""
     logger.info(f"Generating breathing exercise for emotional state: {state.description}")
     
@@ -174,7 +159,7 @@ async def breathing_exercise_endpoint(state: EmotionalState):
         }
         
         # Run the graph
-        result = app.state.graph.invoke(initial_state)
+        result = graph.invoke(initial_state)
         
         # Get the breathing exercise from the result
         breathing_exercise = result["breathing_exercise"]
@@ -189,11 +174,6 @@ async def breathing_exercise_endpoint(state: EmotionalState):
         return breathing_exercise
     
     except Exception as e:
-        logger.error(f"Error in endpoint: {str(e)}")
+        logger.error(f"Error generating breathing exercise: {str(e)}")
         # Return default exercise if anything fails
         return DEFAULT_EXERCISE
-
-if __name__ == "__main__":
-    import uvicorn
-    logger.info("Starting Breathing Exercise Generator API server")
-    uvicorn.run(app, host="0.0.0.0", port=8001)

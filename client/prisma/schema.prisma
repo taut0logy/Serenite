@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String               @id @default(uuid())
+  email          String               @unique
+  hashedPassword String?
+  role           Role                 @default(USER)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  verified       Boolean              @default(false)
+  verificationToken String?           @unique
+  resetToken     String?              @unique
+  resetTokenExpiry DateTime?
+  
+  // Two-factor authentication fields
+  twoFactorEnabled Boolean            @default(false)
+  twoFactorAuth   TwoFactorAuth?
+  trustedDevices  TrustedDevice[]
+
+  profile        Profile?
+  questionnaireResponse QuestionnaireResponse?
+  mentalHealthProfile MentalHealthProfile?
+  sessions       Session[]
+  supportGroups  SupportGroup[]      @relation("SupportGroupMembers")
+  notifications  Notification[]
+  messagesSent   Message[]            @relation("Sender")
+  messagesReceived Message[]          @relation("Receiver")
+  meetingParticipants MeetingParticipant[]
+  calendarEvents CalendarEvent[]
+  feedbacks      Feedback[]
+  reportsMade    Report[]             @relation("Reporter")
+  reportsReceived ReportTarget[]      @relation("ReportedUser")
+  pollsCreated   Poll[]
+  pollsVoted     PollVote[]
+}
+
+model Profile {
+  id        String   @id @default(uuid())
+  firstName String
+  lastName  String
+  dob       DateTime?
+  bio       String?
+  avatarUrl String?
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model QuestionnaireResponse {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  depression Int?
+  anxiety    Int?
+  ptsd      Int?
+  social_anxiety Int?
+  cognitive_distortion Int?
+  self_esteem Int?
+  sleep_disruption Int?
+  functional_impairment Int?
+  isCompleted Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MentalHealthProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  tags      String[] 
+  narrative_summary String
+  recommendations String[]
+  timestamp DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  meta      Json?    // Added for 2FA session metadata
+}
+
+enum Role {
+  ADMIN
+  USER
+  HOST
+  MANAGER
+}
+
+
+model SupportGroup {
+  id        String   @id @default(uuid())
+  name      String
+  description String?
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members   User[]   @relation("SupportGroupMembers")
+  meetings  Meeting[]
+  
+  @@index([name])
+}
+
+model Meeting {
+  id            String      @id @default(uuid())
+  title         String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime?
+  status        MeetingStatus @default(PENDING)
+  supportGroupId String?
+  supportGroup  SupportGroup? @relation(fields: [supportGroupId], references: [id], onDelete: Cascade)
+  participants  MeetingParticipant[]
+  messages      Message[]
+  feedback      Feedback[]
+  reports       Report[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  polls         Poll[]
+  recordings    Recording[]
+
+}
+
+model MeetingParticipant {
+  id        String             @id @default(uuid())
+  meetingId String
+  userId    String
+
+  meeting   Meeting            @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status    ParticipantStatus  @default(PENDING)
+
+  @@unique([meetingId, userId])
+}
+
+enum MeetingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  ENDED
+  RUNNING
+}
+
+enum ParticipantStatus {
+  PENDING      // This is the default status when a user is invited to a meeting
+  ACCEPTED     // The user has accepted the meeting invitation
+  DECLINED    // The user has declined the meeting invitation
+  MUTED       // The user has been muted by the host
+  REMOVED     // The user has been removed from the meeting by the host
+  CAMERA_OFF // The user's camera is turned off by the host
+  HAND_RAISED // The user has raised their hand
+}
+
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String
+  type      NotificationType
+  message   String
+  read      Boolean              @default(false)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    NotificationStatus   @default(UNREAD)
+  meta      Json?
+}
+
+enum NotificationType {
+  MEETING_REQUEST
+  MEETING_UPDATE
+  MEETING_CANCELLED
+  MEETING_REMOVED
+  MEETING_CAMERA_OFF
+  MESSAGE
+  POLL_CREATED
+  POLL_ENDED
+  HAND_RAISED
+  HAND_LOWERED
+  RECORDING_STARTED
+  RECORDING_STOPPED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  senderId  String
+  meetingId String?
+  receiverId String?
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sender    User     @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  meeting   Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  receiver  User?    @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+}
+
+model Attachment {
+  id        String   @id @default(uuid())
+  messageId String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  meetingId String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CalendarEvent {
+  id          String   @id @default(uuid())
+  userId      String
+  startTime   DateTime
+  endTime     DateTime
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id          String         @id @default(uuid())
+  reporterId  String
+  meetingId   String
+  reason      String
+  createdAt   DateTime       @default(now())
+
+  reporter    User           @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  meeting     Meeting        @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  targets     ReportTarget[]
+}
+
+model ReportTarget {
+  id        String   @id @default(uuid())
+  reportId  String
+  userId    String
+
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportedUser User  @relation("ReportedUser", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TwoFactorAuth {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secret        String?
+  otpBackupCodes String[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TrustedDevice {
+  id            String   @id @default(uuid())
+  userId        String
+  deviceToken   String   @unique
+  deviceName    String
+  deviceType    String?
+  ipAddress     String?
+  lastUsed      DateTime @default(now())
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([deviceToken])
+  @@index([userId])
+}
+
+model Poll {
+  id          String      @id @default(uuid())
+  meetingId   String
+  question    String
+  isActive    Boolean     @default(true)
+  isAnonymous Boolean     @default(false)
+  isMultipleChoice Boolean @default(false)
+  createdById   String
+  createdAt   DateTime    @default(now())
+  endTime     DateTime?
+  options     PollOption[]
+  votes       PollVote[]
+  meeting     Meeting     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdBy User        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+}
+
+model PollOption {
+  id      String   @id @default(uuid())
+  pollId  String
+  text    String
+  votes   Int      @default(0)
+  poll    Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+}
+
+model PollVote {
+  id      String   @id @default(uuid())
+  pollId  String
+  userId  String
+  optionIds String[] // Comma-separated for multiple choice
+  createdAt DateTime @default(now())
+  poll    Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Recording {
+  id        String   @id @default(uuid())
+  meetingId String
+  url       String
+  startedAt DateTime
+  endedAt   DateTime?
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

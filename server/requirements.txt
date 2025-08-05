@@ -1,0 +1,50 @@
+# langchain
+# langchain-core
+# langchain-groq
+# langchain-community
+# langchain-postgres
+# langchain-huggingface
+# langchain_astradb
+
+# langgraph
+# pgvector
+# chromadb
+
+
+# sentence-transformers
+# wikipedia
+# cassio
+# typing_extensions
+# arxiv
+# tavily-python
+# youtube_search
+# wikipedia
+# googletrans
+# torch
+# youtube-transcript-api
+# opencv-python
+# deepface
+# pillow
+# numpy
+# altair
+# mediapipe
+# librosa
+# scikit-learn
+# sounddevice
+# scipy==1.10.1
+
+# psycopg2-binary
+
+groq
+instructor
+sqlalchemy
+# Added for FastAPI backend
+fastapi
+uvicorn
+slowapi
+pydantic
+pydantic-settings
+python-dotenv
+python-multipart
+httpx
+requests

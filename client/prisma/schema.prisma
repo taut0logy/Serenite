@@ -40,6 +40,10 @@ model User {
   reportsReceived ReportTarget[]      @relation("ReportedUser")
   pollsCreated   Poll[]
   pollsVoted     PollVote[]
+
+  posts                 Post[]
+  comments              Comment[]
+  reactions             Reaction[]
 }
 
 model Profile {
@@ -344,4 +348,59 @@ model Recording {
   meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Community feature models
+model Post {
+  id                 String      @id @default(cuid())
+  title              String
+  content            String      @db.Text
+  isAnonymous        Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  userId             String
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments           Comment[]
+  reactions          Reaction[]
+  tags               String[]
+  
+  @@index([userId])
+}
+
+enum ReactionType {
+  LIKE
+  HEART
+  SUPPORT
+  HUG
+  THANKS
+}
+
+model Reaction {
+  id          String       @id @default(cuid())
+  type        ReactionType
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId      String
+  post        Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, postId, type])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Comment {
+  id          String    @id @default(cuid())
+  content     String    @db.Text
+  isAnonymous Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId      String
+  post        Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  @@index([postId])
+  @@index([userId])
 }

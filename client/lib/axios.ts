@@ -4,7 +4,7 @@ import axiosBase, { AxiosInstance } from 'axios';
 
 // Create the base Axios instance
 const axios: AxiosInstance = axiosBase.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
     headers: {
         'Content-Type': 'application/json',
     },

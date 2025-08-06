@@ -8,6 +8,7 @@ import { Mic, Upload, RefreshCw, ThumbsUp, StopCircle, Play, Pause } from 'lucid
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import axios from '@/lib/axios';
 
 const VoiceEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
   const [activeTab, setActiveTab] = useState("record");
@@ -243,13 +244,14 @@ const VoiceEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
     try {
       const formData = new FormData();
       formData.append('file', audioBlob);
-      
-      const response = await fetch('http://localhost:8000/analyze-voice', {
-        method: 'POST',
-        body: formData,
+
+      const response = await axios.post('/chat/analyze-voice', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
-      
-      if (!response.ok) {
+
+      if (response.status !== 200) {
         throw new Error(`Error detecting emotion: ${response.status}`);
       }
       

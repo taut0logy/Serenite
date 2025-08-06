@@ -10,7 +10,7 @@
 //   response: string;
 // }
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 //TODO: Use Axios or Fetch API to send requests to the FastAPI backend
 

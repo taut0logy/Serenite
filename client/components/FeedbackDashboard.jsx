@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThumbsUp, ThumbsDown, BarChart, RefreshCw, Calendar } from 'lucide-react';
+import axios from '@/lib/axios';
 
 const FeedbackDashboard = () => {
   const [analytics, setAnalytics] = useState(null);
@@ -19,23 +20,15 @@ const FeedbackDashboard = () => {
     
     try {
       // Fetch analytics data
-      const analyticsResponse = await fetch('http://localhost:8000/feedback/analytics');
-      if (!analyticsResponse.ok) {
-        throw new Error(`Failed to fetch analytics: ${analyticsResponse.status}`);
-      }
-      const analyticsData = await analyticsResponse.json();
-      setAnalytics(analyticsData);
+      const analyticsResponse = await axios.get('/feedback/analytics');
+      setAnalytics(analyticsResponse.data);
       
       // Fetch raw feedback data
-      const feedbackResponse = await fetch('http://localhost:8000/feedback?limit=50');
-      if (!feedbackResponse.ok) {
-        throw new Error(`Failed to fetch feedback: ${feedbackResponse.status}`);
-      }
-      const feedbackData = await feedbackResponse.json();
-      setRawFeedback(feedbackData.feedback || []);
-    } catch (error) {
-      console.error('Error fetching feedback data:', error);
-      setError(error.message);
+      const feedbackResponse = await axios.get('/feedback?limit=50');
+      setRawFeedback(feedbackResponse.data.feedback || []);
+    } catch (err) {
+      console.error('Error fetching feedback data:', err);
+      setError(err.message || 'Failed to fetch feedback data');
     } finally {
       setLoading(false);
     }
@@ -50,6 +43,7 @@ const FeedbackDashboard = () => {
       const date = new Date(dateStr);
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     } catch (e) {
+      console.error('Error formatting date:', e);
       return dateStr;
     }
   };

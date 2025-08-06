@@ -77,7 +77,7 @@ const MeetingTypeList = () => {
     if (!client || !user) return <Loader />;
 
     const meetingLink = `${
-        process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
+        process.env.NEXT_PUBLIC_APP_URL || window.location.origin
     }/meeting/${callDetail?.id}`;
 
     return (

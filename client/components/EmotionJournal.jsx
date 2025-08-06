@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { PlusCircleIcon, XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import axios from '@/lib/axios';
 
 export default function EmotionJournal() {
   const [entries, setEntries] = useState([]);
@@ -43,9 +44,9 @@ export default function EmotionJournal() {
   const fetchJournal = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8000/emotion-journal');
-      const data = await response.json();
-      
+      const response = await axios.get('/emotion-journal');
+      const data = response.data;
+
       setEntries(data.entries.reverse()); // Show newest first
       setPatterns(data.patterns);
     } catch (error) {
@@ -73,16 +74,13 @@ export default function EmotionJournal() {
         source: source,
         timestamp: new Date().toISOString()
       };
-      
-      const response = await fetch('http://localhost:8000/emotion-journal/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(entry),
-      });
-      
-      if (response.ok) {
+
+      const response = await axios.post('/emotion-journal/add', entry);
+      if (response.status !== 200) {
+        throw new Error('Failed to add entry');
+      }
+
+      if (response.data.success) {
         // Reset form
         setNote('');
         setShowForm(false);

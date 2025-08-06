@@ -1,18 +1,7 @@
-import axios from 'axios';
+import axios from '@/lib/axios';
 
-// Define the base URL for the API
-const API_BASE_URL = process.env.NEXT_PUBLIC_DIARY_API_URL || 'http://localhost:8000';
 
-// Configure axios for handling CORS
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: false, // Set to true if you need to pass cookies
-});
-
-// Type definitions matching the FastAPI models
+// Type definitions matching the Fastaxios models
 export interface DiaryEntry {
   content: string;
   date: string;
@@ -42,12 +31,12 @@ export interface SearchParams {
   limit?: number;
 }
 
-// API client
+// axios client
 export const diaryApi = {
   // Analyze a diary entry
   analyzeEntry: async (entry: DiaryEntry): Promise<MoodAnalysisResult> => {
     try {
-      const response = await api.post('/diary/analyze', entry);
+      const response = await axios.post('/diary/analyze', entry);
       return response.data;
     } catch (error) {
       console.error('Error analyzing diary entry:', error);
@@ -58,7 +47,7 @@ export const diaryApi = {
   // Store a diary entry
   storeEntry: async (entry: DiaryEntry): Promise<StoredDiaryEntry> => {
     try {
-      const response = await api.post('/diary/store', entry);
+      const response = await axios.post('/diary/store', entry);
       return response.data;
     } catch (error) {
       console.error('Error storing diary entry:', error);
@@ -70,7 +59,7 @@ export const diaryApi = {
   searchEntries: async (params: SearchParams): Promise<StoredDiaryEntry[]> => {
     try {
       const { query, userId, limit = 5 } = params;
-      const response = await api.get('/diary/search', {
+      const response = await axios.get('/diary/search', {
         params: {
           query,
           user_id: userId,

@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Camera, Upload, RefreshCw, ThumbsUp } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import axios from '@/lib/axios';
 
 const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
   const [activeTab, setActiveTab] = useState("camera");
@@ -122,17 +123,13 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
         formData.append('file', blob, 'camera-capture.jpg');
       }
       
-      const response = await fetch('http://localhost:8000/detect-face-emotion', {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await axios.post('/emotion/detect-face-emotion', formData);
       
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error(`Error detecting emotion: ${response.status}`);
       }
       
-      const data = await response.json();
-      setDetectedEmotion(data);
+      setDetectedEmotion(response.data);
     } catch (err) {
       console.error("Error analyzing emotion:", err);
       setError("Failed to detect emotion. Please try again or use a clearer image.");

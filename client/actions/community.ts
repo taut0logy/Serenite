@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/lib/db";
+import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { ReactionType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -23,7 +23,7 @@ export async function createPost({
       return { error: "Unauthorized" };
     }
 
-    const post = await db.post.create({
+    const post = await prisma.post.create({
       data: {
         title,
         content,
@@ -62,7 +62,7 @@ export async function editPost({
     }
 
     // Check if the post exists and belongs to the user
-    const existingPost = await db.post.findUnique({
+    const existingPost = await prisma.post.findUnique({
       where: {
         id: postId,
       },
@@ -79,7 +79,7 @@ export async function editPost({
       return { error: "You don't have permission to edit this post" };
     }
 
-    const updatedPost = await db.post.update({
+    const updatedPost = await prisma.post.update({
       where: {
         id: postId,
       },
@@ -109,7 +109,7 @@ export async function deletePost(postId: string) {
     }
 
     // Check if the post exists and belongs to the user
-    const existingPost = await db.post.findUnique({
+    const existingPost = await prisma.post.findUnique({
       where: {
         id: postId,
       },
@@ -127,7 +127,7 @@ export async function deletePost(postId: string) {
     }
 
     // Delete the post (This will cascade delete reactions and comments)
-    await db.post.delete({
+    await prisma.post.delete({
       where: {
         id: postId,
       },
@@ -146,7 +146,7 @@ export async function getPosts(page = 1, pageSize = 10) {
   try {
     const skip = (page - 1) * pageSize;
     
-    const posts = await db.post.findMany({
+    const posts = await prisma.post.findMany({
       skip,
       take: pageSize,
       orderBy: {
@@ -174,7 +174,7 @@ export async function getPosts(page = 1, pageSize = 10) {
       },
     });
 
-    const totalPosts = await db.post.count();
+    const totalPosts = await prisma.post.count();
     
     return { 
       posts: posts.map(post => ({
@@ -198,7 +198,7 @@ export async function getPostById(postId: string) {
     const session = await auth();
     const currentUserId = session?.user?.id;
 
-    const post = await db.post.findUnique({
+    const post = await prisma.post.findUnique({
       where: {
         id: postId,
       },
@@ -269,7 +269,7 @@ export async function addComment({
       return { error: "Unauthorized" };
     }
 
-    const comment = await db.comment.create({
+    const comment = await prisma.comment.create({
       data: {
         content,
         isAnonymous,
@@ -303,7 +303,7 @@ export async function editComment({
     }
 
     // Check if the comment exists and belongs to the user
-    const existingComment = await db.comment.findUnique({
+    const existingComment = await prisma.comment.findUnique({
       where: {
         id: commentId,
       },
@@ -321,7 +321,7 @@ export async function editComment({
       return { error: "You don't have permission to edit this comment" };
     }
 
-    const updatedComment = await db.comment.update({
+    const updatedComment = await prisma.comment.update({
       where: {
         id: commentId,
       },
@@ -348,7 +348,7 @@ export async function deleteComment(commentId: string) {
     }
 
     // Check if the comment exists and belongs to the user
-    const existingComment = await db.comment.findUnique({
+    const existingComment = await prisma.comment.findUnique({
       where: {
         id: commentId,
       },
@@ -366,7 +366,7 @@ export async function deleteComment(commentId: string) {
       return { error: "You don't have permission to delete this comment" };
     }
 
-    await db.comment.delete({
+    await prisma.comment.delete({
       where: {
         id: commentId,
       },
@@ -395,7 +395,7 @@ export async function toggleReaction({
     }
 
     // Check if user already has the same reaction
-    const existingReaction = await db.reaction.findFirst({
+    const existingReaction = await prisma.reaction.findFirst({
       where: {
         postId,
         userId: session.user.id,
@@ -405,7 +405,7 @@ export async function toggleReaction({
 
     if (existingReaction) {
       // Remove the reaction if it exists
-      await db.reaction.delete({
+      await prisma.reaction.delete({
         where: {
           id: existingReaction.id,
         },
@@ -414,7 +414,7 @@ export async function toggleReaction({
       return { success: "Reaction removed" };
     } else {
       // Add the reaction if it doesn't exist
-      const reaction = await db.reaction.create({
+      const reaction = await prisma.reaction.create({
         data: {
           type: reactionType,
           userId: session.user.id,

@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react"
 import { Card } from "@/components/ui/card"
+import axios from "@/lib/axios"
 
 export default function KYCPage() {
   const [step, setStep] = useState(1)
@@ -49,16 +50,13 @@ export default function KYCPage() {
             selfieFormData.append('selfies', file) // Changed from 'selfies[]' to 'selfies'
 
             try {
-              const selfieResponse = await fetch('http://localhost:8000/kyc/upload-selfies', {
-                method: 'POST',
-                body: selfieFormData,
-              })
-              
-              if (!selfieResponse.ok) {
+              const selfieResponse = await axios.post('http://localhost:8000/kyc/upload-selfies', selfieFormData)
+
+              if (selfieResponse.status !== 200) {
                 throw new Error('Failed to upload selfie')
               }
               
-              const selfieResult = await selfieResponse.json()
+              const selfieResult = selfieResponse.data
               console.log('Selfie upload result:', selfieResult)
               
               // Start verification if we have both ID and selfie
@@ -88,27 +86,18 @@ export default function KYCPage() {
         idFormData.append('user_id', 'test-user')
         idFormData.append('id_photo', idPhoto)
 
-        const idResponse = await fetch('http://localhost:8000/kyc/upload-id', {
-          method: 'POST',
-          body: idFormData,
-        })
-        const idResult = await idResponse.json()
+        const idResponse = await axios.post('/kyc/upload-id', idFormData)
+        const idResult = idResponse.data
         idPhotoPath = idResult.file_path
       }
 
       // Verify identity
-      const verifyResponse = await fetch('http://localhost:8000/kyc/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id_photo_path: idPhotoPath,
-          selfie_paths: selfiePaths,
-        }),
+      const verifyResponse = await axios.post('/kyc/verify', {
+        id_photo_path: idPhotoPath,
+        selfie_paths: selfiePaths,
       })
 
-      const result = await verifyResponse.json()
+      const result = await verifyResponse.data
       setVerificationResult(result)
     } catch (error) {
       console.error('Verification failed:', error)
@@ -117,6 +106,7 @@ export default function KYCPage() {
       setIsVerifying(false)
     }
   }
+
 
   return (
     <main className="container mx-auto py-8 px-4">

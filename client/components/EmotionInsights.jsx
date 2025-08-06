@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import axios from '@/lib/axios';
 
 export default function EmotionInsights() {
   const [selectedEmotionType, setSelectedEmotionType] = useState('face');
@@ -24,14 +25,14 @@ export default function EmotionInsights() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch(`http://localhost:8000/emotion-insights/${emotionType}/${emotion}`);
-      
-      if (!response.ok) {
+
+      const response = await axios.get(`/emotion/insights/${emotionType}/${emotion}`);
+
+      if (response.status !== 200) {
         throw new Error(`Failed to fetch insights: ${response.status}`);
       }
-      
-      const data = await response.json();
+
+      const data = response.data;
       setInsights(data);
     } catch (error) {
       console.error('Error fetching emotion insights:', error);
@@ -159,7 +160,7 @@ export default function EmotionInsights() {
         <select
           value={selectedEmotion}
           onChange={(e) => setSelectedEmotion(e.target.value)}
-          className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          className="block w-full px-3 py-2 bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
         >
           {emotionOptions[selectedEmotionType].map((emotion) => (
             <option key={emotion} value={emotion}>
@@ -170,26 +171,26 @@ export default function EmotionInsights() {
       </div>
       
       {/* Insights display */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+        <h4 className="font-medium mb-3 flex items-center">
           <span className="capitalize">{selectedEmotionType}</span> Emotion: 
           <span className="ml-2 capitalize font-bold text-blue-600">{selectedEmotion}</span>
         </h4>
         
         {loading ? (
           <div className="py-4 text-center">
-            <div className="animate-pulse inline-block h-6 w-6 rounded-full bg-blue-400 opacity-75"></div>
-            <p className="mt-2 text-gray-500 text-sm">Loading insights...</p>
+            <div className="animate-pulse inline-block h-6 w-6 rounded-full bg-blue-400 dark:bg-blue-600 opacity-75"></div>
+            <p className="mt-2 text-gray-500 dark:text-gray-200 text-sm">Loading insights...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 p-3 rounded-md">
-            <p className="text-red-800 text-sm">{error}</p>
-            <p className="text-red-600 text-xs mt-1">
+          <div className="bg-red-50 dark:bg-red-800 p-3 rounded-md">
+            <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+            <p className="text-red-600 dark:text-red-300 text-xs mt-1">
               Please make sure the server is running and supports this emotion type.
             </p>
           </div>
         ) : (
-          <div className="text-sm">
+          <div className="text-sm *:text-gray-700 dark:text-gray-300">
             {formatInsights(insights)}
           </div>
         )}

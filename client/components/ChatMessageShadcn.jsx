@@ -6,6 +6,7 @@ import { BeatLoader } from "react-spinners";
 import { CornerDownLeft, AlertCircle, Languages, Maximize, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FeedbackUI from './FeedbackUI';
+import axios from '@/lib/axios';
 
 // Function to extract YouTube video ID from a URL
 const extractYouTubeId = (url) => {
@@ -113,22 +114,22 @@ const ChatMessageShadcn = ({ message, onFeedbackSubmit, messageIndex }) => {
 
     setIsTranslating(true);
     try {
-      const response = await fetch('http://localhost:8000/translate', {
-        method: 'POST',
+      const response = await axios.post('/chat/translate', {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
+        data: {
+          text: message.content,
           text: message.content,
           target_language: 'bn'  // 'bn' is the language code for Bengali/Bangla
-        }),
+        },
       });
 
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error('Translation failed');
       }
 
-      const data = await response.json();
+      const data = await response.data;
       setTranslatedContent(data.translated_text);
       setShowTranslation(true);
     } catch (error) {

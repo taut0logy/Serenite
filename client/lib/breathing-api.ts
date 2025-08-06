@@ -1,3 +1,4 @@
+import axios from '@/lib/axios';
 // Types for the breathing exercise API
 export interface EmotionalState {
   description: string;
@@ -32,20 +33,13 @@ class BreathingApi {
 
   async generateExercise(state: EmotionalState): Promise<BreathingPattern> {
     try {
-      const response = await fetch(`${this.baseUrl}/breathing/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(state),
-      });
+      const response = await axios.post('/breathing/generate', state);
 
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      return data;
+      return response.data;
     } catch (error) {
       console.error('Error generating breathing exercise:', error);
       throw error;

@@ -15,7 +15,6 @@ import {
     SheetTrigger,
 } from "@/components/ui/sheet";
 import {
-    Calendar,
     Home,
     LogOut,
     Menu,
@@ -23,6 +22,7 @@ import {
     Settings,
     User,
     Video,
+    BookOpen
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -31,6 +31,7 @@ import { LOGOUT } from "@/graphql/operations/mutations";
 import { toast } from "sonner";
 //import { NotificationMenu } from "@/components/notifications/notification-menu";
 import { UserMenu } from "./user-menu";
+import { MdPeople } from "react-icons/md";
 
 // Define navigation items based on user role
 const getNavItems = (role?: string) => {
@@ -43,17 +44,23 @@ const getNavItems = (role?: string) => {
             roles: ["USER", "HOST", "MANAGER", "ADMIN"],
         },
         {
-            title: "Calendar",
-            href: "/calendar",
-            icon: Calendar,
+            title: "Diary",
+            href: "/diary",
+            icon: BookOpen,
             roles: ["USER", "HOST", "MANAGER", "ADMIN"],
         },
         {
-            title: "Messages",
-            href: "/messages",
+            title: "Chat",
+            href: "/mental-health-assistant",
             icon: MessageSquare,
             roles: ["USER", "HOST", "MANAGER", "ADMIN"],
         },
+        {
+            title: "Community",
+            href: "/community",
+            icon: MdPeople,
+            roles: ["USER", "HOST", "MANAGER", "ADMIN"],
+        }
     ];
 
     // Admin-only items
@@ -127,10 +134,9 @@ export function Navbar() {
                 {/* Logo */}
                 <Link
                     href="/"
-                    className="flex items-center space-x-2 font-bold text-xl"
+                    className="flex items-center space-x-2 font-semibold text-xl"
                 >
-                    <Video className="h-6 w-6 text-primary" />
-                    <span className="hidden sm:inline-block">Serenite</span>
+                    <span className="hidden sm:inline-block bg-gradient-to-r from-primary via-purple-500 to-pink-500 dark:from-primary/90 dark:via-purple-400 dark:to-pink-400 bg-clip-text text-transparent bg-[length:200%_100%]">Serenite</span>
                 </Link>
 
                 {/* Desktop Navigation */}

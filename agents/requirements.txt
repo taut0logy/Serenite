@@ -1,53 +1,68 @@
+# LangChain and AI/LLM
 langchain
 langchain-core
 langchain-groq
 langchain-community
-langgraph
 langchain-huggingface
+langchain_astradb
+langchain-postgres
+langgraph
+groq
+instructor
+
+# Vector Databases and Embeddings
 chromadb
-tavily-python
+pgvector
 sentence-transformers
-wikipedia
+
+# Database and Storage
+psycopg2-binary
+sqlalchemy
 cassio
-typing_extensions
-dotenv
-youtube_search
+
+# FastAPI and Web Framework
+fastapi
+uvicorn
+slowapi
+pydantic
+pydantic-settings
+python-dotenv
+python-multipart
+
+# HTTP Clients and Networking
+httpx
+requests
+
+# Computer Vision and Image Processing
+opencv-python
+deepface
+pillow
+mediapipe
+
+# Audio Processing
+librosa
+sounddevice
+
+# Data Science and Machine Learning
+numpy
+pandas
+scikit-learn
+scipy==1.10.1
+torch
+tf-keras
+altair
+
+# External APIs and Data Sources
+tavily-python
 wikipedia
 arxiv
+youtube_search
 youtube-transcript-api
+googletrans
+
+# Development Tools
 pytest
 black
 isort
 rich
-opencv-python
-deepface
-pillow
-numpy
-pandas
-altair
-mediapipe
-pillow
-pandas
-altair
-librosa
-scikit-learn
-sounddevice
-scipy==1.10.1
-uvicorn
-langchain_astradb
-psycopg2-binary
-sqlalchemy
-pgvector
-langchain-postgres
-groq
-tf-keras
-# Added for FastAPI backend
-fastapi
-slowapi
-pydantic
-python-dotenv
-python-multipart
-httpx
-googletrans
-requests
-torch
+typing_extensions

@@ -3,3 +3,8 @@ node_modules/
 __pycache__/
 *.py[cod]
 generated/
+.vscode/
+.idea/
+*.log
+.DS_Store
+.env

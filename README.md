@@ -1,9 +1,20 @@
-# 🌐 Private & Intuitive Online Support Group System
+# 🌐 Serenite: A Private & Intuitive Online Support Group System
 
-Welcome to our **CSE 3200: System Project Laboratory Project**! 🎓 This project was developed by:
+Welcome to our **CSE 3200: System Project Laboratory Project**!
 
--   **Md. Sakibur Rahman** (Roll: 2007007) ✨
--   **Raufun Ahsan** (Roll: 2007030) 🌟🚀
+## Developed by
+
+[**Md. Sakibur Rahman**](https://github.com/SakiburRahman07)
+
+- Roll: 2007007
+- Session: 2020-21
+
+[**Raufun Ahsan**](https://github.com/taut0logy)
+
+- Roll: 2007030
+- Session: 2020-21
+
+[*Department of Computer Science and Engineering, Khulna University of Engineering & Technology (KUET)*](https://www.kuet.ac.bd)
 
 ## 📖 Project Overview
 

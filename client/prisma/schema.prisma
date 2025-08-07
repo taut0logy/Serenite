@@ -30,10 +30,10 @@ model User {
   mentalHealthProfile MentalHealthProfile?
   sessions       Session[]
   supportGroups  SupportGroup[]      @relation("SupportGroupMembers")
+  meetings       Meeting[]           @relation("MeetingParticipants")
   notifications  Notification[]
   messagesSent   Message[]            @relation("Sender")
   messagesReceived Message[]          @relation("Receiver")
-  meetingParticipants MeetingParticipant[]
   calendarEvents CalendarEvent[]
   feedbacks      Feedback[]
   reportsMade    Report[]             @relation("Reporter")
@@ -107,30 +107,55 @@ enum Role {
   MANAGER
 }
 
+enum SupportGroupType {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum Weekday {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
 
 model SupportGroup {
   id        String   @id @default(uuid())
   name      String
   description String?
+  
+  type      SupportGroupType @default(WEEKLY)
   tags      String[]
+  
+  // Recurring meeting schedule fields
+  meetingDayOfWeek    Weekday? @default(FRIDAY)
+  //set limits to day o month values
+  meetingDayOfMonth   Int?
+  meetingTime         String?   // HH:MM format (e.g., "17:00" for 5 PM)
+  nextMeetingDate     DateTime? // Automatically calculated next meeting date
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   members   User[]   @relation("SupportGroupMembers")
   meetings  Meeting[]
   
   @@index([name])
+  @@index([nextMeetingDate])
 }
 
 model Meeting {
   id            String      @id @default(uuid())
-  title         String
-  description   String?
   startTime     DateTime
   endTime       DateTime?
-  status        MeetingStatus @default(PENDING)
   supportGroupId String?
   supportGroup  SupportGroup? @relation(fields: [supportGroupId], references: [id], onDelete: Cascade)
-  participants  MeetingParticipant[]
+  participants  User[] @relation("MeetingParticipants")
+  status        MeetingStatus @default(PENDING)
   messages      Message[]
   feedback      Feedback[]
   reports       Report[]
@@ -141,23 +166,8 @@ model Meeting {
 
 }
 
-model MeetingParticipant {
-  id        String             @id @default(uuid())
-  meetingId String
-  userId    String
-
-  meeting   Meeting            @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  status    ParticipantStatus  @default(PENDING)
-
-  @@unique([meetingId, userId])
-}
-
 enum MeetingStatus {
   PENDING
-  CONFIRMED
-  CANCELLED
   ENDED
   RUNNING
 }
@@ -211,10 +221,12 @@ model Message {
   senderId  String
   meetingId String?
   receiverId String?
+  replyToId String?
+  replyTo   Message? @relation("MessageReply", fields: [replyToId], references: [id], onDelete: Cascade)
+  replies    Message[] @relation("MessageReply")
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   sender    User     @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
   meeting   Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   receiver  User?    @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)

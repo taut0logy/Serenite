@@ -3,9 +3,9 @@ import {
   Users,
   Settings,
   Bookmark,
-  SquarePen,
   LayoutGrid,
-  LucideIcon
+  LucideIcon,
+  PenBox
 } from 'lucide-react';
 
 type Submenu = {
@@ -48,7 +48,7 @@ export function getMenuList(pathname: string): Group[] {
           href: '',
           label: 'Posts',
           active: pathname.includes('/posts'),
-          icon: SquarePen,
+          icon: PenBox,
           submenus: [
             {
               href: '/posts',

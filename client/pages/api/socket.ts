@@ -54,6 +54,7 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
             console.log('[socket]', data)
             socket.emit('pong', { time: Date.now() })
         })
+
         socket.on("test:echo", (data) => {
             console.info(`[Socket Test] Received test:echo:`, data);
             socket.emit("test:echo:response", {
@@ -70,9 +71,94 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
             });
         });
 
-        socket.on('disconnect', () =>
+        // Meeting Chat Events
+        socket.on('join-meeting-chat', (data: { meetingId: string }) => {
+            const { meetingId } = data;
+            const userId = socket.data.userId;
+            const userEmail = socket.data.email;
+
+            console.log(`[Chat] User ${userEmail} joined meeting chat: ${meetingId}`);
+
+            // Join the meeting room
+            socket.join(`meeting:${meetingId}`);
+
+            // Notify others in the meeting that user joined
+            socket.to(`meeting:${meetingId}`).emit('user-joined-meeting', {
+                userId,
+                userName: userEmail, // You might want to get full name from user profile
+                meetingId
+            });
+        });
+
+        socket.on('leave-meeting-chat', (data: { meetingId: string }) => {
+            const { meetingId } = data;
+            const userId = socket.data.userId;
+            const userEmail = socket.data.email;
+
+            console.log(`[Chat] User ${userEmail} left meeting chat: ${meetingId}`);
+
+            // Leave the meeting room
+            socket.leave(`meeting:${meetingId}`);
+
+            // Notify others in the meeting that user left
+            socket.to(`meeting:${meetingId}`).emit('user-left-meeting', {
+                userId,
+                userName: userEmail,
+                meetingId
+            });
+        });
+
+        socket.on('send-chat-message', (data: {
+            userId: string;
+            userName: string;
+            userAvatar?: string;
+            content: string;
+            meetingId: string;
+        }) => {
+            const { meetingId, content, userName, userAvatar } = data;
+            const userId = socket.data.userId;
+
+            // Validate that the user is authorized to send messages in this meeting
+            if (data.userId !== userId) {
+                console.error(`[Chat] User ID mismatch: ${userId} vs ${data.userId}`);
+                return;
+            }
+
+            const messagePayload = {
+                id: `msg_${Date.now()}_${userId}`, // Simple ID generation
+                userId,
+                userName,
+                userAvatar,
+                content: content.trim(),
+                timestamp: new Date().toISOString(),
+                meetingId
+            };
+
+            console.log(`[Chat] Message from ${userName} in meeting ${meetingId}: ${content}`);
+
+            // Broadcast message to all users in the meeting room (including sender)
+            io.to(`meeting:${meetingId}`).emit('chat-message', messagePayload);
+
+            // Optional: Store message in database here
+            // await saveMessageToDatabase(messagePayload);
+        });
+
+        socket.on('disconnect', () => {
             console.log('[socket] client disconnected')
-        )
+
+            // Clean up: Leave all meeting rooms
+            const rooms = Array.from(socket.rooms);
+            rooms.forEach(room => {
+                if (room.startsWith('meeting:')) {
+                    const meetingId = room.replace('meeting:', '');
+                    socket.to(room).emit('user-left-meeting', {
+                        userId: socket.data.userId,
+                        userName: socket.data.email,
+                        meetingId
+                    });
+                }
+            });
+        });
     });
 
     // Monkey patching to access socket instance globally.

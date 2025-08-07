@@ -10,8 +10,8 @@ import {
     SpeakerLayout,
     useCallStateHooks,
 } from "@stream-io/video-react-sdk";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Users, LayoutList } from "lucide-react";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
+import { Users, LayoutList, MessageSquare } from "lucide-react";
 
 import {
     DropdownMenu,
@@ -23,21 +23,34 @@ import {
 import { Button } from "@/components/ui/button";
 import Loader from "./loader";
 import EndCallButton from "./end-call-button";
+import { GroupChatPanel } from "./group-chat-panel";
+import { useGroupChat } from "@/hooks/use-group-chat";
 import { cn } from "@/lib/utils";
 
 type CallLayoutType = "grid" | "speaker-left" | "speaker-right";
 
 const MeetingRoom = () => {
     const searchParams = useSearchParams();
+    const params = useParams();
     const isPersonalRoom = searchParams
         ? !!searchParams.get("personal")
         : false;
     const router = useRouter();
     const [layout, setLayout] = useState<CallLayoutType>("speaker-left");
     const [showParticipants, setShowParticipants] = useState(false);
-    const { useCallCallingState } = useCallStateHooks();
+    const [showChat, setShowChat] = useState(false);
+    const { useCallCallingState, useParticipantCount } = useCallStateHooks();
 
     const callingState = useCallCallingState();
+    const participantCount = useParticipantCount();
+
+    // Get meeting ID from URL params
+    const meetingId = (params?.id as string) || "default-meeting";
+
+    // Initialize group chat
+    const { messages, sendMessage, isConnected } = useGroupChat({
+        meetingId,
+    });
 
     if (callingState !== CallingState.JOINED) return <Loader />;
 
@@ -71,8 +84,8 @@ const MeetingRoom = () => {
                     className={cn(
                         "h-full w-80 bg-slate-800 border-l border-slate-700 transition-transform duration-300 ease-in-out",
                         {
-                            "translate-x-0": showParticipants,
-                            "translate-x-full": !showParticipants,
+                            "translate-x-0": showParticipants && !showChat,
+                            "translate-x-full": !showParticipants || showChat,
                         }
                     )}
                 >
@@ -80,6 +93,16 @@ const MeetingRoom = () => {
                         onClose={() => setShowParticipants(false)}
                     />
                 </div>
+
+                {/* Chat Sidebar */}
+                <GroupChatPanel
+                    isOpen={showChat}
+                    onClose={() => setShowChat(false)}
+                    messages={messages}
+                    onSendMessage={sendMessage}
+                    participantCount={participantCount || 0}
+                    isConnected={isConnected}
+                />
             </div>
 
             {/* Fixed Meeting Controls Bar at Bottom */}
@@ -135,19 +158,46 @@ const MeetingRoom = () => {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setShowParticipants((prev) => !prev)}
+                            onClick={() => {
+                                setShowParticipants((prev) => !prev);
+                                if (showChat) setShowChat(false);
+                            }}
                             className={cn(
                                 "bg-slate-700/50 hover:bg-slate-600 text-white border border-slate-600 rounded-lg px-3 py-2",
                                 {
                                     "bg-blue-600 border-blue-500":
-                                        showParticipants,
+                                        showParticipants && !showChat,
                                 }
                             )}
                         >
                             <Users size={18} />
                             <span className="ml-2 hidden sm:inline">
-                                {showParticipants ? "Hide" : "Show"}{" "}
+                                {showParticipants && !showChat
+                                    ? "Hide"
+                                    : "Show"}{" "}
                                 Participants
+                            </span>
+                        </Button>
+
+                        {/* Chat Toggle */}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setShowChat((prev) => !prev);
+                                if (showParticipants)
+                                    setShowParticipants(false);
+                            }}
+                            className={cn(
+                                "bg-slate-700/50 hover:bg-slate-600 text-white border border-slate-600 rounded-lg px-3 py-2",
+                                {
+                                    "bg-blue-600 border-blue-500": showChat,
+                                }
+                            )}
+                        >
+                            <MessageSquare size={18} />
+                            <span className="ml-2 hidden sm:inline">
+                                {showChat ? "Hide" : "Show"} Chat
                             </span>
                         </Button>
 

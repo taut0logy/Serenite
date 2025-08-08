@@ -68,12 +68,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Import custom components
-import ChatMessage from "@/components/ChatMessage";
-import ThinkingProcess from "@/components/ThinkingProcess";
-import EmotionJournal from "../../../components/EmotionJournal";
-import EmotionInsights from "../../../components/EmotionInsights";
-import FacialEmotionCapture from "@/components/FacialEmotionCapture";
-import VoiceEmotionCapture from "@/components/VoiceEmotionCapture";
+import ChatMessage from "@/components/mental-health-assistant/chat-message";
+import ThinkingProcess from "@/components/mental-health-assistant/thinking-process";
+import EmotionJournal from "@/components/mental-health-assistant/emotion-journal";
+import EmotionInsights from "@/components/mental-health-assistant/emotion-insights";
+import FacialEmotionCapture from "@/components/mental-health-assistant/facial-emotion-capture";
+import VoiceEmotionCapture from "@/components/mental-health-assistant/voice-emotion-capture";
 
 export default function MentalHealthAssistant() {
     const [messages, setMessages] = useState<Message[]>([

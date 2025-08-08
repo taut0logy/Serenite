@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import "@stream-io/video-react-sdk/dist/css/styles.css";
 
 html,
 body,

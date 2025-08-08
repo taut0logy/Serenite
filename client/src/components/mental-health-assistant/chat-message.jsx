@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { BeatLoader } from "react-spinners";
 import { CornerDownLeft, AlertCircle, Languages, Maximize, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import FeedbackUI from './FeedbackUI';
+import FeedbackUI from '../feedback-ui';
 import axios from '@/lib/axios';
 import { toast } from 'sonner';
 

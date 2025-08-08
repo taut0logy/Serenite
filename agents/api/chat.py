@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Depends
 import requests
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -11,6 +11,8 @@ from models.chat import (
     TranslationRequest,
     TranslationResponse,
 )
+from middleware.auth import get_current_user
+from config.limiter import limiter
 
 
 router = APIRouter(prefix="/chat", tags=["Mental Health Assistant"])
@@ -20,7 +22,8 @@ chat_histories = {}
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+@limiter.limit("5/minute")
+async def chat(request: Request, input: ChatRequest, user = Depends(get_current_user)):
     """
     Chat with the mental health assistant.
 
@@ -29,7 +32,7 @@ async def chat(request: ChatRequest):
     global chat_histories
 
     # Check for user ID - required for memory management
-    user_id = request.user_id
+    user_id = input.user_id
     if not user_id:
         raise HTTPException(
             status_code=400, detail="User ID is required for chat history"
@@ -43,11 +46,11 @@ async def chat(request: ChatRequest):
     history = chat_histories[user_id]
 
     # Initialize agent state if needed
-    if request.agent_state is None:
-        request.agent_state = {}
+    if input.agent_state is None:
+        input.agent_state = {}
 
     # Check if we should add message history to the agent state
-    if "messages" not in request.agent_state:
+    if "messages" not in input.agent_state:
         # Convert langchain ChatMessageHistory to the format our assistant expects
         converted_messages = []
         for msg in history.messages:
@@ -60,27 +63,27 @@ async def chat(request: ChatRequest):
 
         # Add messages to agent state if there's history
         if converted_messages:
-            request.agent_state["message_history"] = converted_messages
+            input.agent_state["message_history"] = converted_messages
 
     # Add facial emotion data to state if selected
-    if request.include_face_emotion and request.face_emotion:
-        request.agent_state["facial_emotion"] = {
-            "emotion": request.face_emotion.get("emotion", ""),
-            "score": request.face_emotion.get("score", 0.0),
+    if input.include_face_emotion and input.face_emotion:
+        input.agent_state["facial_emotion"] = {
+            "emotion": input.face_emotion.get("emotion", ""),
+            "score": input.face_emotion.get("score", 0.0),
         }
 
     # Add voice emotion data to state if selected
-    if request.include_voice_emotion and request.voice_emotion:
-        request.agent_state["voice_emotion"] = {
-            "emotion": request.voice_emotion.get("emotion", ""),
-            "score": request.voice_emotion.get("score", 0.0),
+    if input.include_voice_emotion and input.voice_emotion:
+        input.agent_state["voice_emotion"] = {
+            "emotion": input.voice_emotion.get("emotion", ""),
+            "score": input.voice_emotion.get("score", 0.0),
         }
 
     # Add user message to history
-    history.add_user_message(request.message)
+    history.add_user_message(input.message)
 
     # Pass the original message and updated state to the assistant
-    result = chat_with_mental_health_assistant(request.message, request.agent_state)
+    result = chat_with_mental_health_assistant(input.message, input.agent_state)
 
     # Format response
     formatted_messages = []
@@ -115,7 +118,8 @@ async def chat(request: ChatRequest):
 
 
 @router.get("/history/{user_id}")
-async def get_chat_history(user_id: str):
+@limiter.limit("10/minute")
+async def get_chat_history(request: Request, user_id: str, user: dict = Depends(get_current_user)):
     """
     Get the chat history for a specific user
     """
@@ -139,7 +143,8 @@ async def get_chat_history(user_id: str):
 
 
 @router.delete("/history/{user_id}")
-async def clear_chat_history(user_id: str):
+@limiter.limit("10/minute")
+async def clear_chat_history(request: Request, user_id: str, user = Depends(get_current_user)):
     """
     Clear the chat history for a specific user
     """
@@ -152,7 +157,8 @@ async def clear_chat_history(user_id: str):
 
 
 @router.get("/resources")
-async def get_mental_health_resources():
+@limiter.limit("10/minute")
+async def get_mental_health_resources(request: Request):
     """Get mental health resources for Bangladesh"""
     return {
         "crisis_resources": [
@@ -198,14 +204,15 @@ async def get_mental_health_resources():
 
 
 @router.post("/translate", response_model=TranslationResponse)
-async def translate_text(request: TranslationRequest):
+@limiter.limit("5/minute")
+async def translate_text(request: Request, input: TranslationRequest, user: dict = Depends(get_current_user)):
     """
     Translate text from one language to another using Google Translate API directly
     """
     try:
         # Use public Google Translate API directly with requests
         # This is more stable and doesn't have dependency conflicts
-        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={request.target_language}&dt=t&q={requests.utils.quote(request.text)}"
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={input.target_language}&dt=t&q={requests.utils.quote(input.text)}"
 
         response = requests.get(url)
         if response.status_code != 200:
@@ -223,10 +230,10 @@ async def translate_text(request: TranslationRequest):
         source_language = result[2] if len(result) > 2 else "auto"
 
         return TranslationResponse(
-            original_text=request.text,
+            original_text=input.text,
             translated_text=translated_text,
             source_language=source_language,
-            target_language=request.target_language,
+            target_language=input.target_language,
         )
     except Exception as e:
         # Handle errors

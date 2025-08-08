@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, Request,  HTTPException
+from fastapi import APIRouter, Depends, Request
 from models.feedback import Feedback
+from middleware.auth import get_current_user
 
 router = APIRouter(prefix="/feedback", tags=["User Feedback"])
 
 feedback_data = []
 
 @router.post("/")
-async def submit_feedback(feedback: Feedback):
+async def submit_feedback(request: Request, feedback: Feedback, user: dict = Depends(get_current_user)):
     """
     Submit feedback about an assistant's response.
 
@@ -29,7 +30,7 @@ async def submit_feedback(feedback: Feedback):
 
 
 @router.get("/")
-async def get_feedback(limit: int = 50):
+async def get_feedback(request: Request, limit: int = 50, user: dict = Depends(get_current_user)):
     """
     Get submitted feedback data (for admin use).
 

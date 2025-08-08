@@ -11,8 +11,6 @@ groq
 instructor
 
 # Vector Databases and Embeddings
-chromadb
-pgvector
 sentence-transformers
 
 # Database and Storage
@@ -37,7 +35,6 @@ requests
 opencv-python
 deepface
 pillow
-mediapipe
 
 # Audio Processing
 librosa
@@ -45,12 +42,7 @@ sounddevice
 
 # Data Science and Machine Learning
 numpy
-pandas
-scikit-learn
 scipy==1.10.1
-torch
-tf-keras
-altair
 
 # External APIs and Data Sources
 tavily-python
@@ -58,11 +50,6 @@ wikipedia
 arxiv
 youtube_search
 youtube-transcript-api
-googletrans
 
 # Development Tools
-pytest
-black
-isort
-rich
 typing_extensions

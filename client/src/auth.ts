@@ -306,6 +306,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: user.role || "USER",
           email_verified: user.email_verified || false,
           hasPassword: user.hasPassword || false,
+          kycVerified: user.kycVerified || false,
         };
       }
       // Return the token as is

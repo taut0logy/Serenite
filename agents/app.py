@@ -9,7 +9,16 @@ from utils.logger import logger
 from config.settings import settings
 from config.limiter import limiter
 from dotenv import load_dotenv
-from api import profiling, chat, diary, breathing, emotion_journal, emotion, feedback
+from api import (
+    profiling,
+    chat,
+    diary,
+    breathing,
+    emotion_journal,
+    emotion,
+    feedback,
+    kyc,
+)
 import uvicorn
 
 load_dotenv()
@@ -43,6 +52,7 @@ app.include_router(breathing.router, prefix=settings.API_PREFIX)
 app.include_router(emotion_journal.router, prefix=settings.API_PREFIX)
 app.include_router(emotion.router, prefix=settings.API_PREFIX)
 app.include_router(feedback.router, prefix=settings.API_PREFIX)
+app.include_router(kyc.router, prefix=settings.API_PREFIX)
 
 
 @app.exception_handler(Exception)

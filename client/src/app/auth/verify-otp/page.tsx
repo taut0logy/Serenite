@@ -41,7 +41,7 @@ export default function VerifyOtpPage() {
 }
 
 
-const VerifyOtpPageContent = ({ userId, tempToken, email }: { userId: string; tempToken: string; email: string }) => {
+const VerifyOtpPageContent = ({ userId, tempToken, email }: { userId: string | undefined | null; tempToken: string | undefined | null; email: string | undefined | null }) => {
     const router = useRouter();
     const [otp, setOtp] = useState("");
     const [backupCode, setBackupCode] = useState("");
@@ -205,6 +205,14 @@ const VerifyOtpPageContent = ({ userId, tempToken, email }: { userId: string; te
             setIsVerifying(false);
         }
     };
+
+    if (!userId || !tempToken || !email) {
+        return (
+            <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
+                <p className="text-red-500">Missing required parameters.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="flex items-center justify-center py-8 sm:py-12 md:py-16 lg:py-20 xl:py-24 2xl:py-28 px-4">

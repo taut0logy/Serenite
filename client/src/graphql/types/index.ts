@@ -31,6 +31,7 @@ type User {
   createdAt: String!
   updatedAt: String!
   verified: Boolean!
+  kycVerified: Boolean!
   verificationToken: String
   resetToken: String
   resetTokenExpiry: String

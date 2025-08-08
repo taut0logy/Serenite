@@ -8,13 +8,16 @@ from services.diary import (
     store_diary_entry,
     search_diary_entries,
 )
+from middleware.auth import get_current_user
+from config.limiter import limiter
 
 
 router = APIRouter(prefix="/diary", tags=["Personal Journal with Emotional Knowledge Base"])
 
 
 @router.post("/analyze", response_model=MoodAnalysis)
-async def analyze_diary(entry: DiaryEntry):
+@limiter.limit("10/minute")
+async def analyze_diary(request: Request, entry: DiaryEntry, user = Depends(get_current_user)):
     """Analyze a diary entry and return mood analysis."""
     try:
         return analyze_diary_entry(entry)

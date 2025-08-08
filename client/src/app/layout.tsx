@@ -9,7 +9,6 @@ import { AuthProvider } from "@/providers/auth-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { Navbar } from "@/components/navigation/navbar";
 import "react-datepicker/dist/react-datepicker.css";
-import { Footer } from "@/components/footer";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -52,7 +51,6 @@ export default function RootLayout({
                                         <main className="flex-1">
                                             {children}
                                         </main>
-                                        <Footer />
                                     </div>
                                     <Toaster
                                         toastOptions={{

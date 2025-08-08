@@ -7,20 +7,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Camera, Upload, RefreshCw, ThumbsUp } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import axios from '@/lib/axios';
+import Image from 'next/image';
 
-const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
-  const [activeTab, setActiveTab] = useState("camera");
-  const [cameraStream, setCameraStream] = useState(null);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [detectedEmotion, setDetectedEmotion] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+interface EmotionData {
+  emotion: string;
+  score: number;
+}
+
+interface FacialEmotionCaptureProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onEmotionDetected: (emotionData: EmotionData) => void;
+}
+
+const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }: FacialEmotionCaptureProps) => {
+  const [activeTab, setActiveTab] = useState<string>("camera");
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [detectedEmotion, setDetectedEmotion] = useState<EmotionData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Initialize camera when tab is active
   useEffect(() => {
@@ -34,7 +45,7 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
         cameraStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [isOpen, activeTab]);
+  }, [isOpen, activeTab, cameraStream]);
   
   // Start camera
   const startCamera = async () => {
@@ -72,7 +83,9 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
     
     // Draw video frame to canvas
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    }
     
     // Convert to data URL
     const imageDataUrl = canvas.toDataURL('image/jpeg');
@@ -93,7 +106,7 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
   };
   
   // Handle file selection
-  const handleFileSelect = (e) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -112,17 +125,33 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
     try {
       const formData = new FormData();
       
-      // If from file upload, use the file
+      // If from file upload, use the file directly
       if (activeTab === "upload" && selectedFile) {
         formData.append('file', selectedFile);
       }
       // If from camera, convert data URL to blob
       else if (activeTab === "camera" && capturedImage) {
-        const blob = await fetch(capturedImage).then(r => r.blob());
-        formData.append('file', blob, 'camera-capture.jpg');
+        // Convert data URL to blob
+        const response = await fetch(capturedImage);
+        const blob = await response.blob();
+        
+        // Create a proper file object from the blob
+        const file = new File([blob], 'camera-capture.jpg', { 
+          type: 'image/jpeg',
+          lastModified: Date.now()
+        });
+        
+        formData.append('file', file);
+      } else {
+        throw new Error('No image data available');
       }
       
-      const response = await axios.post('/emotion/detect-face-emotion', formData);
+      // Make the request to detect emotion
+      const response = await axios.post('/emotion/detect-face-emotion', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       
       if (response.status !== 200) {
         throw new Error(`Error detecting emotion: ${response.status}`);
@@ -208,7 +237,7 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
                   <Button 
                     onClick={captureImage} 
                     className="mb-2"
-                    disabled={!cameraStream || error}
+                    disabled={!cameraStream || !!error}
                   >
                     <Camera className="h-4 w-4 mr-2" />
                     Capture Photo
@@ -217,7 +246,8 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
               ) : (
                 <>
                   <div className="relative w-full aspect-video bg-muted rounded-md overflow-hidden mb-4 border">
-                    <img 
+                    <Image
+                      height={480} 
                       src={capturedImage} 
                       alt="Captured" 
                       className="w-full h-full object-cover"
@@ -295,15 +325,19 @@ const FacialEmotionCapture = ({ isOpen, onClose, onEmotionDetected }) => {
                     accept="image/*"
                     className="hidden"
                     onChange={handleFileSelect}
+                    title="Upload image file"
+                    aria-label="Upload image file for emotion detection"
                   />
                 </>
               ) : (
                 <>
                   <div className="relative w-full aspect-video bg-muted rounded-md overflow-hidden mb-4 border">
-                    <img 
+                    <Image 
                       src={capturedImage} 
                       alt="Selected" 
                       className="w-full h-full object-cover"
+                      width={640}
+                      height={480}
                     />
                     
                     {detectedEmotion && (

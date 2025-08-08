@@ -90,11 +90,9 @@ async def get_current_user(
     """
     token = None
     
-    # Try to get token from Authorization header first
     if credentials:
         token = credentials.credentials
     
-    # Also try getting it from cookies if that's how your frontend sends it
     if not token:
         token = request.cookies.get("authjs.session-token") or request.cookies.get("__Secure-authjs.session-token")
 

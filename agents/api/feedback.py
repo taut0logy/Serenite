@@ -3,6 +3,7 @@ from models.feedback import Feedback
 
 router = APIRouter(prefix="/feedback", tags=["User Feedback"])
 
+feedback_data = []
 
 @router.post("/")
 async def submit_feedback(feedback: Feedback):
@@ -18,7 +19,7 @@ async def submit_feedback(feedback: Feedback):
     feedback_dict = feedback.dict()
 
     # Add to feedback data storage
-    feedback_data.routerend(feedback_dict)
+    feedback_data.append(feedback_dict)
 
     # Keep the feedback data manageable in memory (limit to last 100 entries)
     if len(feedback_data) > 100:

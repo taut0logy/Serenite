@@ -4,6 +4,7 @@ import { HowItWorksSection } from "@/components/sections/how-it-works";
 import { TestimonialsSection } from "@/components/sections/testimonials";
 import { FaqSection } from "@/components/sections/faq";
 import { CtaSection } from "@/components/sections/cta";
+import { Footer } from "@/components/footer";
 
 export default function Home() {
     return (
@@ -14,6 +15,7 @@ export default function Home() {
             <TestimonialsSection />
             <FaqSection />
             <CtaSection />
+            <Footer />
         </div>
     );
 }

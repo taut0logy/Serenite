@@ -65,11 +65,15 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
     # Save uploaded file to temporary location
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
     temp_file_path = temp_file.name
+    
+    # Important: Close the temp file handle immediately to avoid permission issues on Windows
+    temp_file.close()
 
     try:
         # Write content to temporary file
+        file_contents = await file.read()
         with open(temp_file_path, "wb") as buffer:
-            buffer.write(await file.read())
+            buffer.write(file_contents)
 
         # Analyze the voice
         emotion, confidence = analyze_voice(temp_file_path)
@@ -93,10 +97,27 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
             print(f"Error adding to emotion journal: {str(e)}")
 
         return {"emotion": emotion, "score": confidence, "insights": insights}
+    except Exception as e:
+        print(f"Error analyzing voice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze voice: {str(e)}")
     finally:
-        # Clean up temporary file
-        if os.path.exists(temp_file_path):
-            os.unlink(temp_file_path)
+        # Clean up temporary file with better error handling
+        try:
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+        except PermissionError:
+            # On Windows, sometimes the file is still locked, try a few times
+            import time
+            for i in range(3):
+                try:
+                    time.sleep(0.1)  # Brief delay
+                    os.unlink(temp_file_path)
+                    break
+                except PermissionError:
+                    if i == 2:  # Last attempt
+                        print(f"Warning: Could not delete temporary file {temp_file_path}")
+        except Exception as cleanup_error:
+            print(f"Warning: Error during cleanup: {str(cleanup_error)}")
 
 
 @router.post("/record-voice")
@@ -107,24 +128,46 @@ async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
     """
     # Create a temporary file
     temp_dir = tempfile.gettempdir()
-    temp_file = os.path.join(temp_dir, "voice_analysis_temp.wav")
+    temp_file = os.path.join(temp_dir, f"voice_analysis_temp_{datetime.datetime.now().timestamp()}.wav")
 
-    # Recording logic
-    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
-    sd.wait()
+    try:
+        # Recording logic
+        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
+        sd.wait()
 
-    # Save the recording
-    write(temp_file, sample_rate, recording)
+        # Save the recording
+        write(temp_file, sample_rate, recording)
 
-    # Analyze the voice
-    emotion, confidence = analyze_voice(temp_file)
+        # Analyze the voice
+        emotion, confidence = analyze_voice(temp_file)
 
-    # Get insights for this emotion
-    insights = {}
-    if emotion.lower() in VOICE_EMOTION_INSIGHTS:
-        insights = VOICE_EMOTION_INSIGHTS[emotion.lower()]
+        # Get insights for this emotion
+        insights = {}
+        if emotion.lower() in VOICE_EMOTION_INSIGHTS:
+            insights = VOICE_EMOTION_INSIGHTS[emotion.lower()]
 
-    return {"emotion": emotion, "score": confidence, "insights": insights}
+        return {"emotion": emotion, "score": confidence, "insights": insights}
+    except Exception as e:
+        print(f"Error with voice recording: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to record and analyze voice: {str(e)}")
+    finally:
+        # Clean up temporary file
+        try:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+        except PermissionError:
+            # On Windows, sometimes the file is still locked, try a few times
+            import time
+            for i in range(3):
+                try:
+                    time.sleep(0.1)  # Brief delay
+                    os.unlink(temp_file)
+                    break
+                except PermissionError:
+                    if i == 2:  # Last attempt
+                        print(f"Warning: Could not delete temporary file {temp_file}")
+        except Exception as cleanup_error:
+            print(f"Warning: Error during cleanup: {str(cleanup_error)}")
 
 @router.get("/insights/{emotion_type}/{emotion}")
 async def get_emotion_insights(emotion_type: str, emotion: str):

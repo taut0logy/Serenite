@@ -3,12 +3,20 @@
 import { useState, useEffect } from 'react';
 import axios from '@/lib/axios';
 
+interface EmotionInsightsData {
+  description?: string;
+  mental_health_implications?: string | string[];
+  coping_strategies?: string | string[];
+  professional_support?: string;
+  self_care?: string | string[];
+}
+
 export default function EmotionInsights() {
-  const [selectedEmotionType, setSelectedEmotionType] = useState('face');
-  const [selectedEmotion, setSelectedEmotion] = useState('happy');
-  const [insights, setInsights] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [selectedEmotionType, setSelectedEmotionType] = useState<string>('face');
+  const [selectedEmotion, setSelectedEmotion] = useState<string>('happy');
+  const [insights, setInsights] = useState<EmotionInsightsData | string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Emotion options by type
   const emotionOptions = {
@@ -36,7 +44,7 @@ export default function EmotionInsights() {
       setInsights(data);
     } catch (error) {
       console.error('Error fetching emotion insights:', error);
-      setError(error.message);
+      setError(error instanceof Error ? error.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -161,6 +169,7 @@ export default function EmotionInsights() {
           value={selectedEmotion}
           onChange={(e) => setSelectedEmotion(e.target.value)}
           className="block w-full px-3 py-2 bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          title="Select emotion to analyze"
         >
           {emotionOptions[selectedEmotionType].map((emotion) => (
             <option key={emotion} value={emotion}>

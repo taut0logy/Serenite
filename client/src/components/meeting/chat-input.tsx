@@ -51,7 +51,7 @@ export const ChatInput = ({
     };
 
     return (
-        <div className="p-4 border-t border-slate-700 bg-slate-800/50">
+        <div className="p-4 border-t border-slate-700 bg-slate-800/80 backdrop-blur-sm">
             <form onSubmit={handleSubmit} className="flex gap-2">
                 <div className="flex-1 relative">
                     <textarea
@@ -63,10 +63,11 @@ export const ChatInput = ({
                         disabled={disabled}
                         rows={1}
                         className={cn(
-                            "chat-textarea w-full bg-slate-700/50 border border-slate-600 text-white placeholder:text-slate-400",
+                            "chat-textarea w-full bg-slate-700/70 border border-slate-600 text-white placeholder:text-slate-400",
                             "focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none",
-                            "rounded-md px-3 py-2 pr-10 resize-none",
-                            "text-sm leading-5"
+                            "rounded-lg px-3 py-2 pr-10 resize-none transition-all duration-200",
+                            "text-sm leading-5 backdrop-blur-sm",
+                            "hover:bg-slate-700/80 focus:bg-slate-700/80"
                         )}
                         maxLength={500}
                     />
@@ -75,7 +76,7 @@ export const ChatInput = ({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="absolute right-1 top-1 h-7 w-7 text-slate-400 hover:text-white hover:bg-slate-600/50"
+                        className="absolute right-1 top-1 h-7 w-7 text-slate-400 hover:text-white hover:bg-slate-600/50 rounded-md transition-all duration-200"
                         disabled={disabled}
                     >
                         <Smile size={16} />
@@ -86,8 +87,9 @@ export const ChatInput = ({
                     type="submit"
                     disabled={disabled || !message.trim()}
                     className={cn(
-                        "bg-blue-600 hover:bg-blue-700 text-white border-0 self-end",
-                        "disabled:bg-slate-600 disabled:text-slate-400"
+                        "bg-blue-600 hover:bg-blue-700 text-white border-0 self-end rounded-lg transition-all duration-200",
+                        "disabled:bg-slate-600 disabled:text-slate-400",
+                        "w-10 h-10 p-0 min-w-0"
                     )}
                     size="icon"
                 >

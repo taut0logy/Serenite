@@ -20,6 +20,11 @@ import { toast } from 'sonner';
 //   return (match && match[2].length === 11) ? match[2] : null;
 // };
 
+interface YoutubeMatch {
+  fullUrl: string;
+  videoId: string;
+}
+
 // Function to safely render content that might contain HTML and embedded videos
 const renderContent = (content) => {
   if (!content) return { __html: "" };
@@ -27,7 +32,7 @@ const renderContent = (content) => {
   // First, check for YouTube links
   const youtubeRegex = /(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/g;
   let processedContent = content;
-  let youtubeMatches = [];
+  const youtubeMatches: YoutubeMatch[] = [];
   let match;
   
   // Find all YouTube links and store them

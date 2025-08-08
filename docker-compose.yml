@@ -1,0 +1,50 @@
+services:
+    agents:
+        image: tautology/serenite_agents:latest
+        container_name: serenite_agents
+        build: ./agents
+        ports:
+            - "8000:8000"
+        volumes:
+            # KYC image uploads
+            - kyc_uploads:/app/services/uploads
+            # Temporary files
+            - temp_files:/tmp
+            # Model cache for AI/ML models
+            - model_cache:/root/.cache
+            # Application logs
+            - app_logs:/app/logs
+        env_file:
+            - .env.agents
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
+
+    client:
+        image: tautology/serenite_client:latest
+        container_name: serenite_client
+        build: ./client
+        ports:
+            - "3000:3000"
+        env_file:
+            - .env.client
+        depends_on:
+            - agents
+        restart: unless-stopped
+
+volumes:
+    kyc_uploads:
+        driver: local
+
+    temp_files:
+        driver: local
+
+    model_cache:
+        driver: local
+
+    app_logs:
+        driver: local

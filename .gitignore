@@ -7,4 +7,5 @@ generated/
 .idea/
 *.log
 .DS_Store
-.env
+.env*
+!.env.example

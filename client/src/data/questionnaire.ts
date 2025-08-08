@@ -1,7 +1,7 @@
 export const questionnaire = {
     "intro": {
         "title": "Tell Us About How You've Been Feeling",
-        "text": "This short set of questions asks about how you’ve been doing over the past two weeks. Your answers help us personalize the support we offer—there are no right or wrong answers."
+        "text": "Help us personalize the support we offer—there are no right or wrong answers."
     },
     "scale": [
         {

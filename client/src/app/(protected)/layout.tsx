@@ -28,7 +28,7 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
     // Render children only for authenticated users
     // (redirect to login is handled by the useAuth hook)
     return (
-        <div className="mx-auto">
+        <div className="mx-auto px-auto">
             <StreamVideoProvider>{children}</StreamVideoProvider>
         </div>
     );

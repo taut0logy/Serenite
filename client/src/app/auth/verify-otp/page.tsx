@@ -19,15 +19,41 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Suspense } from "react";
 import { VERIFY_OTP, VERIFY_BACKUP_CODE } from "@/graphql/operations";
+import { Loader2 } from "lucide-react";
 
 export default function VerifyOtpPage() {
-    const router = useRouter();
+    
     const searchParams = useSearchParams();
     const userId = searchParams?.get("userId");
     const tempToken = searchParams?.get("tempToken");
     const email = searchParams?.get("email");
+    
+    if (!userId || !tempToken || !email) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+                <div className="text-center space-y-4">
+                    <p className="text-lg text-slate-600 dark:text-slate-400">
+                        Missing required parameters. Please try logging in again.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
+            <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
+        </div>}>
+            <VerifyOtpPageContent userId={userId} tempToken={tempToken} email={email} />
+        </Suspense>
+    );
+    
+}
 
+
+const VerifyOtpPageContent = ({ userId, tempToken, email }: { userId: string; tempToken: string; email: string }) => {
+    const router = useRouter();
     const [otp, setOtp] = useState("");
     const [backupCode, setBackupCode] = useState("");
     const [isVerifying, setIsVerifying] = useState(false);

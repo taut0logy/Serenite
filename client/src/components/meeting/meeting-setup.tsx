@@ -134,9 +134,19 @@ const MeetingSetup = ({
                         {/* Join Button */}
                         <Button
                             className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
-                            onClick={() => {
-                                call.join();
-                                setIsSetupComplete(true);
+                            onClick={async () => {
+                                try {
+                                    console.log("Attempting to join call...");
+                                    await call.join();
+                                    console.log("Successfully joined call");
+                                    setIsSetupComplete(true);
+                                } catch (error) {
+                                    console.error(
+                                        "Failed to join call:",
+                                        error
+                                    );
+                                    // The error will be handled by the MeetingRoom component's state management
+                                }
                             }}
                         >
                             <CheckCircle className="w-5 h-5 mr-3" />

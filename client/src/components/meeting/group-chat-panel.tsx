@@ -56,7 +56,7 @@ export const GroupChatPanel = ({
     return (
         <div
             className={cn(
-                "h-full w-80 bg-slate-800 border-l border-slate-700 transition-transform duration-300 ease-in-out flex flex-col",
+                "meeting-chat-panel h-full w-80 bg-slate-800 border-l border-slate-700 transition-transform duration-300 ease-in-out flex flex-col",
                 {
                     "translate-x-0": isOpen,
                     "translate-x-full": !isOpen,
@@ -64,7 +64,7 @@ export const GroupChatPanel = ({
             )}
         >
             {/* Chat Header */}
-            <div className="p-4 border-b border-slate-700 bg-slate-800/80 backdrop-blur-sm">
+            <div className="p-4 border-b border-slate-700 bg-slate-800/90 backdrop-blur-sm">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <MessageSquare size={20} className="text-blue-400" />
@@ -108,8 +108,8 @@ export const GroupChatPanel = ({
                 </div>
             </div>
 
-            {/* Messages Area */}
-            <div className="flex-1 flex flex-col min-h-0">
+            {/* Messages Area - Account for controls height */}
+            <div className="flex-1 flex flex-col min-h-0 pb-20">
                 <ScrollArea ref={scrollAreaRef} className="flex-1 px-2">
                     <div className="py-2">
                         {messages.length === 0 ? (
@@ -136,14 +136,16 @@ export const GroupChatPanel = ({
                     </div>
                 </ScrollArea>
 
-                {/* Chat Input */}
-                <ChatInput
-                    onSendMessage={onSendMessage}
-                    disabled={!isConnected}
-                    placeholder={
-                        isConnected ? "Type a message..." : "Connecting..."
-                    }
-                />
+                {/* Chat Input - Fixed at bottom but above controls */}
+                <div className="absolute bottom-20 left-0 right-0 bg-slate-800 border-t border-slate-700">
+                    <ChatInput
+                        onSendMessage={onSendMessage}
+                        disabled={!isConnected}
+                        placeholder={
+                            isConnected ? "Type a message..." : "Connecting..."
+                        }
+                    />
+                </div>
             </div>
         </div>
     );

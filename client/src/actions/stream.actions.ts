@@ -15,10 +15,13 @@ export const tokenProvider = async () => {
 
     const streamChat = StreamChat.getInstance(STREAM_API_KEY, STREAM_SECRET_KEY);
 
-    const expirationTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+    // Extend token expiration to 4 hours to reduce disconnection issues
+    const expirationTime = Math.floor(Date.now() / 1000) + 14400; // 4 hours from now
     const issuedAt = Math.floor(Date.now() / 1000) - 60; // 1 minute ago
 
     const token = streamChat.createToken(user.id, expirationTime, issuedAt);
+
+    console.log('Stream token generated for user:', user.id, 'expires at:', new Date(expirationTime * 1000));
 
     return token;
 };

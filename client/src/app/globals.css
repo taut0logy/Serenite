@@ -107,3 +107,204 @@ body,
 .chat-toast-progress {
     animation: chat-toast-progress 5000ms linear forwards;
 }
+
+/* Stream Video Component Customizations */
+/* .str-video__call-controls {
+    @apply bg-slate-800/95 backdrop-blur-md border-t border-slate-700;
+    height: 72px !important;
+    padding: 12px 24px !important;
+}
+
+.str-video__call-controls__button {
+    @apply bg-slate-700/50 hover:bg-slate-600 text-white border border-slate-600 rounded-lg;
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+}
+
+.str-video__call-controls__button--active {
+    @apply bg-blue-600 border-blue-500 text-white;
+}
+
+.str-video__call-controls__button--reject,
+.str-video__call-controls__button--leave {
+    @apply bg-red-600 hover:bg-red-700 border-red-500;
+}
+
+.str-video__call-controls__button svg {
+    width: 20px !important;
+    height: 20px !important;
+}
+
+.str-video__call-controls__button span {
+    display: none !important;
+} */
+
+/* Stream Video Layout Customizations */
+/* .str-video__participant-view {
+    @apply rounded-lg border border-slate-700;
+}
+
+.str-video__participant-view__video {
+    @apply rounded-lg;
+} */
+
+/* Stream Video Participant List Customizations */
+/* .str-video__participants-list {
+    @apply bg-slate-800 text-white;
+}
+
+.str-video__participants-list__participant {
+    @apply hover:bg-slate-700/50;
+} */
+
+/* Chat Panel Z-Index */
+
+
+/* .meeting-participants-panel {
+    z-index: 40 !important;
+} */
+
+.meeting-controls-bar {
+    z-index: 30 !important;
+}
+
+/* Enhanced Stream Video Layout Customizations */
+.str-video__participant-view {
+    @apply rounded-lg border border-slate-700 bg-slate-800;
+    margin: 4px !important;
+}
+
+.str-video__participant-view__video {
+    @apply rounded-lg;
+}
+
+.str-video__participant-view__avatar {
+    @apply rounded-lg;
+}
+
+.str-video__participant-view__bar {
+    @apply bg-slate-800/80 backdrop-blur-sm text-white;
+}
+
+/* Improved Grid Layout */
+.str-video__paginated-grid-layout {
+    @apply bg-slate-900;
+    padding: 8px !important;
+    gap: 8px !important;
+}
+
+.str-video__paginated-grid-layout__page {
+    display: grid !important;
+    gap: 8px !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Grid responsive sizing */
+.str-video__paginated-grid-layout__page[data-participant-count="1"] {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr !important;
+}
+
+.str-video__paginated-grid-layout__page[data-participant-count="2"] {
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr !important;
+}
+
+.str-video__paginated-grid-layout__page[data-participant-count="3"],
+.str-video__paginated-grid-layout__page[data-participant-count="4"] {
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+}
+
+.str-video__paginated-grid-layout__page[data-participant-count="5"],
+.str-video__paginated-grid-layout__page[data-participant-count="6"] {
+    grid-template-columns: 1fr 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+}
+
+.str-video__paginated-grid-layout__page[data-participant-count="7"],
+.str-video__paginated-grid-layout__page[data-participant-count="8"],
+.str-video__paginated-grid-layout__page[data-participant-count="9"] {
+    grid-template-columns: 1fr 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr 1fr !important;
+}
+
+/* Speaker Layout Customizations */
+.str-video__speaker-layout {
+    @apply bg-slate-900;
+    padding: 8px !important;
+    gap: 8px !important;
+}
+
+.str-video__speaker-layout__wrapper {
+    gap: 8px !important;
+}
+
+.str-video__speaker-layout__spotlight {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+.str-video__speaker-layout__participants-bar {
+    gap: 4px !important;
+    padding: 4px !important;
+}
+
+.str-video__speaker-layout__participants-bar .str-video__participant-view {
+    border-radius: 8px !important;
+    min-width: 120px !important;
+    min-height: 90px !important;
+}
+
+/* Stream Video Participant List Customizations */
+.str-video__participants-list {
+    @apply bg-slate-800 text-white border-slate-700;
+}
+
+.str-video__participants-list__participant {
+    @apply hover:bg-slate-700/50 text-white border-slate-700;
+}
+
+.str-video__participants-list__header {
+    @apply bg-slate-800 text-white border-slate-700;
+}
+
+/* Custom Call Controls Styling */
+.custom-call-control-btn {
+    @apply transition-all duration-200 hover:shadow-lg;
+}
+
+.custom-call-control-btn:hover {
+    transform: translateY(-1px);
+}
+
+.custom-call-control-btn--active {
+    @apply shadow-lg;
+    transform: translateY(-1px);
+}
+
+/* Mobile Responsive Meeting Layout */
+@media (max-width: 768px) {
+    .meeting-chat-panel,
+    .meeting-participants-panel {
+        width: 100vw !important;
+    }
+
+    .custom-call-control-btn {
+        transform: none !important;
+    }
+
+    .custom-call-control-btn:hover {
+        transform: none !important;
+    }
+
+    .meeting-controls-bar {
+        padding: 8px 16px !important;
+    }
+
+    .meeting-controls-bar .flex {
+        gap: 1rem !important;
+    }
+}

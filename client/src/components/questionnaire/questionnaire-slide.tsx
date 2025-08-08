@@ -2,12 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { questionnaire } from "@/data/questionnaire";
 import { Question } from "@/types/questionnaire";
 import { useKeyboardNavigation } from "@/hooks/use-questionnaire-storage";
+import { cn } from "@/lib/utils";
 
 interface QuestionnaireSlideProps {
     questions: Question[];
@@ -51,109 +51,156 @@ export function QuestionnaireSlide({
     );
 
     return (
-        <div className="max-w-3xl mx-auto p-6 space-y-8">
-            {/* Minimal progress bar */}
-            <div className="space-y-3">
-                <Progress value={progress} className="w-full h-2" />
+        <div className="max-w-4xl mx-auto p-6 space-y-8 min-h-screen flex flex-col">
+            {/* Header with progress */}
+            <div className="space-y-6">
                 <div className="text-center">
-                    <span className="text-sm text-muted-foreground">
+                    <h1 className="text-2xl font-bold text-foreground mb-2">
                         Section {currentSlide} of {totalSlides}
-                    </span>
+                    </h1>
+                    <p className="text-muted-foreground text-lg">
+                        Over the last 2 weeks, how often have you been bothered
+                        by any of the following problems?
+                    </p>
+                </div>
+
+                <div className="space-y-3">
+                    <Progress
+                        value={progress}
+                        className="w-full h-3 bg-muted"
+                    />
+                    <div className="text-center">
+                        <span className="text-sm text-muted-foreground">
+                            {Math.round(progress)}% Complete
+                        </span>
+                    </div>
                 </div>
             </div>
 
-            {/* Instructions */}
-            <div className="text-center space-y-2">
-                <p className="text-muted-foreground">
-                    Over the last 2 weeks, how often have you been bothered by
-                    any of the following problems?
-                </p>
-            </div>
-
             {/* Questions */}
-            <div className="space-y-12">
-                {questions.map((question) => (
-                    <div key={question.id} className="space-y-6">
-                        {/* Question text - make it pop */}
-                        <div className="text-center">
-                            <h2 className="text-xl font-semibold text-foreground leading-relaxed px-4">
-                                {question.text}
-                            </h2>
-                        </div>
-
-                        {/* Response options */}
-                        <RadioGroup
-                            value={responses[question.id]?.toString() || ""}
-                            onValueChange={(value) =>
-                                onResponseChange(question.id, parseInt(value))
-                            }
-                            className="grid grid-cols-2 md:grid-cols-4 gap-4"
-                        >
-                            {questionnaire.scale.map((option) => (
-                                <div key={option.value} className="space-y-2">
-                                    <div className="flex items-center justify-center">
-                                        <RadioGroupItem
-                                            value={option.value.toString()}
-                                            id={`${question.id}-${option.value}`}
-                                            className="w-5 h-5"
-                                        />
-                                    </div>
-                                    <Label
-                                        htmlFor={`${question.id}-${option.value}`}
-                                        className="text-sm text-center block cursor-pointer hover:text-foreground transition-colors p-2 rounded-md hover:bg-muted/50"
-                                    >
-                                        <div className="font-medium mb-1">
-                                            {option.value}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                            {option.label}
-                                        </div>
-                                    </Label>
+            <div className="flex-1 space-y-12">
+                {questions.map((question, questionIndex) => (
+                    <Card
+                        key={question.id}
+                        className="shadow-lg border-2 border-border/50 bg-gradient-to-br from-card to-muted/20"
+                    >
+                        <CardContent className="p-8">
+                            {/* Question number and text */}
+                            <div className="text-center mb-8">
+                                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary font-bold text-lg mb-4">
+                                    {questionIndex +
+                                        1 +
+                                        (currentSlide - 1) * questions.length}
                                 </div>
-                            ))}
-                        </RadioGroup>
-                    </div>
+                                <h2 className="text-xl font-semibold text-foreground leading-relaxed max-w-3xl mx-auto">
+                                    {question.text}
+                                </h2>
+                            </div>
+
+                            {/* Response options */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {questionnaire.scale.map((option) => {
+                                    const isSelected =
+                                        responses[question.id] === option.value;
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            onClick={() =>
+                                                onResponseChange(
+                                                    question.id,
+                                                    option.value
+                                                )
+                                            }
+                                            className={cn(
+                                                "relative p-6 rounded-xl border-2 transition-all duration-200 text-left group hover:shadow-lg",
+                                                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                                                isSelected
+                                                    ? "border-primary bg-primary/5 shadow-md scale-105"
+                                                    : "border-border bg-background hover:border-primary/50 hover:bg-muted/50"
+                                            )}
+                                        >
+                                            {/* Selection indicator */}
+                                            <div
+                                                className={cn(
+                                                    "absolute top-3 right-3 w-6 h-6 rounded-full border-2 transition-all duration-200",
+                                                    isSelected
+                                                        ? "border-primary bg-primary"
+                                                        : "border-muted-foreground/30 group-hover:border-primary/50"
+                                                )}
+                                            >
+                                                {isSelected && (
+                                                    <Check className="w-4 h-4 text-primary-foreground absolute top-0.5 left-0.5" />
+                                                )}
+                                            </div>
+
+                                            {/* Option content */}
+                                            <div className="space-y-2">
+                                                <div
+                                                    className={cn(
+                                                        "text-3xl font-bold transition-colors",
+                                                        isSelected
+                                                            ? "text-primary"
+                                                            : "text-foreground"
+                                                    )}
+                                                >
+                                                    {option.value}
+                                                </div>
+                                                <div
+                                                    className={cn(
+                                                        "text-sm leading-snug transition-colors",
+                                                        isSelected
+                                                            ? "text-foreground"
+                                                            : "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    {option.label}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
                 ))}
             </div>
 
             {/* Navigation */}
-            <div className="flex justify-between items-center pt-8">
+            <div className="flex justify-between items-center pt-8 border-t border-border/50">
                 <Button
                     variant="outline"
                     onClick={onPrevious}
                     disabled={!canGoPrevious}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 h-12 px-6 text-base"
+                    size="lg"
                 >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-5 w-5" />
                     Previous
                 </Button>
+
+                <div className="flex flex-col items-center space-y-2">
+                    {!isSlideComplete && (
+                        <p className="text-sm text-muted-foreground">
+                            Please answer all questions to continue
+                        </p>
+                    )}
+                    {!allPreviousCompleted && isSlideComplete && (
+                        <p className="text-sm text-orange-600 font-medium">
+                            Complete previous sections to proceed
+                        </p>
+                    )}
+                </div>
 
                 <Button
                     onClick={onNext}
                     disabled={!canGoForward}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 h-12 px-6 text-base"
+                    size="lg"
                 >
                     {currentSlide === totalSlides ? "Complete" : "Next"}
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-5 w-5" />
                 </Button>
             </div>
-
-            {/* Help text */}
-            {!isSlideComplete && (
-                <div className="text-center">
-                    <p className="text-sm text-muted-foreground">
-                        Please answer all questions to continue
-                    </p>
-                </div>
-            )}
-
-            {!allPreviousCompleted && isSlideComplete && (
-                <div className="text-center">
-                    <p className="text-sm text-orange-600">
-                        Complete previous sections to proceed
-                    </p>
-                </div>
-            )}
         </div>
     );
 }

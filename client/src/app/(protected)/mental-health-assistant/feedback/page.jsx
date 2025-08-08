@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Shield, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import FeedbackDashboard from "@/components/FeedbackDashboard";
+import FeedbackDashboard from "@/components/feedback-dashboard";
 
 export default function FeedbackPage() {
     const [isAdmin, setIsAdmin] = useState(false);

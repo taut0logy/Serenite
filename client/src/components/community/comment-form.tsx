@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { addComment } from "@/actions/community";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/use-auth";
 
 type CommentFormProps = {
     postId: string;
@@ -18,9 +19,16 @@ export default function CommentForm({ postId }: CommentFormProps) {
     const [isAnonymous, setIsAnonymous] = useState(false);
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { user } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!user) {
+            toast.error("Please sign in to comment");
+            return;
+        }
+
         setLoading(true);
 
         if (!content.trim()) {
@@ -43,7 +51,7 @@ export default function CommentForm({ postId }: CommentFormProps) {
                 setContent("");
                 router.refresh();
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to add comment");
         } finally {
             setLoading(false);

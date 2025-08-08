@@ -57,8 +57,11 @@ type PostCardProps = {
         isAuthor?: boolean;
         user: {
             id?: string;
-            name?: string;
-            avatar?: string;
+            profile?: {
+                firstName: string;
+                lastName: string;
+                avatarUrl?: string | null;
+            };
         };
         commentCount: number;
         reactionCounts: Record<ReactionType, number>;
@@ -131,9 +134,12 @@ export default function PostCard({
                     <div className="flex items-start justify-between">
                         <div className="flex items-start gap-4">
                             <Avatar className="h-10 w-10 border">
-                                <AvatarImage src={post.user.avatar || ""} />
+                                <AvatarImage
+                                    src={post.user.profile?.avatarUrl || ""}
+                                />
                                 <AvatarFallback>
-                                    {post.user.name?.charAt(0) || "A"}
+                                    {post.user.profile?.firstName?.charAt(0) ||
+                                        "A"}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
@@ -146,7 +152,11 @@ export default function PostCard({
                                     </Link>
                                 </CardTitle>
                                 <CardDescription className="flex items-center gap-2 mt-1">
-                                    <span>{post.user.name || "Anonymous"}</span>
+                                    <span>
+                                        {post.user.profile
+                                            ? `${post.user.profile.firstName} ${post.user.profile.lastName}`.trim()
+                                            : "Anonymous"}
+                                    </span>
                                     {post.isAuthor && (
                                         <Badge
                                             variant="outline"

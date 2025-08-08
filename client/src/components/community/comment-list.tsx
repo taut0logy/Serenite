@@ -36,9 +36,11 @@ type Comment = {
     isAuthor?: boolean;
     user: {
         id?: string;
-        name?: string;
-        username?: string;
-        avatar?: string;
+        profile?: {
+            firstName: string;
+            lastName: string;
+            avatarUrl?: string | null;
+        };
     };
     postId: string;
 };
@@ -106,16 +108,20 @@ function CommentItem({ comment }: { comment: Comment }) {
             <Card className="p-4 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex gap-3">
                     <Avatar className="h-8 w-8 border">
-                        <AvatarImage src={comment.user.avatar || ""} />
+                        <AvatarImage
+                            src={comment.user.profile?.avatarUrl || ""}
+                        />
                         <AvatarFallback>
-                            {comment.user.name?.charAt(0) || "A"}
+                            {comment.user.profile?.firstName?.charAt(0) || "A"}
                         </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center flex-wrap gap-2">
                                 <span className="font-medium">
-                                    {comment.user.name || "Anonymous"}
+                                    {comment.user.profile
+                                        ? `${comment.user.profile.firstName} ${comment.user.profile.lastName}`.trim()
+                                        : "Anonymous"}
                                 </span>
                                 {comment.isAuthor && (
                                     <Badge

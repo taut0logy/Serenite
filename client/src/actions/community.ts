@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { auth } from "@/auth";
+import { currentUser } from "@/lib/auth";
 import { ReactionType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -18,8 +18,8 @@ export async function createPost({
   tags: string[];
 }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const user = await currentUser();
+    if (!user?.id) {
       return { error: "Unauthorized" };
     }
 
@@ -29,7 +29,7 @@ export async function createPost({
         content,
         isAnonymous,
         tags,
-        userId: session.user.id,
+        userId: user.id,
       },
     });
 
@@ -56,8 +56,8 @@ export async function editPost({
   tags: string[];
 }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const user = await currentUser();
+    if (!user?.id) {
       return { error: "Unauthorized" };
     }
 
@@ -75,7 +75,7 @@ export async function editPost({
       return { error: "Post not found" };
     }
 
-    if (existingPost.userId !== session.user.id) {
+    if (existingPost.userId !== user.id) {
       return { error: "You don't have permission to edit this post" };
     }
 
@@ -103,8 +103,8 @@ export async function editPost({
 // Delete a post
 export async function deletePost(postId: string) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const user = await currentUser();
+    if (!user?.id) {
       return { error: "Unauthorized" };
     }
 
@@ -122,7 +122,7 @@ export async function deletePost(postId: string) {
       return { error: "Post not found" };
     }
 
-    if (existingPost.userId !== session.user.id) {
+    if (existingPost.userId !== user.id) {
       return { error: "You don't have permission to delete this post" };
     }
 
@@ -156,9 +156,13 @@ export async function getPosts(page = 1, pageSize = 10) {
         user: {
           select: {
             id: true,
-            name: true,
-            username: true,
-            avatar: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true,
+                avatarUrl: true,
+              },
+            },
           },
         },
         comments: {
@@ -179,7 +183,9 @@ export async function getPosts(page = 1, pageSize = 10) {
     return {
       posts: posts.map(post => ({
         ...post,
-        user: post.isAnonymous ? { name: "Anonymous" } : post.user,
+        user: post.isAnonymous
+          ? { profile: { firstName: "Anonymous", lastName: "", avatarUrl: null } }
+          : post.user,
         commentCount: post.comments.length,
         reactionCounts: getReactionCounts(post.reactions),
       })),
@@ -195,8 +201,8 @@ export async function getPosts(page = 1, pageSize = 10) {
 // Get a single post by ID
 export async function getPostById(postId: string) {
   try {
-    const session = await auth();
-    const currentUserId = session?.user?.id;
+    const user = await currentUser();
+    const currentUserId = user?.id;
 
     const post = await prisma.post.findUnique({
       where: {
@@ -206,9 +212,13 @@ export async function getPostById(postId: string) {
         user: {
           select: {
             id: true,
-            name: true,
-            username: true,
-            avatar: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true,
+                avatarUrl: true,
+              },
+            },
           },
         },
         comments: {
@@ -216,9 +226,13 @@ export async function getPostById(postId: string) {
             user: {
               select: {
                 id: true,
-                name: true,
-                username: true,
-                avatar: true,
+                profile: {
+                  select: {
+                    firstName: true,
+                    lastName: true,
+                    avatarUrl: true,
+                  },
+                },
               },
             },
           },
@@ -238,11 +252,15 @@ export async function getPostById(postId: string) {
       post: {
         ...post,
         isAuthor: currentUserId === post.userId,
-        user: post.isAnonymous ? { name: "Anonymous" } : post.user,
+        user: post.isAnonymous
+          ? { profile: { firstName: "Anonymous", lastName: "", avatarUrl: null } }
+          : post.user,
         comments: post.comments.map(comment => ({
           ...comment,
           isAuthor: currentUserId === comment.userId,
-          user: comment.isAnonymous ? { name: "Anonymous" } : comment.user,
+          user: comment.isAnonymous
+            ? { profile: { firstName: "Anonymous", lastName: "", avatarUrl: null } }
+            : comment.user,
         })),
         reactionCounts: getReactionCounts(post.reactions),
       }
@@ -264,8 +282,8 @@ export async function addComment({
   isAnonymous: boolean;
 }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const user = await currentUser();
+    if (!user?.id) {
       return { error: "Unauthorized" };
     }
 
@@ -273,7 +291,7 @@ export async function addComment({
       data: {
         content,
         isAnonymous,
-        userId: session.user.id,
+        userId: user.id,
         postId,
       },
     });
@@ -297,8 +315,8 @@ export async function editComment({
   isAnonymous: boolean;
 }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const user = await currentUser();
+    if (!user?.id) {
       return { error: "Unauthorized" };
     }
 
@@ -317,7 +335,7 @@ export async function editComment({
       return { error: "Comment not found" };
     }
 
-    if (existingComment.userId !== session.user.id) {
+    if (existingComment.userId !== user.id) {
       return { error: "You don't have permission to edit this comment" };
     }
 
@@ -342,8 +360,8 @@ export async function editComment({
 // Delete a comment
 export async function deleteComment(commentId: string) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const user = await currentUser();
+    if (!user?.id) {
       return { error: "Unauthorized" };
     }
 
@@ -362,7 +380,7 @@ export async function deleteComment(commentId: string) {
       return { error: "Comment not found" };
     }
 
-    if (existingComment.userId !== session.user.id) {
+    if (existingComment.userId !== user.id) {
       return { error: "You don't have permission to delete this comment" };
     }
 
@@ -389,8 +407,8 @@ export async function toggleReaction({
   reactionType: ReactionType;
 }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const user = await currentUser();
+    if (!user?.id) {
       return { error: "Unauthorized" };
     }
 
@@ -398,7 +416,7 @@ export async function toggleReaction({
     const existingReaction = await prisma.reaction.findFirst({
       where: {
         postId,
-        userId: session.user.id,
+        userId: user.id,
         type: reactionType,
       },
     });
@@ -417,7 +435,7 @@ export async function toggleReaction({
       const reaction = await prisma.reaction.create({
         data: {
           type: reactionType,
-          userId: session.user.id,
+          userId: user.id,
           postId,
         },
       });

@@ -17,8 +17,10 @@ import { createPost } from "@/actions/community";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function CreatePostButton() {
+    const { isAuthenticated } = useAuth({ required: true });
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [title, setTitle] = useState("");
@@ -49,6 +51,12 @@ export default function CreatePostButton() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!isAuthenticated) {
+            toast.error("Please log in to create a post");
+            return;
+        }
+
         setLoading(true);
 
         try {

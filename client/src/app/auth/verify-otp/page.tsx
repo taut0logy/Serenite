@@ -24,24 +24,43 @@ import { VERIFY_OTP, VERIFY_BACKUP_CODE } from "@/graphql/operations";
 import { Loader2 } from "lucide-react";
 
 export default function VerifyOtpPage() {
-    
+    return (
+        <Suspense
+            fallback={
+                <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
+                    <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
+                </div>
+            }
+        >
+            <VerifyOtpContent />
+        </Suspense>
+    );
+}
+
+const VerifyOtpContent = () => {
     const searchParams = useSearchParams();
     const userId = searchParams?.get("userId");
     const tempToken = searchParams?.get("tempToken");
     const email = searchParams?.get("email");
 
     return (
-        <Suspense fallback={<div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
-            <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
-        </div>}>
-            <VerifyOtpPageContent userId={userId} tempToken={tempToken} email={email} />
-        </Suspense>
+        <VerifyOtpPageContent
+            userId={userId}
+            tempToken={tempToken}
+            email={email}
+        />
     );
-    
-}
+};
 
-
-const VerifyOtpPageContent = ({ userId, tempToken, email }: { userId: string | undefined | null; tempToken: string | undefined | null; email: string | undefined | null }) => {
+const VerifyOtpPageContent = ({
+    userId,
+    tempToken,
+    email,
+}: {
+    userId: string | undefined | null;
+    tempToken: string | undefined | null;
+    email: string | undefined | null;
+}) => {
     const router = useRouter();
     const [otp, setOtp] = useState("");
     const [backupCode, setBackupCode] = useState("");
@@ -337,4 +356,4 @@ const VerifyOtpPageContent = ({ userId, tempToken, email }: { userId: string | u
             </Card>
         </div>
     );
-}
+};

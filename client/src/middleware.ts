@@ -63,12 +63,12 @@ export default auth((req) => {
   }
 
   // CASE 3: User is authenticated but KYC is not verified
-  if (isAuthenticated && !kycVerified && path !== '/auth/kyc-verification') {
-    return NextResponse.redirect(new URL('/auth/kyc-verification', req.url));
-  }
+  // if (isAuthenticated && !kycVerified && path !== '/auth/kyc-verification') {
+  //   return NextResponse.redirect(new URL('/auth/kyc-verification', req.url));
+  // }
 
   // CASE 4:User is verified but has no password set
-  if (isAuthenticated && kycVerified && !hasPassword && path !== '/auth/set-password') {
+  if (isAuthenticated && !hasPassword && path !== '/auth/set-password') {
     return NextResponse.redirect(new URL('/auth/set-password', req.url));
   }
 

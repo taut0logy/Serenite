@@ -143,6 +143,69 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
             // await saveMessageToDatabase(messagePayload);
         });
 
+        // Encrypted chat message handler
+        socket.on('send-encrypted-chat-message', (data: {
+            userId: string;
+            userName: string;
+            userAvatar?: string;
+            encryptedContent: {
+                encryptedContent: string;
+                iv: string;
+                tag: string;
+            };
+            meetingId: string;
+            keyVersion: number;
+        }) => {
+            const { meetingId, encryptedContent, userName, userAvatar, keyVersion } = data;
+            const userId = socket.data.userId;
+
+            // Validate that the user is authorized to send messages in this meeting
+            if (data.userId !== userId) {
+                console.error(`[Encrypted Chat] User ID mismatch: ${userId} vs ${data.userId}`);
+                return;
+            }
+
+            const messagePayload = {
+                id: `enc_msg_${Date.now()}_${userId}`, // Simple ID generation
+                userId,
+                userName,
+                userAvatar,
+                encryptedContent,
+                timestamp: new Date().toISOString(),
+                meetingId,
+                keyVersion
+            };
+
+            console.log(`[Encrypted Chat] Encrypted message from ${userName} in meeting ${meetingId}`);
+
+            // Broadcast encrypted message to all users in the meeting room (including sender)
+            io.to(`meeting:${meetingId}`).emit('encrypted-chat-message', messagePayload);
+
+            // Optional: Store encrypted message in database here
+            // await saveEncryptedMessageToDatabase(messagePayload);
+        });
+
+        // Group key rotation handler
+        socket.on('group-key-rotated', (data: {
+            meetingId: string;
+            newMemberId?: string;
+            removedMemberId?: string;
+        }) => {
+            const { meetingId, newMemberId, removedMemberId } = data;
+            const userId = socket.data.userId;
+
+            console.log(`[Key Rotation] Key rotated for meeting ${meetingId} by ${userId}`);
+
+            // Notify all members in the meeting about key rotation
+            socket.to(`meeting:${meetingId}`).emit('group-key-rotated', {
+                meetingId,
+                rotatedBy: userId,
+                newMemberId,
+                removedMemberId,
+                timestamp: new Date().toISOString()
+            });
+        });
+
         socket.on('disconnect', () => {
             console.log('[socket] client disconnected')
 

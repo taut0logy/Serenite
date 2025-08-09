@@ -347,6 +347,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             role: response.user.role || "USER",
             email_verified: response.user.verified || false,
             hasPassword: response.user.hasPassword || false,
+            kycVerified: response.user.kycVerified || false,
           };
         }
       } catch (error) {
@@ -362,6 +363,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           bio: token?.bio,
           email_verified: token?.email_verified || false,
           hasPassword: token?.hasPassword || false,
+          kycVerified: token?.kycVerified || false,
         };
       }
 

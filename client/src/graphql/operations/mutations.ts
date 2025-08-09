@@ -849,6 +849,22 @@ export const DELETE_AGENDA_ITEM = gql`
   }
 `;
 
+export const UPDATE_KYC_STATUS = gql`
+  mutation UpdateKycStatus($userId: String!, $kycVerified: Boolean!) {
+    updateKycStatus(userId: $userId, kycVerified: $kycVerified) {
+      success
+      message
+      user {
+        id
+        kycVerified
+        email
+        role
+        verified
+      }
+    }
+  }
+`;
+
 export const REORDER_AGENDA_ITEMS = gql`
   mutation ReorderAgendaItems($meetingId: String!, $itemIds: [String!]!) {
     reorderAgendaItems(meetingId: $meetingId, itemIds: $itemIds) {

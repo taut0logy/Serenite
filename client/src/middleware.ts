@@ -31,6 +31,7 @@ export default auth((req) => {
   // Access token data from req.auth (provided by NextAuth middleware)
   const isAuthenticated = !!req.auth;
   const isVerified = req.auth?.user?.email_verified === true;
+  const kycVerified = req.auth?.user?.kycVerified === true;
   const hasPassword = req.auth?.user?.hasPassword === true;
   const path = req.nextUrl.pathname;
 
@@ -61,17 +62,22 @@ export default auth((req) => {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
-  // CASE 3:User is authenticated but has no password set
-  if (isAuthenticated && !hasPassword && path !== '/auth/set-password') {
+  // CASE 3: User is authenticated but KYC is not verified
+  if (isAuthenticated && !kycVerified && path !== '/auth/kyc-verification') {
+    return NextResponse.redirect(new URL('/auth/kyc-verification', req.url));
+  }
+
+  // CASE 4:User is verified but has no password set
+  if (isAuthenticated && kycVerified && !hasPassword && path !== '/auth/set-password') {
     return NextResponse.redirect(new URL('/auth/set-password', req.url));
   }
 
-  // CASE 4: User has password set and visits set-password page
+  // CASE 5: User has password set and visits set-password page
   if (hasPassword && path === '/auth/set-password') {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
-  // CASE 5: Path requires verification but user is not verified
+  // CASE 6: Path requires verification but user is not verified
   if (isVerifiedPath && isAuthenticated && !isVerified) {
     return NextResponse.redirect(new URL('/auth/verify-request', req.url));
   }

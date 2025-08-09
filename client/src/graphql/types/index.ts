@@ -31,7 +31,6 @@ type User {
   createdAt: String!
   updatedAt: String!
   verified: Boolean!
-  kycVerified: Boolean!
   verificationToken: String
   resetToken: String
   resetTokenExpiry: String
@@ -41,6 +40,7 @@ type User {
   trustedDevices: [TrustedDevice!]
   sessions: [Session!]
   twoFactorAuth: TwoFactorAuth
+  kycVerified: Boolean
 }
 
 type Profile {
@@ -160,6 +160,12 @@ type TrustedDevicesPayload {
   devices: [TrustedDevice!]
 }
 
+type KycPayload {
+  success: Boolean!
+  message: String!
+  user: User
+}
+
 # Input types
 input RegisterInput {
   email: String!
@@ -190,6 +196,11 @@ input DeviceInfoInput {
   name: String!
   type: String
   ip: String
+}
+
+input KycVerifyInput {
+  userId: String!
+  kycVerified: Boolean!
 }
 
 type Query {
@@ -269,6 +280,9 @@ type Mutation {
     ipAddress: String
   ): OtpVerifyPayload!
   regenerateBackupCodes(userId: String!): BackupCodesPayload!
+
+  # KYC
+  verifyKyc(input: KycVerifyInput!): KycPayload!
 
   # Trusted devices
   trustDevice(

@@ -1,15 +1,16 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 import logging
 from services.kyc import kyc_service
+from middleware.auth import get_current_user
 
 # Initialize router and logger
 router = APIRouter(prefix="/kyc", tags=["KYC"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/upload-images", response_model=Dict[str, Any])
+@router.post("/upload-images", response_model=Dict[str, Any], dependencies=[Depends(get_current_user)])
 async def upload_images(
     selfie: UploadFile = File(
         ..., description="Selfie image for identity verification"
@@ -95,8 +96,6 @@ async def upload_images(
             },
         )
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"KYC verification failed for user {user_id}: {str(e)}")
         raise HTTPException(
@@ -105,7 +104,7 @@ async def upload_images(
         )
 
 
-@router.post("/verify-liveness", response_model=Dict[str, Any])
+@router.post("/verify-liveness", response_model=Dict[str, Any], dependencies=[Depends(get_current_user)])
 async def verify_liveness(
     video: UploadFile = File(..., description="Short video for liveness detection"),
     user_id: str = Form(..., description="Unique user identifier"),
@@ -163,8 +162,6 @@ async def verify_liveness(
             },
         )
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Liveness verification failed for user {user_id}: {str(e)}")
         raise HTTPException(
@@ -173,7 +170,7 @@ async def verify_liveness(
         )
 
 
-@router.get("/status/{user_id}", response_model=Dict[str, Any])
+@router.get("/status/{user_id}", response_model=Dict[str, Any], dependencies=[Depends(get_current_user)])
 async def get_kyc_status(user_id: str):
     """
     Get KYC verification status for a user

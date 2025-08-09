@@ -2,7 +2,7 @@ from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import httpx
 from typing import Optional, Dict, Any
-from config import settings
+from config.settings import settings
 from utils.logger import logger
 
 security = HTTPBearer(auto_error=False)  # Don't auto-error, handle manually

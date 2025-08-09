@@ -633,6 +633,58 @@ export const authResolvers = {
             }
         },
 
+        verifyKyc: async (
+            _,
+            { input }: { input: { userId: string; kycVerified: boolean } },
+            context: Context
+        ) => {
+            try {
+                // Check authentication
+                if (!context.user || context.user.id !== input.userId) {
+                    return {
+                        success: false,
+                        message: "Unauthorized",
+                        user: null,
+                    };
+                }
+                const user = await context.prisma.user.findUnique({
+                    where: { id: input.userId },
+                });
+
+                if (!user) {
+                    return {
+                        success: false,
+                        message: "User not found",
+                        user: null,
+                    };
+                }
+                
+                const user2 = await context.prisma.user.update({
+                    where: { id: input.userId },
+                    data: { kycVerified: input.kycVerified },
+                    include: { profile: true },
+
+                });
+
+                return {
+                    success: true,
+                    message: "KYC verification status updated successfully",
+                    user: {
+                        id: user2.id,
+                        email: user2.email,
+                        kycVerified: user2.kycVerified,
+                    },
+                };
+            } catch (error) {
+                console.error("KYC verification error:", error);
+                return {
+                    success: false,
+                    message: "Failed to update KYC verification status",
+                    user: null,
+                };
+            }
+        },
+
         trustDevice: async (
             _,
             { userId, deviceName, deviceType, ipAddress },

@@ -1,5 +1,6 @@
 //eslint-disable @typescript-eslint/no-unused-vars
 import { Session, User } from "next-auth";
+//eslint-disable @typescript-eslint/no-unused-vars
 import { JWT } from "next-auth/jwt";
 
 declare module "next-auth" {
@@ -8,6 +9,7 @@ declare module "next-auth" {
       id: string;
       role?: string;
       email_verified?: boolean;
+      kycVerified?: boolean;
       name?: string;
       firstName?: string;
       lastName?: string;
@@ -24,6 +26,7 @@ declare module "next-auth" {
     role?: string;
     token?: string;
     email_verified?: boolean;
+    kycVerified?: boolean;
     hasPassword?: boolean;
     givenName?: string;
     familyName?: string;

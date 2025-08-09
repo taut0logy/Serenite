@@ -4,11 +4,11 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { StreamCall, StreamTheme } from "@stream-io/video-react-sdk";
 import MeetingSetup from "@/components/meeting/meeting-setup";
-import MeetingRoom from "@/components/meeting/meeting-room";
+import EnhancedMeetingRoom from "@/components/meeting/enhanced-meeting-room";
 import { useGetCallById } from "@/hooks/useGetCallById";
 import Loader from "@/components/meeting/loader";
 import { Suspense } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 export default function MeetingPage() {
     const params = useParams();
@@ -26,6 +26,10 @@ const MeetingPageContent = ({ id }: { id: string }) => {
     const { call, isCallLoading } = useGetCallById(id);
     const [isSetupComplete, setIsSetupComplete] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+    
+    // Check if encryption is enabled via URL parameter
+    const enableEncryption = searchParams?.get("encrypted") === "true";
 
     // Add error handling for call loading
     useEffect(() => {
@@ -78,7 +82,10 @@ const MeetingPageContent = ({ id }: { id: string }) => {
                     {!isSetupComplete ? (
                         <MeetingSetup setIsSetupComplete={setIsSetupComplete} />
                     ) : (
-                        <MeetingRoom id={id} />
+                        <EnhancedMeetingRoom 
+                            id={id} 
+                            enableEncryption={enableEncryption} 
+                        />
                     )}
                 </StreamTheme>
             </StreamCall>

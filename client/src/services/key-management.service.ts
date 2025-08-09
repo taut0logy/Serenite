@@ -38,7 +38,7 @@ export interface GroupKeyInfo {
     createdAt: string;
 }
 
-class KeyManagementService {
+export class KeyManagementService {
     private userKeyPair: ECDHKeyPair | null = null;
     private groupKeys: Map<string, GroupKeyInfo> = new Map();
 
@@ -161,29 +161,45 @@ class KeyManagementService {
      */
     async createGroup(groupId: string, members: GroupMember[]): Promise<void> {
         try {
+            console.log('🏗️ Creating group:', { groupId, memberCount: members.length });
+
             if (!this.userKeyPair) {
                 throw new Error('User key pair not initialized');
             }
 
             // Generate AES key for the group
+            console.log('🔑 Generating AES key...');
             const aesKey = await generateAESKey();
+            console.log('✅ AES key generated');
 
             // Encrypt AES key for each member
             const encryptedKeys: Array<{ userId: string; encryptedKey: string }> = [];
+            console.log('🔐 Encrypting AES key for each member...');
 
             for (const member of members) {
-                const memberPublicKey = await importPublicKey(member.publicKey);
-                const encryptedAESKey = await encryptAESKey(
-                    aesKey,
-                    memberPublicKey,
-                    this.userKeyPair.privateKey
-                );
+                console.log(`🔐 Encrypting for member: ${member.userId}`);
+                try {
+                    const memberPublicKey = await importPublicKey(member.publicKey);
+                    console.log('✅ Member public key imported');
 
-                encryptedKeys.push({
-                    userId: member.userId,
-                    encryptedKey: encryptedAESKey,
-                });
+                    const encryptedAESKey = await encryptAESKey(
+                        aesKey,
+                        memberPublicKey,
+                        this.userKeyPair.privateKey
+                    );
+                    console.log('✅ AES key encrypted for member');
+
+                    encryptedKeys.push({
+                        userId: member.userId,
+                        encryptedKey: encryptedAESKey,
+                    });
+                } catch (memberError) {
+                    console.error(`❌ Failed to encrypt for member ${member.userId}:`, memberError);
+                    throw memberError;
+                }
             }
+
+            console.log(`✅ AES key encrypted for ${encryptedKeys.length} members`);
 
             // Store group key locally
             const groupKeyInfo: GroupKeyInfo = {
@@ -194,12 +210,15 @@ class KeyManagementService {
             };
 
             this.groupKeys.set(groupId, groupKeyInfo);
+            console.log('💾 Group key stored locally');
 
             // Send encrypted keys to server
+            console.log('🌐 Uploading group keys to server...');
             await this.uploadGroupKeys(groupId, encryptedKeys, 1);
+            console.log('✅ Group keys uploaded to server');
 
         } catch (error) {
-            console.error('Failed to create group:', error);
+            console.error('❌ Failed to create group:', error);
             throw error;
         }
     }
@@ -302,6 +321,8 @@ class KeyManagementService {
         keyVersion: number
     ): Promise<void> {
         try {
+            console.log('📤 Uploading group keys:', { groupId, keyCount: encryptedKeys.length, keyVersion });
+
             const response = await fetch('/api/encryption/group-keys', {
                 method: 'POST',
                 headers: {
@@ -314,11 +335,18 @@ class KeyManagementService {
                 }),
             });
 
+            console.log('📤 Server response status:', response.status);
+
             if (!response.ok) {
-                throw new Error('Failed to upload group keys');
+                const errorText = await response.text();
+                console.error('❌ Server error response:', errorText);
+                throw new Error(`Failed to upload group keys: ${response.status} ${errorText}`);
             }
+
+            const result = await response.json();
+            console.log('✅ Group keys uploaded successfully:', result);
         } catch (error) {
-            console.error('Failed to upload group keys:', error);
+            console.error('❌ Failed to upload group keys:', error);
             throw error;
         }
     }

@@ -541,6 +541,21 @@ export const ComprehensiveEncryptedChatTest = () => {
                                             ? "Running Tests..."
                                             : "Run All Tests"}
                                     </Button>
+                                    <Button
+                                        onClick={() => {
+                                            console.clear();
+                                            console.log('🧪 Debug: Current encryption state:');
+                                            console.log('- isEncryptionReady:', isEncryptionReady);
+                                            console.log('- encryptionError:', encryptionError);
+                                            console.log('- groupMembers:', groupMembers);
+                                            console.log('- meetingId:', meetingId);
+                                            console.log('- session:', session?.user);
+                                        }}
+                                        variant="outline"
+                                        size="sm"
+                                    >
+                                        Debug Info
+                                    </Button>
                                 </div>
 
                                 <div className="space-y-2">
@@ -906,7 +921,7 @@ export const ComprehensiveEncryptedChatTest = () => {
             </div>
 
             {/* Chat Panel */}
-            <div className="fixed right-0 top-0 h-full z-50">
+            <div className="fixed right-0 top-0 h-full z-30">
                 <EncryptedGroupChatPanel
                     isOpen={isChatOpen}
                     onClose={() => setIsChatOpen(false)}

@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useSocket } from "@/providers/socket-provider";
 import { ChatMessage } from "@/components/meeting/chat-message";
-import { keyManagementService, type GroupMember } from "@/services/key-management.service";
+import { keyManagementService, KeyManagementService, type GroupMember } from "@/services/key-management.service";
 import { encryptMessage, decryptMessage, type EncryptedMessage } from "@/lib/crypto";
 
 interface UseEncryptedGroupChatProps {
@@ -43,54 +43,116 @@ export const useEncryptedGroupChat = ({
     const [isConnected, setIsConnected] = useState(false);
     const [isEncryptionReady, setIsEncryptionReady] = useState(false);
     const [encryptionError, setEncryptionError] = useState<string | null>(null);
+    const [isInitializing, setIsInitializing] = useState(false);
     const messagesRef = useRef<DecryptedChatMessage[]>([]);
+    const keyManagerRef = useRef<KeyManagementService | null>(null);
 
     // Initialize encryption when component mounts
     useEffect(() => {
         const initializeEncryption = async () => {
+            if (isInitializing) {
+                console.log('🔄 Encryption initialization already in progress, skipping...');
+                return;
+            }
+
             try {
+                setIsInitializing(true);
                 setEncryptionError(null);
+                console.log('🔐 Starting encryption initialization for meeting:', meetingId);
+
+                if (!session?.user?.id) {
+                    console.error('❌ No user session available');
+                    setEncryptionError('User session not available');
+                    return;
+                }
 
                 // Initialize key management service
-                await keyManagementService.initialize(session!.user.id);
+                console.log('🔑 Initializing key management service...');
+                if (!keyManagerRef.current) {
+                    keyManagerRef.current = keyManagementService;
+                }
+                await keyManagerRef.current.initialize(session.user.id);
+                console.log('✅ Key management service initialized');
 
                 // Check if we have a group key for this meeting
                 let groupKey = keyManagementService.getGroupKey(meetingId);
+                console.log('🔍 Checking for existing group key:', groupKey ? 'Found' : 'Not found');
 
                 if (!groupKey && groupMembers.length > 0) {
                     // Create group if we're the first to join
-                    console.log('Creating new encrypted group for meeting:', meetingId);
-                    await keyManagementService.createGroup(meetingId, groupMembers);
-                    groupKey = keyManagementService.getGroupKey(meetingId);
+                    console.log('🆕 Creating new encrypted group for meeting:', meetingId);
+                    console.log('👥 Group members:', groupMembers.map(m => ({ userId: m.userId, hasPublicKey: !!m.publicKey })));
+
+                    try {
+                        await keyManagementService.createGroup(meetingId, groupMembers);
+                        console.log('✅ Group created successfully');
+                        groupKey = keyManagementService.getGroupKey(meetingId);
+                        console.log('🔑 Group key retrieved:', groupKey ? 'Success' : 'Failed');
+                    } catch (createError) {
+                        console.error('❌ Group creation failed:', createError);
+                        throw createError;
+                    }
                 } else if (!groupKey) {
                     // Try to fetch group key from server
-                    console.log('Fetching group key for meeting:', meetingId);
-                    const groupKeyBundle = await keyManagementService.fetchGroupKey(meetingId, session!.user.id);
+                    console.log('🌐 Fetching group key from server for meeting:', meetingId);
+                    const groupKeyBundle = await keyManagementService.fetchGroupKey(meetingId, session.user.id);
 
                     if (groupKeyBundle) {
+                        console.log('📦 Group key bundle found:', groupKeyBundle);
                         // We need to get the creator's public key to decrypt
                         // For now, assume we'll get it from the server
-                        console.warn('Group key found but decryption not implemented yet');
+                        console.warn('⚠️ Group key found but decryption not implemented yet');
+                    } else {
+                        console.log('❌ No group key bundle found on server');
                     }
                 }
 
                 if (groupKey) {
                     setIsEncryptionReady(true);
-                    console.log('Encryption ready for meeting:', meetingId);
+                    console.log('🎉 Encryption ready for meeting:', meetingId);
                 } else {
-                    setEncryptionError('Unable to establish encryption for this group');
+                    // No existing group key found, create a new encryption group
+                    console.log('🆕 No encryption group found, creating new group for meeting:', meetingId);
+
+                    if (groupMembers && groupMembers.length > 0) {
+                        console.log('👥 Creating encryption group with members:', groupMembers.map(m => m.userId));
+
+                        try {
+                            await keyManagerRef.current!.createGroup(meetingId, groupMembers);
+                            // Check if the group was created successfully by looking for the local key
+                            const createdKey = keyManagerRef.current!.getGroupKey(meetingId);
+                            if (createdKey) {
+                                setIsEncryptionReady(true);
+                                console.log('🎉 New encryption group created successfully!');
+                            } else {
+                                const errorMsg = 'Failed to create encryption group - no key found';
+                                console.error('❌', errorMsg);
+                                setEncryptionError(errorMsg);
+                            }
+                        } catch (createError) {
+                            const errorMsg = `Failed to create encryption group: ${createError instanceof Error ? createError.message : 'Unknown error'}`;
+                            console.error('❌', errorMsg);
+                            setEncryptionError(errorMsg);
+                        }
+                    } else {
+                        const errorMsg = 'Cannot create encryption group: no group members provided';
+                        console.error('❌', errorMsg);
+                        setEncryptionError(errorMsg);
+                    }
                 }
 
             } catch (error) {
-                console.error('Failed to initialize encryption:', error);
-                setEncryptionError('Failed to initialize encryption');
+                console.error('💥 Failed to initialize encryption:', error);
+                setEncryptionError(`Failed to initialize encryption: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } finally {
+                setIsInitializing(false);
             }
         };
 
         if (session?.user?.id) {
             initializeEncryption();
         }
-    }, [session?.user?.id, meetingId, groupMembers]);
+    }, [session?.user?.id, meetingId, groupMembers, isInitializing]);
 
     // Update ref when messages change
     useEffect(() => {

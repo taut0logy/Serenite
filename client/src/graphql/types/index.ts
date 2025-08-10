@@ -41,6 +41,7 @@ type User {
   sessions: [Session!]
   twoFactorAuth: TwoFactorAuth
   kycVerified: Boolean
+  questionnaireCompleted: Boolean!
 }
 
 type Profile {

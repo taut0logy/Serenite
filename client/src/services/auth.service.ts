@@ -834,6 +834,8 @@ export async function verifySession(token: string) {
         user: {
           include: {
             profile: true,
+            mentalHealthProfile: true,
+            questionnaireResponse: true,
           },
         },
       },
@@ -862,6 +864,8 @@ export async function verifySession(token: string) {
       },
     });
 
+    console.log("User Mental Health Profile:", session.user.mentalHealthProfile);
+
     return {
       valid: true,
       user: {
@@ -871,6 +875,7 @@ export async function verifySession(token: string) {
         verified: session.user.verified,
         profile: session.user.profile,
         hasPassword: session.user.hashedPassword ? true : false,
+        questionnaireCompleted: !!(session.user.mentalHealthProfile)
       },
     };
   } catch (error) {

@@ -14,6 +14,7 @@ interface QuestionnaireReviewProps {
     responses: QuestionnaireResponses;
     onEdit: (slideIndex: number) => void;
     onBack: () => void;
+    onReEdit: () => void;
     onSubmit: () => void;
 }
 
@@ -21,6 +22,7 @@ export function QuestionnaireReview({
     responses,
     onEdit,
     onBack,
+    onReEdit,
     onSubmit,
 }: QuestionnaireReviewProps) {
     // Group responses by domain
@@ -125,9 +127,9 @@ export function QuestionnaireReview({
             {/* Domain sections */}
             <ScrollArea className="h-[60vh]">
                 <div className="space-y-6">
-                    {domainGroups.map((group) => (
+                    {domainGroups.map((group, index) => (
                         <Card
-                            key={group.domain}
+                            key={index}
                             className={cn(
                                 "shadow-md border-2 transition-all",
                                 group.completed
@@ -222,7 +224,7 @@ export function QuestionnaireReview({
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                         <Button
                             variant="outline"
-                            onClick={onBack}
+                            onClick={() => onReEdit()}
                             size="lg"
                             className="w-full sm:w-auto"
                         >

@@ -147,6 +147,7 @@ export const VERIFY_SESSION = gql`
           kycVerified
           role
           hasPassword
+          questionnaireCompleted
           profile {
             firstName
             lastName

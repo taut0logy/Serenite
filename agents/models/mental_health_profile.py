@@ -8,7 +8,6 @@ class MentalHealthProfile(BaseModel):
     tags: List[str] = Field(
         ..., 
         description="Typed tag array driving service logic",
-        pattern=r"^(depression_none_minimal|depression_mild|depression_moderate|depression_moderately_severe|depression_severe|anxiety_none_minimal|anxiety_mild|anxiety_moderate|anxiety_severe|ptsd_unlikely|ptsd_probable|ptsd_elevated|social_anxiety_low|social_anxiety_moderate|social_anxiety_high|social_anxiety_very_high|low_self_esteem|normal_self_esteem|high_self_esteem|cog_distort_low|cog_distort_moderate|cog_distort_high|sleep_disturbance_low|sleep_disturbance_moderate|sleep_disturbance_high|function_impairment_low|function_impairment_moderate|function_impairment_high)$",
         min_items=1,
     )
     narrative_summary: str = Field(..., max_length=500, description="Auto‑generated summary")

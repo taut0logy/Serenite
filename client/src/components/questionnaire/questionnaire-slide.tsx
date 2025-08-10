@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { questionnaire } from "@/data/questionnaire";
 import { Question } from "@/types/questionnaire";
-import { useKeyboardNavigation } from "@/hooks/use-questionnaire-storage";
+import { useKeyboardNavigation } from "@/hooks/use-questionnaire";
 import { cn } from "@/lib/utils";
 
 interface QuestionnaireSlideProps {
@@ -28,7 +28,6 @@ export function QuestionnaireSlide({
     onResponseChange,
     onNext,
     onPrevious,
-    canGoNext,
     canGoPrevious,
     currentSlide,
     totalSlides,
@@ -39,7 +38,23 @@ export function QuestionnaireSlide({
     const isSlideComplete = questions.every(
         (q) => responses[q.id] !== undefined
     );
-    const canGoForward = canGoNext && isSlideComplete && allPreviousCompleted;
+
+    // Add debugging to see responses
+    console.log("QuestionnaireSlide render:", {
+        currentSlide,
+        responsesCount: Object.keys(responses).length,
+        responses,
+        questionIds: questions.map((q) => q.id),
+        answeredQuestions: questions
+            .filter((q) => responses[q.id] !== undefined)
+            .map((q) => q.id),
+    });
+
+    // Allow moving forward if current slide is complete AND either:
+    // 1. All previous slides are complete (normal flow)
+    // 2. This is the last slide (allow completion even with partial previous answers)
+    const isLastSlide = currentSlide === totalSlides;
+    const canGoForward = isSlideComplete && allPreviousCompleted;
 
     // Add keyboard navigation
     useKeyboardNavigation(
@@ -180,15 +195,25 @@ export function QuestionnaireSlide({
 
                 <div className="flex flex-col items-center space-y-2">
                     {!isSlideComplete && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-foreground text-center">
                             Please answer all questions to continue
                         </p>
                     )}
-                    {!allPreviousCompleted && isSlideComplete && (
-                        <p className="text-sm text-orange-600 font-medium">
-                            Complete previous sections to proceed
-                        </p>
-                    )}
+                    {!allPreviousCompleted &&
+                        isSlideComplete &&
+                        !isLastSlide && (
+                            <p className="text-sm text-orange-600 font-medium text-center">
+                                Complete previous sections to proceed
+                            </p>
+                        )}
+                    {!allPreviousCompleted &&
+                        isSlideComplete &&
+                        isLastSlide && (
+                            <p className="text-sm text-blue-600 font-medium text-center">
+                                You can complete the assessment now or go back
+                                to finish previous sections
+                            </p>
+                        )}
                 </div>
 
                 <Button
@@ -197,7 +222,7 @@ export function QuestionnaireSlide({
                     className="flex items-center gap-2 h-12 px-6 text-base"
                     size="lg"
                 >
-                    {currentSlide === totalSlides ? "Complete" : "Next"}
+                    {isLastSlide ? "Complete Assessment" : "Next"}
                     <ChevronRight className="h-5 w-5" />
                 </Button>
             </div>

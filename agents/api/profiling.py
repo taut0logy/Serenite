@@ -40,15 +40,8 @@ router = APIRouter(prefix="/mental-profile", tags=["Mental Health Profiling"])
 @router.post("/", response_model=MentalHealthProfile)
 @limiter.limit("5/minute")
 async def intake(request: Request, input: IntakeRequest, user=Depends(get_current_user)):
-    # Sum per-domain
-    domain_scores: Dict[str, int] = {}
-    for qid, score in input.answers.items():
-        if qid not in DOMAIN_MAP:
-            raise HTTPException(status_code=400, detail=f"Unknown question id: {qid}")
-        domain_scores.setdefault(DOMAIN_MAP[qid], 0)
-        domain_scores[DOMAIN_MAP[qid]] += score
 
-    response = await generate_profile(domain_scores)
+    response = await generate_profile(input.answers)
     
     if not response:
         logger.error("Failed to generate mental health profile")

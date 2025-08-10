@@ -3,18 +3,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-    Avatar,
-    AvatarFallback,
-    AvatarImage,
-} from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import {
     Select,
@@ -109,7 +100,7 @@ const supportGroups: SupportGroup[] = [
         isLive: false,
     },
     {
-        id: 12,
+        id: 11,
         name: "Mindfulness & Meditation",
         description:
             "Learn and practice mindfulness techniques together. Perfect for beginners and experienced practitioners.",
@@ -268,6 +259,7 @@ export default function DashboardPage() {
                             category: group.category,
                             supportGroupId: group.id,
                         },
+                        
                     },
                 });
 

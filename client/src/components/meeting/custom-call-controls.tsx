@@ -63,7 +63,7 @@ export const CustomCallControls = ({
 
     const handleEndCall = async () => {
         if (call) {
-            await call.endCall();
+            await call.leave();
         }
         if (onLeave) {
             onLeave();

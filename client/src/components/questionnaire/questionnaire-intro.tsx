@@ -2,17 +2,21 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Clock, Shield, Heart, ChevronRight } from "lucide-react";
+import { Clock, Shield, Heart, ChevronRight, Loader2 } from "lucide-react";
 import { questionnaire } from "@/data/questionnaire";
 
 interface QuestionnaireIntroProps {
     onStart: () => void;
     hasSavedProgress?: boolean;
+    isLoading?: boolean;
+    hasInitialized?: boolean;
 }
 
 export function QuestionnaireIntro({
     onStart,
     hasSavedProgress = false,
+    isLoading = false,
+    hasInitialized = false,
 }: QuestionnaireIntroProps) {
     return (
         <div className="max-w-4xl mx-auto p-6 min-h-[calc(100vh-4rem)] flex flex-col justify-center">
@@ -102,12 +106,38 @@ export function QuestionnaireIntro({
                             onClick={onStart}
                             size="lg"
                             className="px-8 py-4 text-lg h-14 shadow-lg hover:shadow-xl transition-shadow"
+                            disabled={isLoading || !hasInitialized}
                         >
-                            {hasSavedProgress
-                                ? "Continue Assessment"
-                                : "Begin Assessment"}
-                            <ChevronRight className="ml-2 h-5 w-5" />
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                    Loading Progress...
+                                </>
+                            ) : hasInitialized && hasSavedProgress ? (
+                                <>
+                                    Continue Assessment
+                                    <ChevronRight className="ml-2 h-5 w-5" />
+                                </>
+                            ) : hasInitialized ? (
+                                <>
+                                    Begin Assessment
+                                    <ChevronRight className="ml-2 h-5 w-5" />
+                                </>
+                            ) : (
+                                <>
+                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                    Loading...
+                                </>
+                            )}
                         </Button>
+
+                        {/* Loading message */}
+                        {isLoading && (
+                            <p className="text-sm text-muted-foreground mt-3">
+                                Please wait while we retrieve your saved
+                                responses...
+                            </p>
+                        )}
                     </div>
                 </CardContent>
             </Card>

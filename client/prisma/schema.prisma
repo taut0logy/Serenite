@@ -63,15 +63,8 @@ model Profile {
 model QuestionnaireResponse {
   id        String   @id @default(uuid())
   userId    String   @unique
-  depression Int?
-  anxiety    Int?
-  ptsd      Int?
-  social_anxiety Int?
-  cognitive_distortion Int?
-  self_esteem Int?
-  sleep_disruption Int?
-  functional_impairment Int?
-  isCompleted Boolean @default(false)
+  responses Json
+  isComplete Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

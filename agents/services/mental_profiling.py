@@ -2,6 +2,7 @@ from typing import Dict, Tuple, List
 from groq import Groq
 import instructor
 import json
+from datetime import datetime
 from models.mental_health_profile import MentalHealthProfile
 from config.settings import settings
 
@@ -21,13 +22,13 @@ Here are the _domain_scores_ (integer totals of 7–9 question Likert items), _n
 and associated _tags_, each tag in the form "<domain>_<severity>" such as "depression_moderate", etc.
 
 Domain Definitions:
-- depression: PHQ‑9-like total 0‑27. Cut-offs: ≥10 moderate (sens/spec ≈88%)  :contentReference[oaicite:6]{index=6}  
-- anxiety: GAD‑7-style 0‑21. Cut-offs: ≥10 moderate anxiety (sens 89%, spec 82%)  :contentReference[oaicite:7]{index=7}  
-- ptsd: PCL‑5 short-form scaled 0‑21. Cut-offs: ≥31 probable PTSD (sens ~88%)  :contentReference[oaicite:8]{index=8}  
-- social_anxiety: scaled SIAS 7-item. Full-scale cutoff ≥36/80 indicates clinical-level social anxiety (norm α>0.9)  :contentReference[oaicite:9]{index=9}  
-- cognitive_distortion: CD‑Quest-like scale 0‑21. Full-scale mean ≈22.6 (SD ≈11.9), normalized cut at ≥14 for moderate, ≥21 for high (α ≈0.85)  :contentReference[oaicite:10]{index=10}  
-- self_esteem: Rosenberg self-esteem total 0‑30; ≤14 low, 15‑25 normal, ≥26 high (excellent reliability)  :contentReference[oaicite:11]{index=11}  
-- sleep_disruption: key insomnia items scaled 0‑12; ≥15 on 7-item ISI indicates moderate insomnia  :contentReference[oaicite:12]{index=12}  
+- depression: PHQ‑9-like total 0‑27. Cut-offs: ≥10 moderate (sens/spec ≈88%)
+- anxiety: GAD‑7-style 0‑21. Cut-offs: ≥10 moderate anxiety (sens 89%, spec 82%)
+- ptsd: PCL‑5 short-form scaled 0‑21. Cut-offs: ≥31 probable PTSD (sens ~88%)
+- social_anxiety: scaled SIAS 7-item. Full-scale cutoff ≥36/80 indicates clinical-level social anxiety (norm α>0.9)
+- cognitive_distortion: CD‑Quest-like scale 0‑21. Full-scale mean ≈22.6 (SD ≈11.9), normalized cut at ≥14 for moderate, ≥21 for high (α ≈0.85)
+- self_esteem: Rosenberg self-esteem total 0‑30; ≤14 low, 15‑25 normal, ≥26 high (excellent reliability)
+- sleep_disruption: key insomnia items scaled 0‑12; ≥15 on 7-item ISI indicates moderate insomnia
 - functional_impairment: WHODAS items scaled 0‑12 for daily tasks, concentration, and social participation.
 
 Tagging Logic:
@@ -67,23 +68,46 @@ tags: {tags}
 """
 
 DOMAIN_CONFIG = {
-    "depression": (27, [(0, 4), (5, 9), (10, 14), (15, 19), (20, 27)]),
-    "anxiety": (21, [(0, 4), (5, 9), (10, 14), (15, 21)]),
-    "ptsd": (21, [(0, 30), (31, 33), (34, 80)]),
-    "social_anxiety": (21, [(0, 20), (21, 33), (34, 43), (44, 80)]),
-    "cognitive_distortion": (21, [(0, 14), (15, 20), (21, 21)]),
-    "self_esteem": (30, [(0, 14), (15, 25), (26, 30)]),
-    "sleep_disruption": (12, [(0, 3), (4, 6), (7, 12)]),
-    "functional_impairment": (12, [(0, 3), (4, 6), (7, 12)]),
+    "depression": (
+        27,
+        [
+            (0, 4, "none_minimal"),
+            (5, 9, "mild"),
+            (10, 14, "moderate"),
+            (15, 19, "moderately_severe"),
+            (20, 27, "severe"),
+        ],
+    ),
+    "anxiety": (
+        21,
+        [
+            (0, 4, "none_minimal"),
+            (5, 9, "mild"),
+            (10, 14, "moderate"),
+            (15, 21, "severe"),
+        ],
+    ),
+    "ptsd": (21, [(0, 30, "unlikely"), (31, 33, "probable"), (34, 80, "elevated")]),
+    "social_anxiety": (
+        21,
+        [(0, 20, "low"), (21, 33, "moderate"), (34, 43, "high"), (44, 80, "very_high")],
+    ),
+    "cognitive_distortion": (
+        21,
+        [(0, 14, "low"), (15, 20, "moderate"), (21, 21, "high")],
+    ),
+    "self_esteem": (30, [(0, 14, "low"), (15, 25, "normal"), (26, 30, "high")]),
+    "sleep_disruption": (12, [(0, 3, "low"), (4, 6, "moderate"), (7, 12, "high")]),
+    "functional_impairment": (12, [(0, 3, "low"), (4, 6, "moderate"), (7, 12, "high")]),
 }
 CD_MEAN = 22.6
 CD_SD = 11.9
 
 
-def classify(score: int, buckets: List[Tuple[int, int]]) -> str:
-    for lo, hi in buckets:
+def classify(score: int, buckets: List[Tuple[int, int, str]]) -> str:
+    for lo, hi, label in buckets:
         if lo <= score <= hi:
-            return f"{lo}-{hi}"
+            return label
     return "unknown"
 
 
@@ -98,15 +122,32 @@ def compute_tags(raw: Dict[str, int]) -> List[str]:
 
 
 def compute_profile(answers: Dict[str, int]) -> Tuple[Dict, Dict]:
-    # Aggregate by domain keys (answers come pre-summed?)
-    # Typically 'answers' is small dict mapping QIDs → {0..3}
-    # Here, assume one-level 'domain_x': sum
-    raw = {k: answers[k] for k in DOMAIN_CONFIG.keys()}
+    # If answers contains individual question IDs, we need to aggregate them by domain
+    # If answers already contains domain scores, use them directly
+
+    # Check if we have domain keys or question IDs
+    domain_keys = set(DOMAIN_CONFIG.keys())
+    answer_keys = set(answers.keys())
+
+    if domain_keys.issubset(answer_keys):
+        # We already have domain scores
+        raw = {k: answers[k] for k in DOMAIN_CONFIG.keys()}
+    else:
+        # We need to aggregate from individual questions using DOMAIN_MAP
+        from api.profiling import DOMAIN_MAP
+
+        raw = {domain: 0 for domain in DOMAIN_CONFIG.keys()}
+
+        for qid, score in answers.items():
+            if qid in DOMAIN_MAP:
+                domain = DOMAIN_MAP[qid]
+                raw[domain] += score
+
     normalized = {k: v / DOMAIN_CONFIG[k][0] for k, v in raw.items()}
     return raw, normalized
 
 
-def generate_profile(answers: Dict[str, int]) -> MentalHealthProfile:
+async def generate_profile(answers: Dict[str, int]) -> MentalHealthProfile:
     domain_scores, normalized_scores = compute_profile(answers)
     tags = compute_tags(domain_scores)
 
@@ -131,4 +172,9 @@ def generate_profile(answers: Dict[str, int]) -> MentalHealthProfile:
         messages=messages,
         response_model=MentalHealthProfile,
     )
+
+    # Ensure timestamp is set
+    if not resp.timestamp:
+        resp.timestamp = datetime.utcnow()
+
     return resp

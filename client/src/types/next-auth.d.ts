@@ -10,6 +10,8 @@ declare module "next-auth" {
       role?: string;
       email_verified?: boolean;
       kycVerified?: boolean;
+      hasPassword?: boolean;
+      questionnaireCompleted?: boolean;
       name?: string;
       firstName?: string;
       lastName?: string;
@@ -28,6 +30,7 @@ declare module "next-auth" {
     email_verified?: boolean;
     kycVerified?: boolean;
     hasPassword?: boolean;
+    questionnaireCompleted?: boolean;
     givenName?: string;
     familyName?: string;
   }

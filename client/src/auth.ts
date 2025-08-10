@@ -332,7 +332,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const response = data?.verifySession || {};
 
-        console.log("Session verification response: ", response);
+        // console.log("Session verification response: ", response);
 
         if (response.valid && response.user) {
 
@@ -348,6 +348,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email_verified: response.user.verified || false,
             hasPassword: response.user.hasPassword || false,
             kycVerified: response.user.kycVerified || false,
+            questionnaireCompleted: response.user.questionnaireCompleted || false,
           };
         }
       } catch (error) {
@@ -364,6 +365,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email_verified: token?.email_verified || false,
           hasPassword: token?.hasPassword || false,
           kycVerified: token?.kycVerified || false,
+          questionnaireCompleted: token?.questionnaireCompleted || false,
         };
       }
 
@@ -373,7 +375,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         accessToken: token.accessToken
       };
 
-      console.log("Current Session:", res);
+      /// console.log("Current Session:", res);
 
       return res;
     },

@@ -31,7 +31,7 @@ export default auth((req) => {
   // Access token data from req.auth (provided by NextAuth middleware)
   const isAuthenticated = !!req.auth;
   const isVerified = req.auth?.user?.email_verified === true;
-  const kycVerified = req.auth?.user?.kycVerified === true;
+  //const kycVerified = req.auth?.user?.kycVerified === true;
   const hasPassword = req.auth?.user?.hasPassword === true;
   const path = req.nextUrl.pathname;
 

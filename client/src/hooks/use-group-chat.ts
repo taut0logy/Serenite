@@ -134,7 +134,7 @@ export const useGroupChat = ({
 
         const messagePayload: Omit<ChatMessagePayload, "id" | "timestamp"> = {
             userId: session.user.id,
-            userName: session.user.name || "Unknown User",
+            userName: session.user.firstName || "Unknown User",
             userAvatar: session.user.image || undefined,
             content,
             meetingId,

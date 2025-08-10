@@ -390,5 +390,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: 7 * 24 * 60 * 60, // 7 days
     updateAge: 60 * 60, // 1 hour
   },
-  debug: process.env.NODE_ENV === "development",
+  debug: true,
+  trustHost: true
 });

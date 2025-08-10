@@ -1,6 +1,6 @@
 services:
     agents:
-        image: tautology/serenite_agents:latest
+        image: taut0logy/serenite_agents:latest
         container_name: serenite_agents
         build: ./agents
         ports:
@@ -25,7 +25,7 @@ services:
             start_period: 40s
 
     client:
-        image: tautology/serenite_client:latest
+        image: taut0logy/serenite_client:latest
         container_name: serenite_client
         build: ./client
         ports:

@@ -38,6 +38,7 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
             // Attach user data to socket
             socket.data.userId = user.id
             socket.data.email = user.email
+            socket.data.name = user.profile?.firstName
 
             console.log(`✅ [Socket] User authenticated: ${user.email} (${user.id})`)
             next()
@@ -75,9 +76,9 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
         socket.on('join-meeting-chat', (data: { meetingId: string }) => {
             const { meetingId } = data;
             const userId = socket.data.userId;
-            const userEmail = socket.data.email;
+            const userName = socket.data.name;
 
-            console.log(`[Chat] User ${userEmail} joined meeting chat: ${meetingId}`);
+            console.log(`[Chat] User ${userName} joined meeting chat: ${meetingId}`);
 
             // Join the meeting room
             socket.join(`meeting:${meetingId}`);
@@ -85,7 +86,7 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
             // Notify others in the meeting that user joined
             socket.to(`meeting:${meetingId}`).emit('user-joined-meeting', {
                 userId,
-                userName: userEmail, // You might want to get full name from user profile
+                userName, // You might want to get full name from user profile
                 meetingId
             });
         });
@@ -93,9 +94,9 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
         socket.on('leave-meeting-chat', (data: { meetingId: string }) => {
             const { meetingId } = data;
             const userId = socket.data.userId;
-            const userEmail = socket.data.email;
+            const userName = socket.data.name;
 
-            console.log(`[Chat] User ${userEmail} left meeting chat: ${meetingId}`);
+            console.log(`[Chat] User ${userName} left meeting chat: ${meetingId}`);
 
             // Leave the meeting room
             socket.leave(`meeting:${meetingId}`);
@@ -103,7 +104,7 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
             // Notify others in the meeting that user left
             socket.to(`meeting:${meetingId}`).emit('user-left-meeting', {
                 userId,
-                userName: userEmail,
+                userName,
                 meetingId
             });
         });

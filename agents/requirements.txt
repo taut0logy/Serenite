@@ -43,6 +43,7 @@ sounddevice
 # Data Science and Machine Learning
 numpy
 scipy==1.10.1
+tf-keras
 
 # External APIs and Data Sources
 tavily-python

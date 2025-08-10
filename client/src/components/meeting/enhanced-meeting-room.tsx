@@ -259,38 +259,38 @@ const EnhancedMeetingRoom = ({
     ]);
 
     // Handle call disconnection and reconnection
-    useEffect(() => {
-        if (!call) return;
+    // useEffect(() => {
+    //     if (!call) return;
 
-        const handleReconnection = async () => {
-            if (
-                (callingState === CallingState.OFFLINE ||
-                    callingState === CallingState.RECONNECTING_FAILED) &&
-                reconnectAttempts < 3
-            ) {
-                console.log(
-                    `Attempting to reconnect (${reconnectAttempts + 1}/3)...`
-                );
-                setReconnectAttempts((prev) => prev + 1);
+    //     const handleReconnection = async () => {
+    //         if (
+    //             (callingState === CallingState.OFFLINE ||
+    //                 callingState === CallingState.RECONNECTING_FAILED) &&
+    //             reconnectAttempts < 3
+    //         ) {
+    //             console.log(
+    //                 `Attempting to reconnect (${reconnectAttempts + 1}/3)...`
+    //             );
+    //             setReconnectAttempts((prev) => prev + 1);
 
-                try {
-                    await call.join();
-                } catch (error) {
-                    console.error("Reconnection failed:", error);
-                    setLastError(
-                        `Reconnection failed: ${
-                            error instanceof Error
-                                ? error.message
-                                : "Unknown error"
-                        }`
-                    );
-                }
-            }
-        };
+    //             try {
+    //                 await call.join();
+    //             } catch (error) {
+    //                 console.error("Reconnection failed:", error);
+    //                 setLastError(
+    //                     `Reconnection failed: ${
+    //                         error instanceof Error
+    //                             ? error.message
+    //                             : "Unknown error"
+    //                     }`
+    //                 );
+    //             }
+    //         }
+    //     };
 
-        const timer = setTimeout(handleReconnection, 2000);
-        return () => clearTimeout(timer);
-    }, [callingState, call, reconnectAttempts]);
+    //     const timer = setTimeout(handleReconnection, 2000);
+    //     return () => clearTimeout(timer);
+    // }, [callingState, call, reconnectAttempts]);
 
     // Toggle encryption mode
     const toggleEncryption = async () => {

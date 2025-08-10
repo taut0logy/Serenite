@@ -9,3 +9,4 @@ generated/
 .DS_Store
 .env*
 !.env.example
+demo/

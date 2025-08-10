@@ -109,7 +109,7 @@ const supportGroups: SupportGroup[] = [
         isLive: false,
     },
     {
-        id: 3,
+        id: 12,
         name: "Mindfulness & Meditation",
         description:
             "Learn and practice mindfulness techniques together. Perfect for beginners and experienced practitioners.",
@@ -254,7 +254,7 @@ export default function DashboardPage() {
                 // For live sessions, create an instant meeting
                 toast.loading(`Joining ${group.name} live session...`);
 
-                const id = `support-group-${group.id}-${Date.now()}`;
+                const id = `support-group-${group.id}`;
                 const call = client.call("default", id);
 
                 if (!call) throw new Error("Failed to create meeting");
@@ -280,7 +280,6 @@ export default function DashboardPage() {
                     `You've joined ${group.name}! You'll be notified before the next session.`
                 );
 
-                // You could also create a scheduled meeting here
                 // const scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // Tomorrow
                 // const call = client.call("default", `support-group-${group.id}-scheduled`);
                 // await call.getOrCreate({

@@ -248,22 +248,33 @@ export async function getPostById(postId: string) {
       return { error: "Post not found" };
     }
 
+    const postUser = post.isAnonymous
+      ? { profile: { firstName: "Anonymous", lastName: "", avatarUrl: null }, id: undefined }
+      : {
+          id: post.user?.id,
+          profile: post.user?.profile ?? { firstName: "", lastName: "", avatarUrl: null },
+        };
+
+    const postComments = post.comments.map((comment) => ({
+      ...comment,
+      isAuthor: currentUserId === comment.userId,
+      user: comment.isAnonymous
+        ? { profile: { firstName: "Anonymous", lastName: "", avatarUrl: null }, id: undefined }
+        : {
+            id: comment.user?.id,
+            profile: comment.user?.profile ?? { firstName: "", lastName: "", avatarUrl: null },
+          },
+    }));
+
     return {
       post: {
         ...post,
         isAuthor: currentUserId === post.userId,
-        user: post.isAnonymous
-          ? { profile: { firstName: "Anonymous", lastName: "", avatarUrl: null } }
-          : post.user,
-        comments: post.comments.map(comment => ({
-          ...comment,
-          isAuthor: currentUserId === comment.userId,
-          user: comment.isAnonymous
-            ? { profile: { firstName: "Anonymous", lastName: "", avatarUrl: null } }
-            : comment.user,
-        })),
+        user: postUser,
+        comments: postComments,
+        commentCount: post.comments.length,
         reactionCounts: getReactionCounts(post.reactions),
-      }
+      },
     };
   } catch (error) {
     console.error("Error fetching post:", error);

@@ -1,12 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "next-themes";
-import { SessionProvider } from "next-auth/react";
-import ApolloWrapper from "@/providers/apollo-provider";
-import { SocketProvider } from "@/providers/socket-provider";
-import { AuthProvider } from "@/providers/auth-provider";
-import { Toaster } from "@/components/ui/sonner";
+// SessionProvider moved into AuthProvider (client) to keep this layout as a Server Component
+import Providers from "@/providers/Providers";
 import { Navbar } from "@/components/navigation/navbar";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -36,40 +32,12 @@ export default function RootLayout({
                 className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
                 suppressHydrationWarning
             >
-                <SessionProvider>
-                    <AuthProvider>
-                        <ApolloWrapper>
-                            <SocketProvider>
-                                <ThemeProvider
-                                    attribute="class"
-                                    defaultTheme="system"
-                                    enableSystem
-                                    disableTransitionOnChange
-                                >
-                                    <div className="flex flex-col min-h-screen">
-                                        <Navbar />
-                                        <main className="flex-1">
-                                            {children}
-                                        </main>
-                                    </div>
-                                    <Toaster
-                                        toastOptions={{
-                                            className: "sonner",
-                                            style: {
-                                                fontFamily:
-                                                    "var(--geist-font-mono)",
-                                                fontSize: "0.875rem",
-                                                lineHeight: "1.25rem",
-                                            },
-                                        }}
-                                        closeButton
-                                        richColors
-                                    />
-                                </ThemeProvider>
-                            </SocketProvider>
-                        </ApolloWrapper>
-                    </AuthProvider>
-                </SessionProvider>
+                <Providers>
+                    <div className="flex flex-col min-h-screen">
+                        <Navbar />
+                        <main className="flex-1">{children}</main>
+                    </div>
+                </Providers>
             </body>
         </html>
     );

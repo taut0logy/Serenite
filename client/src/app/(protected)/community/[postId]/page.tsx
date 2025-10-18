@@ -1,4 +1,4 @@
-import { getPostById } from "@/actions/community";
+import { getPostById } from "@/actions/community.actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";

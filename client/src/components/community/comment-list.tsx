@@ -23,7 +23,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { deleteComment } from "@/actions/community";
+import { deleteComment } from "@/actions/community.actions";
 import { useRouter } from "next/navigation";
 import CommentEditForm from "./comment-edit-form";
 import { Badge } from "@/components/ui/badge";

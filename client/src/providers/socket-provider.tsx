@@ -22,7 +22,6 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const token = session?.accessToken;
 
   useEffect(() => {
-    // Only proceed if we have a token
     if (!token) {
       if (socket) {
         console.log('No session token, disconnecting socket');
@@ -33,7 +32,6 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Create new socket connection
     console.log(`Initializing socket connection to: ${socketUrl} with token`);
     const socketInstance = io(socketUrl, {
       auth: {
@@ -48,7 +46,6 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       //timeout: 10000,
     });
 
-    // Connection event listeners
     socketInstance.on('connect', () => {
       console.log(`Socket connected successfully with ID: ${socketInstance.id}`);
       setIsConnected(true);
@@ -101,11 +98,11 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!socket) return;
 
-    // Handle events
+    // TODO: Handle events
     //example: socket.on('event_name', (data) => { console.log(data); });
 
     return () => {
-      // Clean up event listeners
+      // TODO: Clean up event listeners
       //example: socket.off('event_name');
     };
   }, [socket]);

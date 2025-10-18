@@ -393,5 +393,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     updateAge: 60 * 60, // 1 hour
   },
   debug: true,
-  trustHost: true
 });

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { editPost } from "@/actions/community";
+import { editPost } from "@/actions/community.actions";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ReactionType } from "@prisma/client";

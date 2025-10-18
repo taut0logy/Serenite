@@ -24,7 +24,7 @@ import {
     Trash2,
 } from "lucide-react";
 import { ReactionType } from "@prisma/client";
-import { toggleReaction, deletePost } from "@/actions/community";
+import { toggleReaction, deletePost } from "@/actions/community.actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";

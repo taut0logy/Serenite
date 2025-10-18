@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPosts } from "@/actions/community";
+import { getPosts } from "@/actions/community.actions";
 import PostCard from "./post-card";
 import { Button } from "@/components/ui/button";
 import { useRouter, usePathname } from "next/navigation";

@@ -1,11 +1,9 @@
-import os
 import re
 from typing import List, Annotated, TypedDict, Union, Dict, Optional, Literal, Any
 from typing_extensions import NotRequired
-import cassio
+
 # LangGraph and LangChain components
 from langchain_groq import ChatGroq
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import (
     HumanMessage,
@@ -17,13 +15,18 @@ from langgraph.graph import END, StateGraph, START
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from youtube_transcript_api import YouTubeTranscriptApi
-from langchain_astradb import AstraDBVectorStore
-from langchain_community.tools import WikipediaQueryRun, ArxivQueryRun
+from langchain_postgres import PGVector
+from langchain_community.tools import (
+    WikipediaQueryRun,
+    ArxivQueryRun,
+    YouTubeSearchTool,
+)
 from langchain_community.utilities import WikipediaAPIWrapper, ArxivAPIWrapper
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_community.tools import YouTubeSearchTool
+from langchain_tavily import TavilySearch
 from langgraph.graph.message import add_messages
 from config.settings import settings
+from utils.logger import logger
+from services.embeddings_adapter import get_embeddings
 
 
 # Define agent state with proper annotation for messages
@@ -51,6 +54,7 @@ class AgentState(TypedDict):
     voice_emotion: NotRequired[Dict[str, Any]]
     combined_emotion_profile: NotRequired[Dict[str, Any]]
 
+
 # API Keys
 groq_api_key = settings.GROQ_API_KEY
 tavily_api_key = settings.TAVILY_API_KEY
@@ -58,39 +62,24 @@ tavily_api_key = settings.TAVILY_API_KEY
 # Set up LLM
 llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-70b-8192", temperature=0.7)
 
-# Set up embeddings
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+# Set up embeddings (uses Cohere API in production, HuggingFace in dev)
+embeddings = get_embeddings()
 
-cassio.init(
-    token=settings.ASTRA_DB_APPLICATION_TOKEN, 
-    database_id=settings.ASTRA_DB_ID
-)
-
-# Mental health resources
-documents = [
-    "Depression is a common mental health disorder characterized by persistent sadness and loss of interest in activities.",
-    "Anxiety disorders involve excessive worry that's difficult to control.",
-    "Mindfulness meditation can help reduce stress and anxiety by focusing on the present moment.",
-    "Cognitive Behavioral Therapy (CBT) is an effective treatment for many mental health conditions.",
-    "Self-care practices like regular exercise, proper sleep, and healthy eating can improve mental well-being.",
-    "Trauma can have lasting effects on mental health, but treatment approaches like EMDR can be helpful.",
-    "Social support is crucial for mental health recovery - connecting with others can reduce feelings of isolation.",
-    "Dialectical Behavior Therapy (DBT) combines cognitive techniques with mindfulness to help regulate emotions.",
-    "Recovery from mental health challenges is possible with the right support and treatment approach.",
-    "Setting boundaries is an important self-care practice for protecting your mental health.",
-]
-
-# Create vector store
-vectorstore = AstraDBVectorStore(
-    embedding=embeddings,
-    collection_name="mental_health_resources",
-    token=settings.ASTRA_DB_APPLICATION_TOKEN,
-    api_endpoint=settings.ASTRA_DB_API_ENDPOINT,
-)
-
-# Add documents
-for doc in documents:
-    vectorstore.add_texts([doc])
+# Connect to existing PostgreSQL vector store (created by setup_vector_store.py)
+try:
+    vectorstore = PGVector(
+        embeddings=embeddings,
+        collection_name="mental_health_resources",
+        connection=settings.DATABASE_URL,
+        use_jsonb=True,
+    )
+    logger.info(
+        "Successfully connected to PostgreSQL vector store for mental health resources"
+    )
+except Exception as e:
+    logger.error(f"Failed to connect to mental health vector store: {str(e)}")
+    logger.error("Make sure you have run: python setup_vector_store.py")
+    raise
 
 retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
@@ -151,7 +140,7 @@ wiki_tool = WikipediaQueryRun(api_wrapper=wiki_wrapper)
 arxiv_wrapper = ArxivAPIWrapper(top_k_results=2)
 arxiv_tool = ArxivQueryRun(api_wrapper=arxiv_wrapper)
 
-tavily_search_tool = TavilySearchResults(max_results=3, tavily_api_key=tavily_api_key)
+tavily_search_tool = TavilySearch(max_results=3, tavily_api_key=tavily_api_key)
 youtube_search_tool = YouTubeSearchTool()
 
 
@@ -185,8 +174,9 @@ def search_mental_health_videos(query: str) -> str:
 
             # If successful, return the URLs as a newline-separated string
             return "\n".join(url_list[:3])  # Limit to top 3 videos
-        except:
+        except Exception as e:
             # If parsing fails, just return the raw results as it might already be formatted
+            logger.info(f"Error parsing YouTube search results: {str(e)}")
             return results
 
     except Exception as e:
@@ -617,6 +607,8 @@ def suggest_self_care(state: AgentState) -> Dict:
             "rationale": f"When feeling {emotion}, activities that help {activity_benefit} can be particularly helpful.",
         }
     except Exception as e:
+        
+        logger.error(f"Error generating self-care suggestions: {str(e)}")
         # Fallback in case of any error
         suggestions = {
             "primary_suggestion": "Take a few deep breaths and notice how your body feels",
@@ -1263,7 +1255,7 @@ def analyze_emotion_and_needs(state: AgentState) -> Dict:
                 reasoning_message += f"\n- Your voice tone, which suggests **{voice_emotion.get('emotion')}**"
 
             if combined_profile.get("mixed_signals", False):
-                reasoning_message += f"\n\nInterestingly, I'm noticing some mixed emotional signals here, which is completely normal. Humans often experience complex emotional states."
+                reasoning_message += "\n\nInterestingly, I'm noticing some mixed emotional signals here, which is completely normal. Humans often experience complex emotional states."
 
         reasoning_message += f"""
         
@@ -1310,7 +1302,7 @@ def determine_response_strategy(state: AgentState) -> Dict:
     strategy_prompt = ChatPromptTemplate.from_messages(
         [
             SystemMessage(
-                content=f"""You are a mental health professional deciding how to respond to someone.
+                content="""You are a mental health professional deciding how to respond to someone.
         
         Based on the emotional analysis and message context, determine the best response strategy.
         
@@ -1478,7 +1470,7 @@ def select_and_use_tools(state: AgentState) -> Dict:
 
                     # Add a message indicating blog creation
                     if state.get("reasoning_visible", True):
-                        blog_creation_message = f"""
+                        blog_creation_message = """
                         💭 **Creating Blog Post from Video**
                         
                         I'm generating a comprehensive blog post from the video that covers this topic.
@@ -1542,7 +1534,7 @@ def select_and_use_tools(state: AgentState) -> Dict:
                     f"Found a relevant video: {result.get('title', 'Video')}\n"
                 )
             elif tool_name == "youtube_videos":
-                tools_summary += f"Found relevant videos you might find helpful.\n"
+                tools_summary += "Found relevant videos you might find helpful.\n"
             elif tool_name == "mental_health_info":
                 tools_summary += (
                     f"From our mental health resources:\n{result[:200]}...\n\n"
@@ -1661,7 +1653,7 @@ def generate_response(state: AgentState) -> Dict:
 
     # Start with reasoning if enabled
     if state.get("reasoning_visible", True):
-        final_reasoning = f"""
+        final_reasoning = """
         💭 **Finalizing My Response**
         
         Now I'll craft a response that addresses your needs...
@@ -2673,7 +2665,7 @@ def provide_reflective_listening(state: AgentState) -> Dict:
     new_messages = []
 
     if state.get("reasoning_visible", True):
-        reasoning_message = f"""
+        reasoning_message = """
         💭 **Using Reflective Listening**
         
         I notice you're expressing your feelings and experiences.
@@ -2743,7 +2735,7 @@ def provide_motivational_response(state: AgentState) -> Dict:
     new_messages = []
 
     if state.get("reasoning_visible", True):
-        reasoning_message = f"""
+        reasoning_message = """
         💭 **Creating Motivational Support**
         
         I notice you may benefit from some encouragement and validation.

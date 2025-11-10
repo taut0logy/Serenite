@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import PasswordField from "@/components/ui/password-field";
 import { toast } from "sonner";
 import { REGISTER } from "@/graphql/operations";
 
@@ -115,10 +116,10 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-center px-4 py-4 sm:px-6 lg:px-8">
             <div className="w-full max-w-md space-y-8">
                 <div className="text-center">
-                    <h1 className="text-3xl font-bold">Create an account</h1>
+                    <h1 className="text-3xl font-bold">Welcome!</h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                         Sign up to get started
                     </p>
@@ -194,12 +195,7 @@ export default function RegisterPage() {
                                         <FormItem>
                                             <FormLabel>Password</FormLabel>
                                             <FormControl>
-                                                <Input
-                                                    type="password"
-                                                    placeholder="••••••••"
-                                                    disabled={isLoading}
-                                                    {...field}
-                                                />
+                                                <PasswordField field={field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -214,12 +210,7 @@ export default function RegisterPage() {
                                                 Confirm Password
                                             </FormLabel>
                                             <FormControl>
-                                                <Input
-                                                    type="password"
-                                                    placeholder="••••••••"
-                                                    disabled={isLoading}
-                                                    {...field}
-                                                />
+                                                <PasswordField field={field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -244,7 +235,7 @@ export default function RegisterPage() {
                             </div>
                             <div className="relative flex justify-center text-xs uppercase">
                                 <span className="bg-background px-2 text-muted-foreground">
-                                    Faster signup with
+                                    Or Continue with
                                 </span>
                             </div>
                         </div>
@@ -266,13 +257,6 @@ export default function RegisterPage() {
                             >
                                 <FcGoogle className="mr-2 h-4 w-4" /> Google
                             </Button>
-                        </div>
-
-                        <div className="text-center text-xs text-muted-foreground">
-                            <p>
-                                Social sign-up creates verified accounts
-                                automatically
-                            </p>
                         </div>
 
                         <div className="text-center text-sm">

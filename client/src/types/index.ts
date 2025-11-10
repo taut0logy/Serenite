@@ -9,4 +9,8 @@ export interface User {
   image?: string;
   role?: string;
   email_verified?: boolean;
+  verified?: boolean;
+  kycVerified?: boolean;
+  hasPassword?: boolean;
+  questionnaireCompleted?: boolean;
 }

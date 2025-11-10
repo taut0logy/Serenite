@@ -874,6 +874,7 @@ export async function verifySession(token: string) {
                 email: session.user.email,
                 role: session.user.role,
                 verified: session.user.verified,
+                kycVerified: session.user.kycVerified,
                 profile: session.user.profile,
                 hasPassword: session.user.hashedPassword ? true : false,
                 questionnaireCompleted: !!(session.user.mentalHealthProfile)

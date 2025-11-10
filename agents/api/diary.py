@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
 from typing import List
-from services.diary import (
+from services.diary_pg import (
     DiaryEntry,
     StoredDiaryEntry,
     MoodAnalysis,

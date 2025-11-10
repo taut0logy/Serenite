@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { CHECK_2FA_REQUIRED } from "@/graphql/operations";
+import PasswordField from "@/components/ui/password-field";
 
 const loginSchema = z.object({
     email: z.string().email("Please enter a valid email address"),
@@ -161,12 +162,7 @@ export default function LoginPage() {
                                         <FormItem>
                                             <FormLabel>Password</FormLabel>
                                             <FormControl>
-                                                <Input
-                                                    type="password"
-                                                    placeholder="••••••••"
-                                                    disabled={isLoading}
-                                                    {...field}
-                                                />
+                                                <PasswordField field={field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>

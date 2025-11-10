@@ -1,15 +1,14 @@
-import os
 from typing import Dict, List, TypedDict
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
 import cassio
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_astradb import AstraDBVectorStore
 from datetime import datetime
 import uuid
 from utils.logger import logger
 from config.settings import settings
+from services.embeddings_adapter import get_embeddings
 
 # Initialize Groq chat model
 groq_api_key = settings.GROQ_API_KEY
@@ -34,10 +33,10 @@ except Exception as e:
     logger.info(f"Failed to initialize cassio: {str(e)}")
     raise
 
-# Initialize embeddings
+# Initialize embeddings (uses Cohere API in production, HuggingFace in dev)
 try:
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    logger.info("Successfully initialized HuggingFace embeddings")
+    embeddings = get_embeddings()
+    logger.info("Successfully initialized embeddings adapter")
 except Exception as e:
     logger.info(f"Failed to initialize embeddings: {str(e)}")
     raise

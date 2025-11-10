@@ -37,23 +37,23 @@ const testimonials = [
     },
 ];
 
-const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-        opacity: 1,
-        transition: {
-            staggerChildren: 0.1,
-        },
-    },
-};
+// const containerVariants = {
+//     hidden: { opacity: 0 },
+//     visible: {
+//         opacity: 1,
+//         transition: {
+//             staggerChildren: 0.1,
+//         },
+//     },
+// };
 
-const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-        opacity: 1,
-        y: 0,
-    },
-};
+// const itemVariants = {
+//     hidden: { opacity: 0, y: 20 },
+//     visible: {
+//         opacity: 1,
+//         y: 0,
+//     },
+// };
 
 export function TestimonialsSection() {
     const [activeIndex, setActiveIndex] = useState(0);
@@ -76,6 +76,7 @@ export function TestimonialsSection() {
     useEffect(() => {
         const timer = setInterval(nextTestimonial, 8000); // Auto advance every 8 seconds
         return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return (

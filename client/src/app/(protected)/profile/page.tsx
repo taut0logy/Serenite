@@ -193,15 +193,9 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
                 {/* Profile Details Tab */}
                 <TabsContent value="details">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Profile Information</CardTitle>
-                            <CardDescription>
-                                Update your personal details and public profile
-                                information.
-                            </CardDescription>
-                        </CardHeader>
+                        
                         <CardContent>
-                            <div className="flex flex-col gap-6">
+                            <div className="flex flex-col gap-6 pt-6">
                                 <div className="flex items-center gap-4">
                                     <div className="h-20 w-20 overflow-hidden rounded-full border">
                                         {user?.image ? (

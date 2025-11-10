@@ -4,7 +4,6 @@ import "./globals.css";
 // SessionProvider moved into AuthProvider (client) to keep this layout as a Server Component
 import Providers from "@/providers/Providers";
 import { Navbar } from "@/components/navigation/navbar";
-import "react-datepicker/dist/react-datepicker.css";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",

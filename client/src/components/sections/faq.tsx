@@ -162,7 +162,7 @@ export function FaqSection() {
                 {/* Contact CTA */}
                 <div className="text-center mt-12">
                     <p className="text-muted-foreground mb-4">
-                        Can't find what you're looking for?
+                        Can&apos;t find what you&apos;re looking for?
                     </p>
                     <Button variant="outline" className="gap-2">
                         <Mail className="w-4 h-4" />

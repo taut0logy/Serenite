@@ -1,7 +1,7 @@
 "use strict";
 
 import prisma from "@/lib/prisma";
-import { Notification, NotificationType } from "@/lib/generated/prisma";
+import { Notification, NotificationType } from "@prisma/client";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const io = (global as any).io;

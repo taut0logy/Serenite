@@ -2,13 +2,13 @@ from typing import Dict, List, TypedDict
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_postgres import PGVector
 from sqlalchemy import create_engine, text
 from datetime import datetime
 import uuid
 from utils.logger import logger
 from config.settings import settings
+from services.embeddings_adapter import get_embeddings
 
 # Initialize Groq chat model
 groq_api_key = settings.GROQ_API_KEY
@@ -27,15 +27,15 @@ except Exception as e:
     logger.error(f"Failed to connect to PostgreSQL: {str(e)}")
     raise
 
-# Initialize embeddings
+# Initialize embeddings (uses Cohere API in production, HuggingFace in dev)
 try:
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    logger.info("Successfully initialized HuggingFace embeddings")
+    embeddings = get_embeddings()
+    logger.info("Successfully initialized embeddings adapter")
 except Exception as e:
     logger.error(f"Failed to initialize embeddings: {str(e)}")
     raise
 
-# Initialize vector store
+# Connect to existing vector store (created by setup_vector_store.py)
 try:
     pg_vector_store = PGVector(
         embeddings=embeddings,
@@ -43,13 +43,14 @@ try:
         collection_name="diary_entries",
         use_jsonb=True,
     )
-    logger.info("Successfully initialized PostgreSQL vector store")
+    logger.info("Successfully connected to PostgreSQL vector store for diary entries")
 except Exception as e:
-    logger.error(f"Failed to initialize vector store: {str(e)}")
+    logger.error(f"Failed to connect to diary vector store: {str(e)}")
+    logger.error("Make sure you have run: python setup_vector_store.py")
     raise
 
 model = ChatGroq(
-    groq_api_key=groq_api_key, model_name="llama3-70b-8192", temperature=0.7
+    groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile", temperature=0.7
 )
 
 
@@ -136,6 +137,10 @@ def analyze_mood(state: AgentState) -> AgentState:
             "confidence": confidence,
         }
     except Exception as e:
+        # Log the actual error for debugging
+        logger.error(f"Error in mood analysis: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        
         # Return default values in case of error
         return {
             "messages": messages,

@@ -1,16 +1,38 @@
 from fastapi import HTTPException
-from deepface import DeepFace
 import cv2
 import numpy as np
 import os
 from typing import List, Tuple, Dict, Any
 from utils.logger import logger
 from datetime import datetime
+from config.settings import settings
+
+# Import S3 storage adapter for temporary file storage
+from services.s3_storage_adapter import s3_storage
+
+# Import AWS Rekognition adapter for face verification
+try:
+    from services.aws_rekognition_adapter import rekognition
+
+    USE_REKOGNITION = rekognition is not None and settings.USE_API_MODELS
+except ImportError:
+    USE_REKOGNITION = False
+    logger.warning("AWS Rekognition adapter not available, using fallback")
+
+# Fallback to DeepFace if AWS Rekognition not configured
+if not USE_REKOGNITION:
+    try:
+        from deepface import DeepFace
+
+        logger.info("Using DeepFace for face verification (fallback)")
+    except ImportError:
+        logger.warning("DeepFace not available, face verification may not work")
 
 
 class KYCService:
     def __init__(self):
-        # Get absolute path for uploads directory
+        # Get absolute path for temporary uploads directory
+        # NOTE: All files in this directory are temporary and will be deleted after verification
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.upload_dir = os.path.join(current_dir, "uploads")
         self.ensure_upload_directory()
@@ -21,7 +43,12 @@ class KYCService:
         )
 
         # Verification thresholds
-        self.VERIFICATION_THRESHOLD = 0.6  # DeepFace similarity threshold
+        self.VERIFICATION_THRESHOLD = (
+            0.6  # Similarity threshold (for DeepFace fallback)
+        )
+        self.REKOGNITION_THRESHOLD = (
+            80.0  # AWS Rekognition similarity threshold (0-100)
+        )
         self.MIN_FACE_SIZE = (50, 50)  # Minimum face size for detection
         self.MAX_VERIFICATION_DISTANCE = 0.4  # Maximum distance for face verification
 
@@ -209,13 +236,15 @@ class KYCService:
         return best_face, best_metadata
 
     async def save_image(self, file_data: bytes, user_id: str, image_type: str) -> str:
-        """Save uploaded image to disk with validation"""
+        """
+        Save uploaded image with validation
+        Uses S3 storage if enabled, otherwise falls back to local storage
+        """
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{user_id}_{image_type}_{timestamp}.jpg"
-            filepath = os.path.join(self.upload_dir, filename)
 
-            logger.info(f"Attempting to save {image_type} image: {filepath}")
+            logger.info(f"Attempting to save {image_type} image for user {user_id}")
 
             # Convert bytes to numpy array
             nparr = np.frombuffer(file_data, np.uint8)
@@ -251,14 +280,23 @@ class KYCService:
             # Log image details
             logger.info(f"Image shape: {img.shape}")
 
-            # Ensure the file is written
-            success = cv2.imwrite(filepath, img)
+            # Encode image back to bytes for storage
+            success, img_encoded = cv2.imencode(".jpg", img)
             if not success:
-                logger.error(f"Failed to write image to {filepath}")
-                raise HTTPException(status_code=500, detail="Failed to save image")
+                raise HTTPException(status_code=500, detail="Failed to encode image")
 
-            logger.info(f"Successfully saved image to: {filepath}")
-            return filepath
+            img_bytes = img_encoded.tobytes()
+
+            # Save to S3 or local storage using the adapter
+            file_key = await s3_storage.save_file(
+                file_data=img_bytes,
+                user_id=user_id,
+                filename=filename,
+                content_type="image/jpeg",
+            )
+
+            logger.info(f"Successfully saved {image_type} image: {file_key}")
+            return file_key
 
         except HTTPException:
             raise
@@ -277,15 +315,39 @@ class KYCService:
         2. Extract faces from both images
         3. Perform face verification
         4. Return detailed results
+
+        Note: Face crop files are created temporarily during verification
+        but are automatically cleaned up after processing.
         """
+        # Track face crop files for cleanup
+        selfie_face_path = None
+        id_face_path = None
+
         try:
             logger.info(
                 f"Starting identity verification - Selfie: {selfie_path}, ID: {id_card_path}"
             )
 
-            # Load images
-            selfie_img = cv2.imread(selfie_path)
-            id_card_img = cv2.imread(id_card_path)
+            # Load images from S3 or local storage
+            selfie_bytes = await s3_storage.get_file(selfie_path)
+            id_card_bytes = await s3_storage.get_file(id_card_path)
+
+            if selfie_bytes is None:
+                raise HTTPException(
+                    status_code=404, detail="Selfie image not found or corrupted"
+                )
+            if id_card_bytes is None:
+                raise HTTPException(
+                    status_code=404, detail="ID card image not found or corrupted"
+                )
+
+            # Decode images from bytes
+            selfie_img = cv2.imdecode(
+                np.frombuffer(selfie_bytes, np.uint8), cv2.IMREAD_COLOR
+            )
+            id_card_img = cv2.imdecode(
+                np.frombuffer(id_card_bytes, np.uint8), cv2.IMREAD_COLOR
+            )
 
             if selfie_img is None:
                 raise HTTPException(
@@ -294,9 +356,7 @@ class KYCService:
             if id_card_img is None:
                 raise HTTPException(
                     status_code=404, detail="ID card image not found or corrupted"
-                )
-
-            # Step 1: Extract faces from selfie
+                )  # Step 1: Extract faces from selfie
             selfie_faces = self.detect_and_extract_faces(selfie_img, is_id_card=False)
             if not selfie_faces:
                 raise HTTPException(
@@ -316,42 +376,135 @@ class KYCService:
             best_selfie_face, selfie_metadata = self.select_best_face(selfie_faces)
             best_id_face, id_metadata = self.select_best_face(id_faces)
 
-            # Step 4: Save extracted faces for verification
-            selfie_face_path = selfie_path.replace(".jpg", "_face.jpg")
-            id_face_path = id_card_path.replace(".jpg", "_face.jpg")
-
-            cv2.imwrite(
-                selfie_face_path, cv2.cvtColor(best_selfie_face, cv2.COLOR_RGB2BGR)
+            # Step 4: Save extracted face crops temporarily for verification
+            # Generate unique keys/filenames for face crops
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            user_id = (
+                selfie_path.split("/")[-1].split("_")[0]
+                if "/" in selfie_path
+                else selfie_path.split("_")[0]
             )
-            cv2.imwrite(id_face_path, cv2.cvtColor(best_id_face, cv2.COLOR_RGB2BGR))
 
-            # Step 5: Perform face verification using multiple models
+            selfie_face_filename = f"{user_id}_selfie_face_{timestamp}.jpg"
+            id_face_filename = f"{user_id}_id_face_{timestamp}.jpg"
+
+            # Encode face crops to bytes
+            _, selfie_face_encoded = cv2.imencode(
+                ".jpg", cv2.cvtColor(best_selfie_face, cv2.COLOR_RGB2BGR)
+            )
+            _, id_face_encoded = cv2.imencode(
+                ".jpg", cv2.cvtColor(best_id_face, cv2.COLOR_RGB2BGR)
+            )
+
+            # Save face crops using S3 storage adapter
+            selfie_face_path = await s3_storage.save_file(
+                file_data=selfie_face_encoded.tobytes(),
+                user_id=user_id,
+                filename=selfie_face_filename,
+                content_type="image/jpeg",
+            )
+            id_face_path = await s3_storage.save_file(
+                file_data=id_face_encoded.tobytes(),
+                user_id=user_id,
+                filename=id_face_filename,
+                content_type="image/jpeg",
+            )
+
+            logger.info(
+                f"Face crops saved temporarily: {selfie_face_path}, {id_face_path}"
+            )
+
+            # Step 5: Perform face verification using AWS Rekognition or DeepFace
             verification_results = []
-            models = ["VGG-Face", "Facenet", "ArcFace"]
+            use_rekognition = USE_REKOGNITION  # Local copy to avoid scope issues
 
-            for model in models:
+            # Use AWS Rekognition if available
+            if use_rekognition:
                 try:
-                    result = DeepFace.verify(
-                        img1_path=selfie_face_path,
-                        img2_path=id_face_path,
-                        model_name=model,
-                        distance_metric="cosine",
-                        enforce_detection=False,
+                    result = rekognition.verify_faces(
+                        best_selfie_face,
+                        best_id_face,
+                        similarity_threshold=self.REKOGNITION_THRESHOLD,
                     )
+
                     verification_results.append(
                         {
-                            "model": model,
-                            "verified": bool(result["verified"]),
-                            "distance": float(result["distance"]),
-                            "threshold": float(result["threshold"]),
+                            "model": "AWS-Rekognition",
+                            "verified": result["verified"],
+                            "distance": 100
+                            - result["similarity"],  # Convert similarity to distance
+                            "similarity": result["similarity"],
+                            "confidence": result["confidence"],
+                            "threshold": self.REKOGNITION_THRESHOLD,
                         }
                     )
+
                     logger.info(
-                        f"{model} verification: {result['verified']} (distance: {result['distance']:.4f})"
+                        f"AWS Rekognition verification: {result['verified']} "
+                        f"(similarity: {result['similarity']:.2f}%)"
                     )
                 except Exception as e:
-                    logger.warning(f"Verification with {model} failed: {str(e)}")
-                    continue
+                    logger.warning(f"AWS Rekognition verification failed: {str(e)}")
+                    # Fall back to DeepFace if Rekognition fails
+                    use_rekognition = False
+
+            # Fallback to DeepFace if Rekognition not available or failed
+            if not use_rekognition:
+                models = ["VGG-Face", "Facenet", "ArcFace"]
+
+                # DeepFace requires local file paths, so if using S3, download temporarily
+                local_selfie_face_path = selfie_face_path
+                local_id_face_path = id_face_path
+
+                # If files are in S3 (not absolute local paths), download them
+                if settings.USE_S3_STORAGE and not os.path.isabs(selfie_face_path):
+                    import tempfile
+
+                    # Download face crops from S3 to temp files for DeepFace
+                    selfie_face_bytes = await s3_storage.get_file(selfie_face_path)
+                    id_face_bytes = await s3_storage.get_file(id_face_path)
+
+                    # Create temp files
+                    temp_selfie = tempfile.NamedTemporaryFile(
+                        delete=False, suffix=".jpg"
+                    )
+                    temp_id = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+
+                    temp_selfie.write(selfie_face_bytes)
+                    temp_id.write(id_face_bytes)
+                    temp_selfie.close()
+                    temp_id.close()
+
+                    local_selfie_face_path = temp_selfie.name
+                    local_id_face_path = temp_id.name
+
+                    logger.info(
+                        "Downloaded face crops from S3 for DeepFace verification"
+                    )
+
+                for model in models:
+                    try:
+                        result = DeepFace.verify(
+                            img1_path=local_selfie_face_path,
+                            img2_path=local_id_face_path,
+                            model_name=model,
+                            distance_metric="cosine",
+                            enforce_detection=False,
+                        )
+                        verification_results.append(
+                            {
+                                "model": model,
+                                "verified": bool(result["verified"]),
+                                "distance": float(result["distance"]),
+                                "threshold": float(result["threshold"]),
+                            }
+                        )
+                        logger.info(
+                            f"{model} verification: {result['verified']} (distance: {result['distance']:.4f})"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Verification with {model} failed: {str(e)}")
+                        continue
 
             if not verification_results:
                 raise HTTPException(
@@ -388,9 +541,6 @@ class KYCService:
                 ),
             }
 
-            # Cleanup extracted face images
-            self._safe_delete([selfie_face_path, id_face_path])
-
             logger.info(
                 f"Identity verification completed: {result['verified']} with {result['confidence_score']}% confidence"
             )
@@ -404,6 +554,29 @@ class KYCService:
             raise HTTPException(
                 status_code=500, detail=f"Identity verification failed: {str(e)}"
             )
+        finally:
+            # Always cleanup face crop files, even if verification fails
+            if selfie_face_path or id_face_path:
+                files_to_delete = [f for f in [selfie_face_path, id_face_path] if f]
+                deleted_count = await s3_storage.delete_files(files_to_delete)
+                logger.info(f"Cleaned up {deleted_count} temporary face crop files")
+
+                # Clean up temp files if DeepFace was used with S3
+                if not use_rekognition and settings.USE_S3_STORAGE:
+                    try:
+                        if "local_selfie_face_path" in locals() and os.path.exists(
+                            local_selfie_face_path
+                        ):
+                            os.remove(local_selfie_face_path)
+                        if "local_id_face_path" in locals() and os.path.exists(
+                            local_id_face_path
+                        ):
+                            os.remove(local_id_face_path)
+                        logger.info("Cleaned up temporary DeepFace files")
+                    except Exception as cleanup_error:
+                        logger.warning(
+                            f"Failed to cleanup temp DeepFace files: {str(cleanup_error)}"
+                        )
 
     def _get_verification_message(self, is_verified: bool, confidence: float) -> str:
         """Generate user-friendly verification message"""
@@ -423,26 +596,33 @@ class KYCService:
                 return "Identity verification failed. Please retake both photos with better lighting and ensure faces are clearly visible."
 
     def _safe_delete(self, file_paths: List[str]):
-        """Safely delete files without raising exceptions"""
-        for path in file_paths:
-            try:
-                if os.path.exists(path):
-                    os.remove(path)
-                    logger.info(f"Deleted temporary file: {path}")
-            except Exception as e:
-                logger.warning(f"Failed to delete file {path}: {str(e)}")
+        """Safely delete files without raising exceptions (deprecated - use cleanup_images)"""
+        import asyncio
+
+        asyncio.create_task(s3_storage.delete_files(file_paths))
 
     def cleanup_images(self, file_paths: List[str]):
-        """Clean up temporary image files"""
-        for path in file_paths:
-            try:
-                if os.path.exists(path):
-                    os.remove(path)
-                    logger.info(f"Successfully deleted file: {path}")
-                else:
-                    logger.warning(f"File not found for deletion: {path}")
-            except Exception as e:
-                logger.error(f"Failed to delete file {path}: {str(e)}")
+        """
+        Clean up temporary image files from S3 or local storage
+        This method is synchronous wrapper for async S3 cleanup
+        """
+        import asyncio
+
+        try:
+            # Run async deletion in sync context
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is already running, schedule task
+                asyncio.create_task(s3_storage.delete_files(file_paths))
+                logger.info(f"Scheduled cleanup of {len(file_paths)} files")
+            else:
+                # Run in new event loop
+                deleted_count = loop.run_until_complete(
+                    s3_storage.delete_files(file_paths)
+                )
+                logger.info(f"Cleaned up {deleted_count}/{len(file_paths)} files")
+        except Exception as e:
+            logger.error(f"Failed to cleanup files: {str(e)}")
 
 
 # Create service instance

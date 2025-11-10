@@ -18,9 +18,9 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { RESET_PASSWORD } from "@/graphql/operations";
+import PasswordField from "@/components/ui/password-field";
 
 const resetPasswordSchema = z
     .object({
@@ -146,12 +146,7 @@ const ResetPasswordForm = ({ token }: { token: string }) => {
                                         <FormItem>
                                             <FormLabel>New Password</FormLabel>
                                             <FormControl>
-                                                <Input
-                                                    type="password"
-                                                    placeholder="••••••••"
-                                                    disabled={isLoading}
-                                                    {...field}
-                                                />
+                                                <PasswordField field={field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -166,12 +161,7 @@ const ResetPasswordForm = ({ token }: { token: string }) => {
                                                 Confirm New Password
                                             </FormLabel>
                                             <FormControl>
-                                                <Input
-                                                    type="password"
-                                                    placeholder="••••••••"
-                                                    disabled={isLoading}
-                                                    {...field}
-                                                />
+                                                <PasswordField field={field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>

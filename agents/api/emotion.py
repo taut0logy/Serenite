@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException, UploadFile, File
 import io
 import numpy as np
@@ -19,6 +18,7 @@ from api.emotion_journal import add_to_emotion_journal
 
 router = APIRouter(prefix="/emotion", tags=["Emotion Detection and Analysis"])
 
+
 @router.post("/detect-face-emotion", response_model=EmotionDetectionResult)
 async def detect_emotion(file: UploadFile = File(...)):
     """
@@ -27,6 +27,11 @@ async def detect_emotion(file: UploadFile = File(...)):
     contents = await file.read()
     image = Image.open(io.BytesIO(contents))
 
+    # Ensure image is in RGB mode (some images might be grayscale, RGBA, etc.)
+    if image.mode != "RGB":
+        print(f"Converting image from {image.mode} to RGB")
+        image = image.convert("RGB")
+
     # Convert PIL Image to numpy array for detection
     img_array = np.array(image)
 
@@ -34,7 +39,19 @@ async def detect_emotion(file: UploadFile = File(...)):
     emotion, score = detect_face_emotion(img_array)
 
     if not emotion:
-        raise HTTPException(status_code=400, detail="No face or emotion detected")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "No face detected",
+                "message": "Please ensure your face is clearly visible in the image and try again.",
+                "suggestions": [
+                    "Make sure there is adequate lighting",
+                    "Position your face in the center of the frame",
+                    "Remove any obstructions (glasses, masks, etc.) if possible",
+                    "Try capturing the image from a different angle",
+                ],
+            },
+        )
 
     # Get insights for this emotion
     insights = {}
@@ -65,7 +82,7 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
     # Save uploaded file to temporary location
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
     temp_file_path = temp_file.name
-    
+
     # Important: Close the temp file handle immediately to avoid permission issues on Windows
     temp_file.close()
 
@@ -99,7 +116,9 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
         return {"emotion": emotion, "score": confidence, "insights": insights}
     except Exception as e:
         print(f"Error analyzing voice: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to analyze voice: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to analyze voice: {str(e)}"
+        )
     finally:
         # Clean up temporary file with better error handling
         try:
@@ -108,6 +127,7 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
         except PermissionError:
             # On Windows, sometimes the file is still locked, try a few times
             import time
+
             for i in range(3):
                 try:
                     time.sleep(0.1)  # Brief delay
@@ -115,7 +135,9 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
                     break
                 except PermissionError:
                     if i == 2:  # Last attempt
-                        print(f"Warning: Could not delete temporary file {temp_file_path}")
+                        print(
+                            f"Warning: Could not delete temporary file {temp_file_path}"
+                        )
         except Exception as cleanup_error:
             print(f"Warning: Error during cleanup: {str(cleanup_error)}")
 
@@ -128,11 +150,15 @@ async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
     """
     # Create a temporary file
     temp_dir = tempfile.gettempdir()
-    temp_file = os.path.join(temp_dir, f"voice_analysis_temp_{datetime.datetime.now().timestamp()}.wav")
+    temp_file = os.path.join(
+        temp_dir, f"voice_analysis_temp_{datetime.datetime.now().timestamp()}.wav"
+    )
 
     try:
         # Recording logic
-        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
+        recording = sd.rec(
+            int(duration * sample_rate), samplerate=sample_rate, channels=1
+        )
         sd.wait()
 
         # Save the recording
@@ -149,7 +175,9 @@ async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
         return {"emotion": emotion, "score": confidence, "insights": insights}
     except Exception as e:
         print(f"Error with voice recording: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to record and analyze voice: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to record and analyze voice: {str(e)}"
+        )
     finally:
         # Clean up temporary file
         try:
@@ -158,6 +186,7 @@ async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
         except PermissionError:
             # On Windows, sometimes the file is still locked, try a few times
             import time
+
             for i in range(3):
                 try:
                     time.sleep(0.1)  # Brief delay
@@ -168,6 +197,7 @@ async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
                         print(f"Warning: Could not delete temporary file {temp_file}")
         except Exception as cleanup_error:
             print(f"Warning: Error during cleanup: {str(cleanup_error)}")
+
 
 @router.get("/insights/{emotion_type}/{emotion}")
 async def get_emotion_insights(emotion_type: str, emotion: str):

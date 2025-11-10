@@ -10,7 +10,11 @@ router = APIRouter(prefix="/kyc", tags=["KYC"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/upload-images", response_model=Dict[str, Any], dependencies=[Depends(get_current_user)])
+@router.post(
+    "/upload-images",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(get_current_user)],
+)
 async def upload_images(
     selfie: UploadFile = File(
         ..., description="Selfie image for identity verification"
@@ -74,27 +78,32 @@ async def upload_images(
 
         logger.info(f"Images saved - Selfie: {selfie_path}, ID: {id_card_path}")
 
-        # Perform identity verification
-        verification_result = await kyc_service.verify_identity(
-            selfie_path, id_card_path
-        )
+        # List to track all files that need cleanup
+        files_to_cleanup = [selfie_path, id_card_path]
 
-        # Clean up uploaded files after verification
-        kyc_service.cleanup_images([selfie_path, id_card_path])
+        try:
+            # Perform identity verification
+            verification_result = await kyc_service.verify_identity(
+                selfie_path, id_card_path
+            )
 
-        logger.info(
-            f"KYC verification completed for user {user_id}: {verification_result['verified']}"
-        )
+            logger.info(
+                f"KYC verification completed for user {user_id}: {verification_result['verified']}"
+            )
 
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "status": "success",
-                "user_id": user_id,
-                "verification_result": verification_result,
-                "message": "Identity verification completed successfully",
-            },
-        )
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "status": "success",
+                    "user_id": user_id,
+                    "verification_result": verification_result,
+                    "message": "Identity verification completed successfully",
+                },
+            )
+        finally:
+            # Always clean up uploaded files, even if verification fails
+            kyc_service.cleanup_images(files_to_cleanup)
+            logger.info(f"Cleanup completed for user {user_id}")
 
     except Exception as e:
         logger.error(f"KYC verification failed for user {user_id}: {str(e)}")
@@ -104,7 +113,11 @@ async def upload_images(
         )
 
 
-@router.post("/verify-liveness", response_model=Dict[str, Any], dependencies=[Depends(get_current_user)])
+@router.post(
+    "/verify-liveness",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(get_current_user)],
+)
 async def verify_liveness(
     video: UploadFile = File(..., description="Short video for liveness detection"),
     user_id: str = Form(..., description="Unique user identifier"),
@@ -170,7 +183,11 @@ async def verify_liveness(
         )
 
 
-@router.get("/status/{user_id}", response_model=Dict[str, Any], dependencies=[Depends(get_current_user)])
+@router.get(
+    "/status/{user_id}",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(get_current_user)],
+)
 async def get_kyc_status(user_id: str):
     """
     Get KYC verification status for a user

@@ -60,7 +60,7 @@ The **Private & Intuitive Online Support Group System** is a comprehensive menta
 
 ### 🤖 Personalized AI Assistant
 
--   **Advanced LLM**: Powered by llama3-70b-8192 for empathetic responses
+-   **Advanced LLM**: Powered by llama-3.3-70b-versatile for empathetic responses
 -   **Agentic Framework**: LangGraph-powered AI that takes proactive actions
 -   **Web Integration**: Tavily search for relevant articles and resources
 -   **Continuous Learning**: Feedback-driven personalization
@@ -115,7 +115,7 @@ The **Private & Intuitive Online Support Group System** is a comprehensive menta
 ### AI & Machine Learning
 
 -   **Language Models**:
-    -   llama3-70b-8192 (Conversational AI)
+    -   llama-3.3-70b-versatile (Conversational AI)
     -   all-MiniLM-L6-v2 (Vector embeddings)
     -   Deepface VGG-Face (Facial recognition for KYC)
 -   **AI Framework**: LangChain for RAG pipelines, LangGraph for agentic workflows

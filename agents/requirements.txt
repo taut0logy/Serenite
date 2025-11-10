@@ -3,20 +3,24 @@ langchain
 langchain-core
 langchain-groq
 langchain-community
-langchain-huggingface
-langchain_astradb
+langchain-cohere
+langchain-tavily
+# langchain-astradb
+# langchain-huggingface
 langchain-postgres
 langgraph
+
 groq
 instructor
+cohere
 
 # Vector Databases and Embeddings
-sentence-transformers
+# sentence-transformers
 
 # Database and Storage
 psycopg2-binary
 sqlalchemy
-cassio
+# cassio
 
 # FastAPI and Web Framework
 fastapi
@@ -32,9 +36,10 @@ httpx
 requests
 
 # Computer Vision and Image Processing
-opencv-python
-deepface
+# opencv-python
+# deepface
 pillow
+boto3  # For AWS Rekognition
 
 # Audio Processing
 librosa
@@ -42,8 +47,8 @@ sounddevice
 
 # Data Science and Machine Learning
 numpy
-scipy==1.10.1
-tf-keras
+# scipy==1.10.1
+# tf-keras
 
 # External APIs and Data Sources
 tavily-python

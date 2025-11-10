@@ -43,7 +43,7 @@ import {
     GET_BACKUP_CODES,
     GET_TRUSTED_DEVICES,
 } from "@/graphql/operations";
-import { TrustedDevice } from "@/lib/generated/prisma";
+import { TrustedDevice } from "@prisma/client";
 
 export default function SecurityPage() {
     const { data: session } = useSession();

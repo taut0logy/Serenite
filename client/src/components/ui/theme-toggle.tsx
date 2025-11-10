@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useTheme } from "next-themes";
 import { motion } from "motion/react";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon, SunMoon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -15,7 +15,7 @@ import {
 const ThemeIcons = {
     light: Sun,
     dark: Moon,
-    system: Monitor,
+    system: SunMoon,
 };
 
 export function ThemeToggle() {
@@ -78,7 +78,7 @@ export function ThemeToggle() {
                     )}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setTheme("system")}>
-                    <Monitor className="mr-2 h-4 w-4" />
+                    <SunMoon className="mr-2 h-4 w-4" />
                     <span>System</span>
                     {currentTheme === "system" && (
                         <motion.span

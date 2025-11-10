@@ -168,7 +168,7 @@ async def generate_profile(answers: Dict[str, int]) -> MentalHealthProfile:
     ]
 
     resp = client.chat.completions.create(
-        model="mixtral-8x7b-32768",
+        model="llama-3.1-8b-instant",
         messages=messages,
         response_model=MentalHealthProfile,
     )

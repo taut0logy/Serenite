@@ -10,3 +10,6 @@ generated/
 .env*
 !.env.example
 demo/
+*.md
+!README.md
+models/

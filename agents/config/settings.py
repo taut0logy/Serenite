@@ -25,9 +25,26 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     GROQ_API_KEY: str
     TAVILY_API_KEY: str
-    ASTRA_DB_ID: str
-    ASTRA_DB_APPLICATION_TOKEN: str
-    ASTRA_DB_API_ENDPOINT: str
+
+    # Cohere API for embeddings (multilingual support for Bangla)
+    COHERE_API_KEY: str = ""
+
+    # AWS Rekognition for face detection/emotion/verification
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "us-east-1"
+
+    # AWS S3 for temporary file storage (optional)
+    USE_S3_STORAGE: bool = True
+    S3_TEMP_BUCKET: str = "serenite-temp"
+
+    # Deployment mode
+    USE_API_MODELS: bool = True
+
+    # AstraDB settings (optional - now using PostgreSQL)
+    ASTRA_DB_ID: str = ""
+    ASTRA_DB_APPLICATION_TOKEN: str = ""
+    ASTRA_DB_API_ENDPOINT: str = ""
 
     # Cache settings
     CACHE_TTL: int = 3600  # 1 hour
@@ -48,9 +65,8 @@ class Settings(BaseSettings):
     CORS_CREDENTIALS: bool = True
     CORS_METHODS: List[str] = ["*"]
     CORS_HEADERS: List[str] = ["*"]
-    
-    TF_ENABLE_ONEDNN_OPTS: int = 0  # Disable oneDNN optimizations for TensorFlow
 
+    TF_ENABLE_ONEDNN_OPTS: int = 0  # Disable oneDNN optimizations for TensorFlow
 
     class Config:
         env_file = ".env"

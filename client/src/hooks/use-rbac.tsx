@@ -39,6 +39,7 @@ export function useRBAC(requiredRole?: string) {
  * @param requiredRole The minimum required role
  * @returns A wrapped function that only executes if the user has permission
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function withPermission<T extends (...args: any[]) => any>(
     fn: T,
     requiredRole?: string

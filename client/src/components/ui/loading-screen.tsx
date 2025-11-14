@@ -9,7 +9,7 @@ interface LoadingScreenProps {
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message = 'Loading...' }) => {
   return (
-    <div className="flex h-[calc(100vh-4rem)] w-full items-center justify-center bg-background">
+    <div className="flex h-[calc(100vh-4rem-1px)] w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center justify-center gap-2">
         <motion.div
           animate={{ rotate: 360 }}

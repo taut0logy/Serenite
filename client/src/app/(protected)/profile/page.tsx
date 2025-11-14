@@ -6,7 +6,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useMutation } from "@apollo/client";
-import { useAuth, useConfirmPassword } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
+import { useConfirmPassword } from "@/hooks/use-confirm-password";
+import { useRefreshSession } from "@/lib/session-utils";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -43,7 +45,6 @@ import { UPDATE_PROFILE, DELETE_ACCOUNT } from "@/graphql/operations/mutations";
 import { signOut } from "next-auth/react";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getSession } from "next-auth/react";
 import Image from "next/image";
 
 // Profile form schema
@@ -75,6 +76,7 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
     const { user } = useAuth();
     const router = useRouter();
     const { confirmPassword, PasswordConfirmDialog } = useConfirmPassword();
+    const { refreshSession } = useRefreshSession();
 
     // GraphQL mutations
     const [updateProfile] = useMutation(UPDATE_PROFILE);
@@ -117,7 +119,7 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
                 );
 
                 // Refresh the session to get the updated user data
-                await getSession();
+                await refreshSession();
                 router.refresh();
             } else {
                 toast.error("Failed to update profile");
@@ -193,7 +195,6 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
                 {/* Profile Details Tab */}
                 <TabsContent value="details">
                     <Card>
-                        
                         <CardContent>
                             <div className="flex flex-col gap-6 pt-6">
                                 <div className="flex items-center gap-4">

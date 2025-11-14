@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-//import { useAuth } from "@/hooks/use-auth";
+//import { useAuth } from "@/providers/auth-provider";
 //import { LoadingScreen } from "@/components/ui/loading-screen";
 import StreamVideoProvider from "@/providers/stream-video-provider";
 

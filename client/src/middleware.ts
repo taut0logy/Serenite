@@ -30,12 +30,25 @@ const VERIFIED_PATHS = [
 
 export default auth((req) => {
   // Access token data from req.auth (provided by NextAuth middleware)
-  const isAuthenticated = !!req.auth;
-  const isVerified = req.auth?.user?.email_verified === true;
-  //const kycVerified = req.auth?.user?.kycVerified === true;
-  const hasPassword = req.auth?.user?.hasPassword === true;
-  const questionnaireCompleted = req.auth?.user?.questionnaireCompleted === true;
+  const isAuthenticated = !!req.auth?.user;
+  const user = req.auth?.user;
+
+  // Safely access user properties with fallbacks
+  const isVerified = user?.email_verified === true;
+  const hasPassword = user?.hasPassword === true;
+  const questionnaireCompleted = user?.questionnaireCompleted === true;
   const path = req.nextUrl.pathname;
+
+  // Debug logging (can be removed in production)
+  if (isAuthenticated) {
+    console.log('Middleware auth check:', {
+      path,
+      isAuthenticated,
+      hasPassword,
+      questionnaireCompleted,
+      isVerified,
+    });
+  }
 
   // Check if the path is a protected route
   const isProtectedPath = PROTECTED_PATHS.some(prefix =>
@@ -69,13 +82,13 @@ export default auth((req) => {
   //   return NextResponse.redirect(new URL('/auth/kyc-verification', req.url));
   // }
 
-  // CASE 4:User is verified but has no password set
+  // CASE 4: User is authenticated but has no password set
   if (isAuthenticated && !hasPassword && path !== '/auth/set-password') {
     return NextResponse.redirect(new URL('/auth/set-password', req.url));
   }
 
-  // CASE 5: User has password set and visits set-password page
-  if (hasPassword && path === '/auth/set-password') {
+  // CASE 5: User is authenticated, has password set, and visits set-password page
+  if (isAuthenticated && hasPassword && path === '/auth/set-password') {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
@@ -83,7 +96,7 @@ export default auth((req) => {
   // Only redirect to questionnaire from dashboard and other main app pages, not from questionnaire itself
   if (isAuthenticated && hasPassword && !questionnaireCompleted && path !== '/questionnaire') {
     // Only redirect from main app pages, not from auth pages
-    const shouldRedirectToQuestionnaire = ['/dashboard', '/profile', '/settings', '/mental-health-assistant', '/breathing-exercise', '/diary'].some(prefix =>
+    const shouldRedirectToQuestionnaire = ['/dashboard', '/mental-health-assistant', '/breathing-exercise', '/diary'].some(prefix =>
       path === prefix || path.startsWith(`${prefix}/`)
     );
 
@@ -93,7 +106,7 @@ export default auth((req) => {
   }
 
   // CASE 7: Questionnaire completed but user tries to access questionnaire page
-  if (questionnaireCompleted && path === '/questionnaire') {
+  if (isAuthenticated && questionnaireCompleted && path === '/questionnaire') {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 

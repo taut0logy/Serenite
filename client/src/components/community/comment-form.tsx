@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { addComment } from "@/actions/community.actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 
 type CommentFormProps = {
     postId: string;

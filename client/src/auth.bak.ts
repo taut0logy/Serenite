@@ -17,11 +17,13 @@ import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { getClient } from "@/lib/apollo-client";
-import { getAuthenticatedClient } from "@/lib/apollo-client";
 import type { User } from "next-auth";
-import { LOGIN, VERIFY_SESSION, SOCIAL_AUTH, CHECK_2FA_REQUIRED, LOGOUT } from "@/graphql/operations";
-import { VERIFY_2FA_TOKEN } from "@/graphql/operations/queries";
+import {
+  loginUser,
+  verifySession,
+  check2FARequired,
+  socialAuth,
+} from "@/actions/auth.actions";
 
 // Debug current environment variables (without exposing secrets)
 // console.log("Auth.ts: Environment check", {
@@ -59,26 +61,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           //   hasUserId: !!credentials.userId,
           // });
 
-          const apolloClient = getClient();
-
           // Case 1: Direct token login (coming from 2FA verification)
           if (credentials.token && credentials.userId) {
-            const { data } = await apolloClient.mutate({
-              mutation: VERIFY_SESSION,
-              variables: {
-                token: credentials.token,
-              },
-            });
-
-            const response = data?.verifySession || {};
+            const response = await verifySession(credentials.token as string);
 
             if (response.valid && response.user) {
-              const userProfile = response.user.profile || {};
 
               return {
                 id: response.user.id,
                 email: response.user.email || "",
-                image: userProfile.avatarUrl || "",
+                image: response.user.profile?.avatarUrl || "",
                 token: credentials.token,
                 role: response.user.role || "USER",
                 email_verified: response.user.verified || false,
@@ -90,23 +82,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           // Case 2: 2FA verification flow (post-OTP verification)
+          // We don't have a dedicated verify2FAToken action; reuse verifySessionAction when a token is provided
           if (credentials.twoFactorToken && credentials.email) {
-            const { data } = await apolloClient.query({
-              query: VERIFY_2FA_TOKEN,
-              variables: {
-                token: credentials.twoFactorToken,
-              },
-            });
-
-            const response = data?.verify2FAToken || {};
+            const response = await verifySession(credentials.twoFactorToken as string);
 
             if (response.valid && response.user) {
-              const userProfile = response.user.profile || {};
 
               return {
                 id: response.user.id,
                 email: response.user.email || "",
-                image: userProfile.avatarUrl || "",
+                image: response.user.profile?.avatarUrl || "",
                 token: credentials.twoFactorToken,
                 role: response.user.role || "USER",
                 email_verified: response.user.verified || false,
@@ -126,16 +111,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           //console.log("Checking 2FA with device token:", !!deviceToken);
 
           // First check if 2FA is required
-          const { data: checkData } = await apolloClient.mutate({
-            mutation: CHECK_2FA_REQUIRED,
-            variables: {
-              email: credentials.email,
-              password: credentials.password,
-              deviceToken,
-            },
-          });
-
-          const checkResult = checkData?.check2FARequired || {};
+          const checkResult = await check2FARequired(
+            credentials.email as string,
+            credentials.password as string,
+            deviceToken as string | undefined
+          );
           // console.log("2FA check result:", {
           //   success: checkResult.success,
           //   requiresTwoFactor: checkResult.requiresTwoFactor,
@@ -145,27 +125,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (checkResult.success && !checkResult.requiresTwoFactor) {
             //console.log("Proceeding with login, bypassing 2FA");
             // Perform the actual login
-            const { data } = await apolloClient.mutate({
-              mutation: LOGIN,
-              variables: {
-                email: credentials.email,
-                password: credentials.password,
-                deviceToken,
-              },
-            });
-
-            // Extract the response from the array that's returned by the server
-            const response = data?.login || {};
-
-            //console.log("Login Mutation response: ", response);
+            const response = await loginUser(
+              credentials.email as string,
+              credentials.password as string,
+              deviceToken as string | undefined
+            );
 
             if (response.token && response.user) {
-              const userProfile = response.user.profile || {};
-
               return {
                 id: response.user.id,
                 email: response.user.email || "",
-                image: userProfile.avatarUrl || "",
+                image: response.user.profile?.avatarUrl || "",
                 token: response.token,
                 role: response.user.role || "USER",
                 email_verified: response.user.verified || false,
@@ -229,8 +199,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       try {
-        const apolloClient = getClient();
-
         // Extract name parts based on provider
         let firstName = "";
         let lastName = "";
@@ -263,14 +231,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           avatarUrl: user.image || "",
         };
 
-        // Call the socialAuth mutation
-        const { data } = await apolloClient.mutate({
-          mutation: SOCIAL_AUTH,
-          variables: { input },
-        });
-
-        // Extract the response from the array
-        const response = data?.socialAuth || {};
+        // Call the social auth server action directly
+        const response = await socialAuth(
+          input.email,
+          input.provider,
+          input.providerId,
+          input.name,
+          input.firstName,
+          input.lastName,
+          input.avatarUrl
+        );
 
         if (response.success) {
           user.token = response.token;
@@ -288,13 +258,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return false;
       }
     },
-    async jwt({ token, user, account, trigger, session }) {
-      console.log("JWT callback triggered", {
-        trigger,
-        hasUser: !!user,
-        hasAccount: !!account,
-        hasSession: !!session,
-      });
+    async jwt({ token, user, account }) {
+      // console.log("JWT callback", {
+      //   user: user,
+      //   hasAccount: !!account,
+      //   tokenFields: token,
+      // });
 
       // Initial sign in
       if (account && user) {
@@ -309,107 +278,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email_verified: user.email_verified || false,
           hasPassword: user.hasPassword || false,
           kycVerified: user.kycVerified || false,
-          questionnaireCompleted: user.questionnaireCompleted || false,
         };
       }
-
-      // Force refresh when update is triggered (e.g., after profile update)
-      if (trigger === "update") {
-        console.log("Forcing token refresh due to update trigger");
-        if (token.accessToken) {
-          try {
-            // Use authenticated client for server-side calls
-            const apolloClient = getAuthenticatedClient(token.accessToken as string);
-            const { data } = await apolloClient.mutate({
-              mutation: VERIFY_SESSION,
-            });
-
-            const response = data?.verifySession || {};
-
-            if (response.valid && response.user) {
-              const userProfile = response.user.profile || {};
-              return {
-                ...token,
-                sub: response.user.id,
-                email: response.user.email,
-                picture: userProfile.avatarUrl || "",
-                role: response.user.role || "USER",
-                email_verified: response.user.verified || false,
-                hasPassword: response.user.hasPassword || false,
-                kycVerified: response.user.kycVerified || false,
-                questionnaireCompleted: response.user.questionnaireCompleted || false,
-                firstName: userProfile.firstName,
-                lastName: userProfile.lastName,
-                bio: userProfile.bio,
-                dob: userProfile.dob,
-                lastUpdate: Date.now(),
-              };
-            } else {
-              // Session is invalid (deleted, expired, or user deleted)
-              // Return null to force user to re-authenticate
-              console.error("Session validation failed during update - session is no longer valid");
-              return null;
-            }
-          } catch (error) {
-            console.error("Force token refresh error:", error);
-            // On error, invalidate the session to be safe
-            return null;
-          }
-        }
-        return token;
-      }
-
-      // If no access token, return token as is
-      if (!token.accessToken) {
-        return token;
-      }
-
-      // Periodically refresh user data from the server (every 5 minutes)
-      const lastUpdate = token.lastUpdate as number || 0;
-      const now = Date.now();
-      const shouldUpdate = now - lastUpdate > 5 * 60 * 1000; // 5 minutes
-
-      if (shouldUpdate && token.accessToken) {
-        try {
-          // Use authenticated client for server-side calls
-          const apolloClient = getAuthenticatedClient(token.accessToken as string);
-          const { data } = await apolloClient.mutate({
-            mutation: VERIFY_SESSION,
-          });
-
-          const response = data?.verifySession || {};
-
-          if (response.valid && response.user) {
-            const userProfile = response.user.profile || {};
-            return {
-              ...token,
-              sub: response.user.id,
-              email: response.user.email,
-              picture: userProfile.avatarUrl || "",
-              role: response.user.role || "USER",
-              email_verified: response.user.verified || false,
-              hasPassword: response.user.hasPassword || false,
-              kycVerified: response.user.kycVerified || false,
-              questionnaireCompleted: response.user.questionnaireCompleted || false,
-              firstName: userProfile.firstName,
-              lastName: userProfile.lastName,
-              bio: userProfile.bio,
-              dob: userProfile.dob,
-              lastUpdate: now,
-            };
-          } else {
-            // Session is invalid (deleted, expired, or user deleted)
-            // Return null to force user to re-authenticate
-            console.error("Session validation failed during periodic refresh - session is no longer valid");
-            return null;
-          }
-        } catch (error) {
-          console.error("Token refresh error in JWT callback:", error);
-          // On error, invalidate the session to be safe
-          return null;
-        }
-      }
-
       // Return the token as is
       return token;
     },
@@ -420,51 +290,59 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       //   tokenFields: token,
       // });
 
-      // Build user from token data (which is now periodically refreshed in jwt callback)
-      const user = {
-        id: token?.sub || "",
-        name: token?.name || `${token?.firstName || ""} ${token?.lastName || ""}`.trim() || undefined,
-        firstName: token?.firstName as string | undefined,
-        lastName: token?.lastName as string | undefined,
-        email: token?.email as string | undefined,
-        image: token?.picture as string | undefined,
-        role: (token?.role as string) || "USER",
-        bio: token?.bio as string | undefined,
-        dob: token?.dob as string | undefined,
-        email_verified: (token?.email_verified as boolean) || false,
-        hasPassword: (token?.hasPassword as boolean) || false,
-        kycVerified: (token?.kycVerified as boolean) || false,
-        questionnaireCompleted: (token?.questionnaireCompleted as boolean) || false,
-      };
+      let user;
+
+      try {
+        const response = await verifySession(token.accessToken as string);
+
+        if (response.valid && response.user) {
+
+          const profile = response.user.profile;
+
+          const userAny = response.user;
+
+          user = {
+            id: userAny.id,
+            email: userAny.email || "",
+            firstName: profile?.firstName || "User",
+            lastName: profile?.lastName || "",
+            bio: profile?.bio || "",
+            dob: profile?.dob,
+            image: profile?.avatarUrl || "",
+            role: userAny.role || "USER",
+            email_verified: userAny.verified || false,
+            hasPassword: userAny.hasPassword || false,
+            kycVerified: userAny.kycVerified || false,
+            questionnaireCompleted: userAny.questionnaireCompleted || false,
+          };
+        }
+      } catch (error) {
+        console.error("Token verification error:", error);
+        user = {
+          id: token?.sub || "",
+          name: token?.name,
+          firstName: token?.firstName,
+          lastName: token?.lastName,
+          email: token?.email,
+          image: token?.picture,
+          role: token?.role || "USER",
+          bio: token?.bio,
+          email_verified: token?.email_verified || false,
+          hasPassword: token?.hasPassword || false,
+          kycVerified: token?.kycVerified || false,
+          questionnaireCompleted: token?.questionnaireCompleted || false,
+        };
+      }
 
       const res = {
         ...session,
         user,
-        accessToken: token.accessToken as string,
+        accessToken: token.accessToken
       };
 
-      console.log("Current Session:", res);
+      /// console.log("Current Session:", res);
 
       return res;
-    },
-  },
-  events: {
-    async signOut(message) {
-      // Delete the session from database when user logs out
-      // This ensures the token cannot be used by other services (like Python agents)
-      // Check if message has token (JWT strategy)
-      if ('token' in message && message.token?.accessToken) {
-        const token = message.token.accessToken as string;
-        try {
-          // Use authenticated client for server-side calls
-          const apolloClient = getAuthenticatedClient(token);
-          await apolloClient.mutate({
-            mutation: LOGOUT,
-          });
-        } catch (error) {
-          console.error("Error deleting session on logout:", error);
-        }
-      }
     },
   },
   pages: {

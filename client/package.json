@@ -8,7 +8,12 @@
         "start": "next start",
         "lint": "next lint",
         "gen": "prisma generate",
-        "db:push": "prisma db push"
+        "db:push": "prisma db push",
+        "db:seed": "tsx prisma/seed.ts",
+        "db:seed:complete": "tsx prisma/seed-complete.ts"
+    },
+    "prisma": {
+        "seed": "tsx prisma/seed.ts"
     },
     "dependencies": {
         "@apollo/client": "^3.13.9",
@@ -104,6 +109,7 @@
         "eslint-config-next": "15.0.3",
         "postcss": "^8",
         "tailwindcss": "^3.4.1",
+        "tsx": "^4.20.6",
         "typescript": "^5"
     }
 }

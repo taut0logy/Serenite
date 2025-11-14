@@ -30,6 +30,7 @@ pydantic
 pydantic-settings
 python-dotenv
 python-multipart
+nest-asyncio
 
 # HTTP Clients and Networking
 httpx

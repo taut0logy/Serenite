@@ -815,7 +815,7 @@ export default function MentalHealthAssistant() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-65px)] bg-muted/30 dark:bg-gray-950">
+        <div className="flex flex-col h-[calc(100vh-4rem-1px)] bg-muted/30 dark:bg-gray-950">
             {/* Header */}
             <header className="bg-background border-b py-3 px-4 sm:px-6 sticky top-0 z-10 shadow-sm">
                 <div className="flex justify-between items-center max-w-7xl mx-auto">

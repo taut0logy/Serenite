@@ -27,7 +27,7 @@ export default function VerifyOtpPage() {
     return (
         <Suspense
             fallback={
-                <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
+                <div className="flex items-center justify-center min-h-[calc(100vh-4rem-1px)]">
                     <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
                 </div>
             }

@@ -226,9 +226,20 @@ export const authResolvers = {
             }
         },
 
-        logout: async (_, { token }: { token: string }) => {
+        logout: async (_, { token }: { token?: string }, ctx) => {
             try {
-                const result = await authService.logoutUser(token);
+                // Use token from context if not provided in variables
+                // This allows flexibility: can use Authorization header OR pass token explicitly
+                const sessionToken = token || ctx.token;
+
+                if (!sessionToken) {
+                    return {
+                        success: false,
+                        message: "No authentication token provided",
+                    };
+                }
+
+                const result = await authService.logoutUser(sessionToken);
                 return result;
             } catch (error) {
                 console.error("Logout error:", error);
@@ -239,9 +250,20 @@ export const authResolvers = {
             }
         },
 
-        verifySession: async (_, { token }: { token: string }) => {
+        verifySession: async (_, { token }: { token?: string }, ctx) => {
             try {
-                const result = await authService.verifySession(token);
+                // Use token from context if not provided in variables
+                // This allows flexibility: can use Authorization header OR pass token explicitly
+                const sessionToken = token || ctx.token;
+
+                if (!sessionToken) {
+                    return {
+                        valid: false,
+                        user: null,
+                    };
+                }
+
+                const result = await authService.verifySession(sessionToken);
                 return result;
             } catch (error) {
                 console.error("Session verification error:", error);
@@ -658,7 +680,7 @@ export const authResolvers = {
                         user: null,
                     };
                 }
-                
+
                 const user2 = await context.prisma.user.update({
                     where: { id: input.userId },
                     data: { kycVerified: input.kycVerified },

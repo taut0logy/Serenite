@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState } from "react";
 import { StreamVideo, StreamVideoClient } from "@stream-io/video-react-sdk";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 import { Loader2 } from "lucide-react";
 import { tokenProvider } from "@/actions/stream.actions";
 
@@ -38,7 +38,7 @@ const StreamVideoProvider = ({ children }: { children: ReactNode }) => {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center bg-background min-h-screen">
+            <div className="flex items-center justify-center bg-background h-[calc(100vh-4rem-1px)]">
                 <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );

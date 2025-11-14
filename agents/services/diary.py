@@ -55,7 +55,7 @@ except Exception as e:
     raise
 
 model = ChatGroq(
-    groq_api_key=groq_api_key, model_name="llama3-70b-8192", temperature=0.7
+    groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile", temperature=0.7
 )
 
 

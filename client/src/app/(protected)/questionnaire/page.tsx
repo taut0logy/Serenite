@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
     QuestionnaireIntro,
     QuestionnaireSlide,
@@ -8,11 +9,12 @@ import {
 import { QuestionnaireReview } from "@/components/questionnaire/questionnaire-review";
 import { useQuestionnaireStore } from "@/stores/use-questionnaire-store";
 import { useQuestionnaire } from "@/hooks/use-questionnaire";
+import { useRefreshSession } from "@/lib/session-utils";
 import { toast } from "sonner";
-import { redirectToDashboard } from "@/actions/questionnaire.actions";
 
 export default function QuestionnairePage() {
     const store = useQuestionnaireStore();
+    const { refreshSession } = useRefreshSession();
     const {
         submitQuestionnaire,
         isSubmitting,
@@ -21,16 +23,22 @@ export default function QuestionnairePage() {
         findFirstIncompleteSlide,
     } = useQuestionnaire();
 
+    // Scroll to top when state or slide changes
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }, [store.state, store.currentSlide]);
+
     // Handle submission
     const handleSubmit = async () => {
         try {
             const result = await submitQuestionnaire();
 
             if (result.success) {
-                toast.info(
-                    "Thanks a lot! Let your journey begin."
-                );
-                await redirectToDashboard();
+                toast.success("Thanks a lot! Let your journey begin.");
+
+                // Refresh session for updated user data
+                await refreshSession();
+
             }
         } catch (error) {
             console.error("Error submitting questionnaire:", error);

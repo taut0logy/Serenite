@@ -60,7 +60,7 @@ groq_api_key = settings.GROQ_API_KEY
 tavily_api_key = settings.TAVILY_API_KEY
 
 # Set up LLM
-llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-70b-8192", temperature=0.7)
+llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile", temperature=0.7)
 
 # Set up embeddings (uses Cohere API in production, HuggingFace in dev)
 embeddings = get_embeddings()

@@ -63,6 +63,16 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "An unexpected error occurred. Please try again later."},
     )
+    
+@app.get("/")
+async def root(request: Request):
+    """Root endpoint."""
+    return {
+        "message": "Welcome to the Serenite API",
+        "version": settings.APP_VERSION,
+        "timestamp": datetime.now().isoformat(),
+        "docs_url": f"{request.url_for('swagger_ui_html')}",
+    }
 
 
 @app.get("/health")

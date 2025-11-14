@@ -1,7 +1,15 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
 import io
 import numpy as np
-import sounddevice as sd
+
+# Conditionally import sounddevice (not needed in production with API models)
+try:
+    import sounddevice as sd
+    SOUNDDEVICE_AVAILABLE = True
+except (ImportError, OSError):
+    SOUNDDEVICE_AVAILABLE = False
+    sd = None
+
 from scipy.io.wavfile import write
 import tempfile
 import os
@@ -148,6 +156,12 @@ async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
     Record voice directly on the server (for testing purposes)
     In production, voice should be recorded on client and uploaded
     """
+    if not SOUNDDEVICE_AVAILABLE:
+        raise HTTPException(
+            status_code=501,
+            detail="Voice recording not available on this server. Please use the upload endpoint instead."
+        )
+    
     # Create a temporary file
     temp_dir = tempfile.gettempdir()
     temp_file = os.path.join(

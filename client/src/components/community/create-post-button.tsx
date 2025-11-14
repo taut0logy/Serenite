@@ -17,10 +17,10 @@ import { createPost } from "@/actions/community.actions";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 
 export default function CreatePostButton() {
-    const { isAuthenticated } = useAuth({ required: true });
+    const { isAuthenticated } = useAuth();
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [title, setTitle] = useState("");

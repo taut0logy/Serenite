@@ -137,7 +137,7 @@ export const VERIFY_BACKUP_CODE = gql`
 `;
 
 export const VERIFY_SESSION = gql`
-  mutation VerifySession($token: String!) {
+  mutation VerifySession($token: String) {
     verifySession(token: $token) {
         valid
         user {
@@ -304,7 +304,7 @@ export const DELETE_ACCOUNT = gql`
 `;
 
 export const LOGOUT = gql`
-  mutation Logout($token: String!) {
+  mutation Logout($token: String) {
     logout(token: $token) {
         success
         message

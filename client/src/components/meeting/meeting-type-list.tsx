@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Call, useStreamVideoClient } from "@stream-io/video-react-sdk";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 
 import HomeCard from "./home-card";

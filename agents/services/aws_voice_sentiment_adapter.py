@@ -221,7 +221,7 @@ class AWSVoiceSentimentAdapter:
                         self.transcribe_client.delete_transcription_job(
                             TranscriptionJobName=job_name
                         )
-                    except:
+                    except Exception:
                         pass
 
                     return transcript_text

@@ -40,8 +40,9 @@ import {
     type KYCVerificationResult,
     type KYCUploadResponse,
 } from "@/services/kyc.service";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 import { UPDATE_KYC_STATUS } from "@/graphql/operations";
+import { useRefreshSession } from "@/lib/session-utils";
 
 const kycSchema = z.object({
     selfie: z
@@ -64,6 +65,7 @@ interface VerificationStep {
 export default function KYCVerificationPage() {
     const router = useRouter();
     const { user } = useAuth();
+    const { refreshSession } = useRefreshSession();
     const [updateKycStatus] = useMutation(UPDATE_KYC_STATUS);
     const [isLoading, setIsLoading] = useState(false);
     const [currentStep, setCurrentStep] = useState(1);
@@ -136,7 +138,6 @@ export default function KYCVerificationPage() {
     };
 
     async function onSubmit(data: KYCFormValues) {
-
         setIsLoading(true);
         setCurrentStep(2);
 
@@ -172,14 +173,12 @@ export default function KYCVerificationPage() {
 
                         if (kycUpdateData?.updateKycStatus?.success) {
                             // Update the session to reflect the new KYC status
-                            
+                            await refreshSession();
 
                             toast.success("Identity verification successful!");
 
-                            // Redirect to dashboard after a short delay
-                            setTimeout(() => {
-                                router.push("/dashboard");
-                            }, 2000);
+                            // Redirect to dashboard with updated session
+                            router.push("/dashboard");
                         } else {
                             toast.error(
                                 "Failed to update verification status. Please contact support."

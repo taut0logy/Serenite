@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,8 +16,9 @@ import {
 } from "@/components/ui/form";
 import { toast } from "sonner";
 import { SET_PASSWORD } from "@/graphql/operations";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 import PasswordField from "@/components/ui/password-field";
+import { useRefreshSession } from "@/lib/session-utils";
 
 const setPasswordSchema = z
     .object({
@@ -39,7 +39,6 @@ export default function SetPasswordPage() {
 }
 
 const SetPasswordForm = () => {
-    const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [setPassword] = useMutation(SET_PASSWORD);
     const [status, setStatus] = useState<"loading" | "success" | "error">(
@@ -48,6 +47,7 @@ const SetPasswordForm = () => {
     const [message, setMessage] = useState<string>("");
 
     const { user } = useAuth();
+    const { refreshSession } = useRefreshSession();
 
     const form = useForm<SetPasswordFormValues>({
         resolver: zodResolver(setPasswordSchema),
@@ -75,7 +75,9 @@ const SetPasswordForm = () => {
                 setStatus("success");
                 setMessage(response.message || "Password set successfully");
                 toast.success(response.message || "Password set successfully");
-                router.push("/auth/login");
+
+                // Refresh the session to get updated user data
+                await refreshSession();
             } else {
                 setStatus("error");
                 setMessage(response.message || "Failed to set password");

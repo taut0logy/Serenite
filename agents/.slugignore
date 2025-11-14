@@ -4,7 +4,6 @@ __pycache__/
 .venv/
 venv/
 env/
-models/
 .pytest_cache/
 .coverage
 htmlcov/
@@ -17,9 +16,11 @@ build/
 *.swp
 *.swo
 *~
-.python-version
 temp_storage/
 uploads/
 services/uploads/
 services/temp_storage/
 *.log
+*.sh
+*.md
+

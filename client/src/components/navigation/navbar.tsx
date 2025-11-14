@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -131,7 +131,18 @@ export function Navbar() {
 
     // Get user initials for avatar fallback
     const getUserInitials = () => {
-        if (!user || !user.firstName || !user.lastName) return "U";
+        if (!user?.firstName || !user?.lastName) {
+            if (user?.name) {
+                const nameParts = user.name.split(" ");
+                if (nameParts.length >= 2) {
+                    return `${nameParts[0][0]}${
+                        nameParts[nameParts.length - 1][0]
+                    }`.toUpperCase();
+                }
+                return user.name[0]?.toUpperCase() || "U";
+            }
+            return "U";
+        }
         return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
     };
 

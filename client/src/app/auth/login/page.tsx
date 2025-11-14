@@ -220,13 +220,6 @@ export default function LoginPage() {
                             </Button>
                         </div>
 
-                        <div className="text-center text-xs text-muted-foreground">
-                            <p>
-                                Social login accounts will be automatically
-                                linked with existing email accounts
-                            </p>
-                        </div>
-
                         <div className="text-center text-sm">
                             Don&apos;t have an account?{" "}
                             <Link

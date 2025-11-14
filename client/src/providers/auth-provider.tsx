@@ -1,14 +1,8 @@
 "use client";
 
-import {
-    createContext,
-    useContext,
-    useEffect,
-    useState,
-    ReactNode,
-} from "react";
+import { createContext, useContext, ReactNode } from "react";
 import { useSession } from "next-auth/react";
-import { signOut } from "@/auth";
+import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 
@@ -26,13 +20,11 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: session, status } = useSession();
     const router = useRouter();
-    const [isLoading, setIsLoading] = useState<boolean>(true);
 
-    // Extract user from session
+    // Extract user from session - this will automatically update when session changes
     const user = session?.user as User | null;
 
-    //console.log("[Auth provider]: user---", user);
-
+    const isLoading = status === "loading";
     const isAuthenticated = !!user;
     const isVerified = !!user?.email_verified;
 
@@ -61,13 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.push("/auth/login");
     };
 
-    // Effect to handle loading state
-    useEffect(() => {
-        if (status !== "loading") {
-            setIsLoading(false);
-        }
-    }, [status]);
-
     const value = {
         user,
         isLoading,
@@ -82,10 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 }
 
-export function useAuthContext() {
+export function useAuth() {
     const context = useContext(AuthContext);
     if (context === undefined) {
-        throw new Error("useAuthContext must be used within an AuthProvider");
+        throw new Error("useAuth must be used within an AuthProvider");
     }
     return context;
 }

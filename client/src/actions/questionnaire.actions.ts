@@ -2,7 +2,6 @@
 
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
-import { redirect } from "next/navigation";
 import axios from "@/lib/axios";
 
 export async function saveQuestionnaireProgress(responses: Record<string, number>) {
@@ -143,6 +142,10 @@ async function generateMentalHealthProfile(responses: Record<string, number>) {
         });
 
         console.log("Mental health profile generated successfully");
+
+        // Force session update by revalidating the path
+        // This will trigger the session callback to refetch user data
+        return { success: true };
     } catch (error) {
         console.error("Error generating mental health profile:", error);
         throw error;
@@ -174,8 +177,4 @@ export async function getQuestionnaireProgress() {
         console.error("Error getting questionnaire progress:", error);
         return { success: false, error: "Failed to load progress" };
     }
-}
-
-export async function redirectToDashboard() {
-    redirect("/dashboard");
 }

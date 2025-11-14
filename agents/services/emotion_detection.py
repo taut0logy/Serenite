@@ -311,8 +311,8 @@ def analyze_voice(file_path):
         y, sr = librosa.load(file_path, duration=5)
 
         # Extract some basic audio features
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-        mfcc_processed = np.mean(mfcc.T, axis=0)
+        # mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        # mfcc_processed = np.mean(mfcc.T, axis=0)
 
         # In a real implementation, you would use your model here
         # For demonstration, randomly select an emotion

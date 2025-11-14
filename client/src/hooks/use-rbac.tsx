@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuthContext } from "@/providers/auth-provider";
+import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { useEffect } from "react";
 
@@ -11,7 +11,7 @@ import { useEffect } from "react";
  * @returns Object with permission check results
  */
 export function useRBAC(requiredRole?: string) {
-    const { isLoading, hasPermission } = useAuthContext();
+    const { isLoading, hasPermission } = useAuth();
 
     // Check if user has required role
     const canAccess = hasPermission(requiredRole);

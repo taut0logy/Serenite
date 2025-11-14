@@ -225,8 +225,7 @@ type NotificationsPayload {
 }
 
 type Mutation {
-  # Session verification
-  verifySession(token: String!): VerifyPayload!
+  verifySession(token: String): VerifyPayload!
   # Account creation and verification
   register(input: RegisterInput!): AuthPayload!
   resendVerificationEmail(email: String!): SimplePayload!
@@ -236,7 +235,7 @@ type Mutation {
 
   # Authentication
   login(email: String!, password: String!, deviceToken: String): LoginPayload!
-  logout(token: String!): SimplePayload!
+  logout(token: String): SimplePayload!
 
   # Password management
   forgotPassword(email: String!): SimplePayload!

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/providers/auth-provider";
 import { StreamCall, StreamTheme } from "@stream-io/video-react-sdk";
 import MeetingSetup from "@/components/meeting/meeting-setup";
 import MeetingRoom from "@/components/meeting/meeting-room";
@@ -23,7 +23,7 @@ export default function MeetingPage() {
 }
 
 const MeetingPageContent = ({ id }: { id: string }) => {
-    const { isLoading, user } = useAuth({ required: true });
+    const { isLoading, user } = useAuth();
     const { call, isCallLoading } = useGetCallById(id);
     const [isSetupComplete, setIsSetupComplete] = useState(false);
     const [error, setError] = useState<string | null>(null);

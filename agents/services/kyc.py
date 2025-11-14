@@ -1,5 +1,4 @@
 from fastapi import HTTPException
-import cv2
 import numpy as np
 import os
 from typing import List, Tuple, Dict, Any
@@ -19,6 +18,21 @@ except ImportError:
     USE_REKOGNITION = False
     logger.warning("AWS Rekognition adapter not available, using fallback")
 
+# Conditionally import cv2 only if not using Rekognition (for fallback methods)
+if not USE_REKOGNITION:
+    try:
+        import cv2
+
+        CV2_AVAILABLE = True
+        logger.info("Using OpenCV for face detection (fallback mode)")
+    except ImportError:
+        CV2_AVAILABLE = False
+        logger.error("OpenCV not available and Rekognition not configured")
+else:
+    CV2_AVAILABLE = False
+    cv2 = None  # Avoid undefined variable errors
+    logger.info("Using AWS Rekognition (OpenCV not needed)")
+
 # Fallback to DeepFace if AWS Rekognition not configured
 if not USE_REKOGNITION:
     try:
@@ -37,10 +51,13 @@ class KYCService:
         self.upload_dir = os.path.join(current_dir, "uploads")
         self.ensure_upload_directory()
 
-        # Initialize face detection cascade
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
+        # Initialize face detection cascade only if cv2 is available
+        if CV2_AVAILABLE:
+            self.face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            )
+        else:
+            self.face_cascade = None
 
         # Verification thresholds
         self.VERIFICATION_THRESHOLD = (
@@ -52,9 +69,15 @@ class KYCService:
         self.MIN_FACE_SIZE = (50, 50)  # Minimum face size for detection
         self.MAX_VERIFICATION_DISTANCE = 0.4  # Maximum distance for face verification
 
+        verification_method = (
+            "AWS Rekognition"
+            if USE_REKOGNITION
+            else ("OpenCV + DeepFace" if CV2_AVAILABLE else "Not Available")
+        )
         logger.info(
             f"Enhanced KYC Service initialized with upload directory: {self.upload_dir}"
         )
+        logger.info(f"Face verification method: {verification_method}")
 
     def ensure_upload_directory(self):
         """Ensure the upload directory exists"""
@@ -73,6 +96,9 @@ class KYCService:
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """Preprocess image for better face detection"""
+        if not CV2_AVAILABLE:
+            return image  # Return original if cv2 not available
+
         try:
             # Convert to RGB if needed
             if len(image.shape) == 3 and image.shape[2] == 3:
@@ -105,6 +131,12 @@ class KYCService:
         Detect and extract faces from image with metadata
         Returns list of (face_image, metadata) tuples
         """
+        if not CV2_AVAILABLE:
+            raise HTTPException(
+                status_code=501,
+                detail="Face detection not available. Please configure AWS Rekognition.",
+            )
+
         try:
             faces_data = []
 
@@ -246,6 +278,20 @@ class KYCService:
 
             logger.info(f"Attempting to save {image_type} image for user {user_id}")
 
+            if not CV2_AVAILABLE:
+                # When cv2 not available, save directly without validation
+                # This is acceptable in production where we use Rekognition
+                file_key = await s3_storage.save_file(
+                    file_data=file_data,
+                    user_id=user_id,
+                    filename=filename,
+                    content_type="image/jpeg",
+                )
+                logger.info(
+                    f"Successfully saved {image_type} image (no cv2): {file_key}"
+                )
+                return file_key
+
             # Convert bytes to numpy array
             nparr = np.frombuffer(file_data, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -341,7 +387,46 @@ class KYCService:
                     status_code=404, detail="ID card image not found or corrupted"
                 )
 
-            # Decode images from bytes
+            if not CV2_AVAILABLE:
+                # When cv2 not available, use Rekognition directly without face detection
+                if not USE_REKOGNITION:
+                    raise HTTPException(
+                        status_code=501,
+                        detail="Face verification not available. Please configure AWS Rekognition or install OpenCV.",
+                    )
+
+                logger.info("Using direct Rekognition verification (no cv2)")
+
+                # Use Rekognition to verify directly from image bytes
+                # For Rekognition, we need to convert bytes to numpy array for the rekognition service
+                import numpy as np
+
+                selfie_nparr = np.frombuffer(selfie_bytes, np.uint8)
+                id_nparr = np.frombuffer(id_card_bytes, np.uint8)
+
+                # For Rekognition, we'll use PIL to load images since cv2 is not available
+                from PIL import Image
+                import io
+
+                selfie_img = np.array(Image.open(io.BytesIO(selfie_bytes)))
+                id_card_img = np.array(Image.open(io.BytesIO(id_card_bytes)))
+
+                result = rekognition.verify_faces(
+                    selfie_img,
+                    id_card_img,
+                    similarity_threshold=self.REKOGNITION_THRESHOLD,
+                )
+
+                return {
+                    "verification_method": "AWS-Rekognition-Direct",
+                    "verified": result["verified"],
+                    "similarity": result["similarity"],
+                    "confidence": result["confidence"],
+                    "threshold": self.REKOGNITION_THRESHOLD,
+                    "timestamp": datetime.now().isoformat(),
+                }
+
+            # Decode images from bytes using cv2
             selfie_img = cv2.imdecode(
                 np.frombuffer(selfie_bytes, np.uint8), cv2.IMREAD_COLOR
             )
@@ -389,12 +474,31 @@ class KYCService:
             id_face_filename = f"{user_id}_id_face_{timestamp}.jpg"
 
             # Encode face crops to bytes
-            _, selfie_face_encoded = cv2.imencode(
-                ".jpg", cv2.cvtColor(best_selfie_face, cv2.COLOR_RGB2BGR)
-            )
-            _, id_face_encoded = cv2.imencode(
-                ".jpg", cv2.cvtColor(best_id_face, cv2.COLOR_RGB2BGR)
-            )
+            if CV2_AVAILABLE:
+                _, selfie_face_encoded = cv2.imencode(
+                    ".jpg", cv2.cvtColor(best_selfie_face, cv2.COLOR_RGB2BGR)
+                )
+                _, id_face_encoded = cv2.imencode(
+                    ".jpg", cv2.cvtColor(best_id_face, cv2.COLOR_RGB2BGR)
+                )
+            else:
+                # Use PIL when cv2 not available
+                from PIL import Image
+                import io
+
+                selfie_pil = Image.fromarray(best_selfie_face.astype("uint8"), "RGB")
+                id_pil = Image.fromarray(best_id_face.astype("uint8"), "RGB")
+
+                selfie_io = io.BytesIO()
+                id_io = io.BytesIO()
+
+                selfie_pil.save(selfie_io, format="JPEG")
+                id_pil.save(id_io, format="JPEG")
+
+                selfie_face_encoded = np.frombuffer(
+                    selfie_io.getvalue(), dtype=np.uint8
+                )
+                id_face_encoded = np.frombuffer(id_io.getvalue(), dtype=np.uint8)
 
             # Save face crops using S3 storage adapter
             selfie_face_path = await s3_storage.save_file(

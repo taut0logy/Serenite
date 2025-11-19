@@ -39,7 +39,7 @@ import {
     kycService,
     type KYCVerificationResult,
     type KYCUploadResponse,
-} from "@/services/kyc.service";
+} from "@/actions/kyc.actions";
 import { useAuth } from "@/providers/auth-provider";
 import { UPDATE_KYC_STATUS } from "@/graphql/operations";
 import { useRefreshSession } from "@/lib/session-utils";

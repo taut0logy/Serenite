@@ -6,7 +6,7 @@ import {
     type KYCVerificationResult,
     type KYCStatusInfo,
     type LivenessVerificationResult,
-} from '@/services/kyc.service';
+} from '@/actions/kyc.actions';
 
 export interface UseKYCReturn {
     // State

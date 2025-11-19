@@ -26,7 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { useKYC } from "@/hooks/use-kyc";
-import { kycService } from "@/services/kyc.service";
+import { kycService } from "@/actions/kyc.actions";
 import { UPDATE_KYC_STATUS } from "@/graphql/operations";
 
 export default function KYCTestingPage() {

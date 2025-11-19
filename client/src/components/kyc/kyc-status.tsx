@@ -10,7 +10,7 @@ import {
     AlertTriangle,
 } from "lucide-react";
 import { useKYC } from "@/hooks/use-kyc";
-import { kycService } from "@/services/kyc.service";
+import { kycService } from "@/actions/kyc.actions";
 
 interface KYCStatusComponentProps {
     userId?: string;

@@ -549,9 +549,12 @@ export async function check2FARequired(
       return {
         success: true,
         message: "Login requires 2FA verification",
-        requiresTwoFactor: true,
+        requires2FA: true,
         tempToken: otpResult.tempToken,
-        userId: user.id,
+        user: {
+          id: user.id,
+          email: user.email,
+        },
       };
     }
 
@@ -559,7 +562,7 @@ export async function check2FARequired(
     return {
       success: true,
       message: "Login does not require 2FA",
-      requiresTwoFactor: false,
+      requires2FA: false,
     };
   } catch (error) {
     console.error("Error checking 2FA requirement:", error);

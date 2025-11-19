@@ -61,7 +61,7 @@ export default function VerifyRequestPage() {
     };
 
     return (
-        <div className="flex items-center justify-center px-4 py-6 sm:px-6 lg:px-8">
+        <div className="h-full flex items-center justify-center px-4 py-auto sm:px-6 lg:px-8">
             <div className="w-full max-w-md space-y-8">
                 <div className="text-center">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
@@ -77,38 +77,8 @@ export default function VerifyRequestPage() {
                 </div>
 
                 <div className="mt-8 space-y-6">
-                    <div className="rounded-lg border border-border bg-card p-6">
-                        <h2 className="text-lg font-medium">
-                            What happens next?
-                        </h2>
-                        <ul className="mt-4 space-y-3 text-sm">
-                            <li className="flex items-start">
-                                <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                                    1
-                                </span>
-                                <span>
-                                    Click the link in the email we sent you
-                                </span>
-                            </li>
-                            <li className="flex items-start">
-                                <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                                    2
-                                </span>
-                                <span>Your email address will be verified</span>
-                            </li>
-                            <li className="flex items-start">
-                                <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                                    3
-                                </span>
-                                <span>
-                                    You&apos;ll be redirected to sign in
-                                </span>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <div className="text-center">
-                        <p className="text-sm text-muted-foreground">
+                    <div className="">
+                        <p className="text-xl text-center font-bold mb-4">
                             Didn&apos;t receive an email?
                         </p>
                         <Form {...form}>
@@ -139,24 +109,28 @@ export default function VerifyRequestPage() {
                                         {error.message}
                                     </div>
                                 )}
-
-                                <Button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="mt-4"
-                                >
-                                    {loading ? "Sending..." : "Resend email"}
-                                </Button>
+                                <div className="flex items-center mt-4 gap-4">
+                                    <Button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="flex-1"
+                                    >
+                                        {loading
+                                            ? "Sending..."
+                                            : "Resend email"}
+                                    </Button>
+                                    <Link href="/auth/login" className="flex-1">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="w-full"
+                                        >
+                                            Back to sign in
+                                        </Button>
+                                    </Link>
+                                </div>
                             </form>
                         </Form>
-                    </div>
-
-                    <div className="text-center">
-                        <Link href="/auth/login">
-                            <Button variant="outline" className="w-full">
-                                Back to sign in
-                            </Button>
-                        </Link>
                     </div>
                 </div>
             </div>

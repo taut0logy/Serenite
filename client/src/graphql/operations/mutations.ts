@@ -108,6 +108,11 @@ export const VERIFY_OTP = gql`
       success
       message
       token
+      deviceToken
+      user {
+        id
+        email
+      }
     }
   }
 `;
@@ -132,6 +137,11 @@ export const VERIFY_BACKUP_CODE = gql`
       success
       message
       token
+      deviceToken
+      user {
+        id
+        email
+      }
     }
   }
 `;
@@ -200,21 +210,10 @@ export const CHECK_2FA_REQUIRED = gql`
         success
         message
         requires2FA
-        token
         tempToken
         user {
           id
           email
-          verified
-          role
-          hasPassword
-          profile {
-            firstName
-            lastName
-            bio
-            dob
-            avatarUrl
-          }
         }
       }
     }

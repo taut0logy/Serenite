@@ -67,7 +67,8 @@ export default function LoginPage() {
 
             const checkResult = checkData?.check2FARequired;
             if (!checkResult?.success) {
-                toast.error(checkResult?.message);
+                setIsLoading(false);
+                toast.error(checkResult?.message || "Login failed");
                 if (
                     checkResult?.message ===
                     "Please verify your email before logging in"
@@ -78,11 +79,23 @@ export default function LoginPage() {
             }
 
             // If check was successful and 2FA is required
-            if (checkResult?.success && checkResult?.requiresTwoFactor) {
-                // Redirect to OTP verification page with required parameters
+            const requires2FA = checkResult?.requires2FA;
+            if (checkResult?.success && requires2FA) {
+                console.log("2FA required, redirecting to OTP page");
                 toast.info("Two-factor authentication required");
+                setIsLoading(false);
+                
+                // Get userId from the nested user object
+                const userId = checkResult?.user?.id;
+                
+                if (!userId || !checkResult.tempToken) {
+                    console.error("Missing userId or tempToken in 2FA response");
+                    toast.error("Failed to initiate 2FA verification");
+                    return;
+                }
+                
                 router.push(
-                    `/auth/verify-otp?userId=${checkResult.userId}&tempToken=${checkResult.tempToken}&email=${data.email}`
+                    `/auth/verify-otp?userId=${userId}&tempToken=${checkResult.tempToken}&email=${data.email}`
                 );
                 return;
             }

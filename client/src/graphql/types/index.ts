@@ -147,6 +147,8 @@ type OtpVerifyPayload {
   success: Boolean!
   message: String!
   token: String
+  deviceToken: String
+  user: User
 }
 
 type BackupCodesPayload {

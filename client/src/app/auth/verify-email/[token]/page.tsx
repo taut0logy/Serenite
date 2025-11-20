@@ -4,12 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMutation } from "@apollo/client";
 import { Suspense } from "react";
 
 import { Button } from "@/components/ui/button";
 import { MdCheckCircleOutline, MdErrorOutline } from "react-icons/md";
-import { VERIFY_EMAIL } from "@/graphql/operations";
+import { verifyEmail } from "@/actions/auth.actions";
 
 export default function VerifyEmailPage() {
     const params = useParams();
@@ -34,7 +33,6 @@ const Fallback = () => {
 
 const VerifyEmailContent = ({ token }: { token: string }) => {
     const router = useRouter();
-    const [verifyEmail] = useMutation(VERIFY_EMAIL);
     const [status, setStatus] = useState<"loading" | "success" | "error">(
         "loading"
     );
@@ -49,11 +47,7 @@ const VerifyEmailContent = ({ token }: { token: string }) => {
 
         const verifyToken = async () => {
             try {
-                const { data } = await verifyEmail({
-                    variables: { token },
-                });
-
-                const response = data?.verifyEmail || {};
+                const response = await verifyEmail(token);
 
                 if (response.success) {
                     setStatus("success");
@@ -76,7 +70,7 @@ const VerifyEmailContent = ({ token }: { token: string }) => {
         };
 
         verifyToken();
-    }, [token, verifyEmail, router]);
+    }, [token, router]);
 
     return (
         <div className="flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@apollo/client";
 import { Button } from "@/components/ui/button";
 import {
     Form,
@@ -15,7 +14,7 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { toast } from "sonner";
-import { SET_PASSWORD } from "@/graphql/operations";
+import { setPassword } from "@/actions/auth.actions";
 import { useAuth } from "@/providers/auth-provider";
 import PasswordField from "@/components/ui/password-field";
 import { useRefreshSession } from "@/lib/session-utils";
@@ -40,7 +39,6 @@ export default function SetPasswordPage() {
 
 const SetPasswordForm = () => {
     const [isLoading, setIsLoading] = useState(false);
-    const [setPassword] = useMutation(SET_PASSWORD);
     const [status, setStatus] = useState<"loading" | "success" | "error">(
         "loading"
     );
@@ -58,18 +56,15 @@ const SetPasswordForm = () => {
     });
 
     const onSubmit = async (data: SetPasswordFormValues) => {
+        if (!user?.id) {
+            toast.error("User not found. Please log in again.");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
-            const { data: responseData } = await setPassword({
-                variables: {
-                    userId: user?.id,
-                    password: data.password,
-                },
-            });
-
-            // Extract the response from the array that's returned by the server
-            const response = responseData?.setPassword || {};
+            const response = await setPassword(user.id, data.password);
 
             if (response.success) {
                 setStatus("success");

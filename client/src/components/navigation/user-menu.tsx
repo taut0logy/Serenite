@@ -45,17 +45,23 @@ export function UserMenu({ user }: { user: UserType | null }) {
     };
 
     const getUserInitials = () => {
-        if (!user?.firstName || !user?.lastName) {
-            if (user?.name) {
-                const nameParts = user.name.split(" ");
-                if (nameParts.length >= 2) {
-                    return `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
-                }
-                return user.name[0]?.toUpperCase() || "U";
-            }
-            return "U";
+        if (user?.firstName && user?.lastName) {
+            return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
         }
-        return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+        if (user?.email) {
+            return user.email.substring(0, 2).toUpperCase();
+        }
+        return "U";
+    };
+
+    const getDisplayName = () => {
+        if (user?.firstName && user?.lastName) {
+            return `${user.firstName} ${user.lastName}`;
+        }
+        if (user?.email) {
+            return user.email.split("@")[0];
+        }
+        return "User";
     };
 
     return (
@@ -70,7 +76,7 @@ export function UserMenu({ user }: { user: UserType | null }) {
                             <Avatar className="h-8 w-8">
                                 <AvatarImage
                                     src={user?.image || ""}
-                                    alt={user?.name || "User"}
+                                    alt={getDisplayName()}
                                 />
                                 <AvatarFallback>
                                     {getUserInitials()}
@@ -86,7 +92,7 @@ export function UserMenu({ user }: { user: UserType | null }) {
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex flex-col space-y-1">
                                 <p className="text-sm font-medium leading-none">
-                                    {user?.name}
+                                    {getDisplayName()}
                                 </p>
                                 <p className="text-xs leading-none text-muted-foreground">
                                     {user?.email}

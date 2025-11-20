@@ -6,7 +6,6 @@ import Link from "next/link";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@apollo/client";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +18,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { FORGOT_PASSWORD } from "@/graphql/operations";
+import { forgotPassword } from "@/actions/auth.actions";
 
 const forgotPasswordSchema = z.object({
     email: z.string().email("Please enter a valid email address"),
@@ -30,7 +29,6 @@ type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 export default function ForgotPasswordPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [forgotPassword] = useMutation(FORGOT_PASSWORD);
     const [status, setStatus] = useState<"success" | "error" | null>(null);
     const [message, setMessage] = useState<string>("");
 
@@ -45,14 +43,7 @@ export default function ForgotPasswordPage() {
         setIsLoading(true);
 
         try {
-            const { data: responseData } = await forgotPassword({
-                variables: {
-                    email: data.email,
-                },
-            });
-
-            // Extract the response from the array that's returned by the server
-            const response = responseData?.forgotPassword || {};
+            const response = await forgotPassword(data.email);
 
             if (response.success) {
                 setStatus("success");

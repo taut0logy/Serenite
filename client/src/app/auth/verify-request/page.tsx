@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { MdOutlineEmail } from "react-icons/md";
-import { useMutation } from "@apollo/client";
-import { RESEND_VERIFICATION_EMAIL } from "@/graphql/operations/mutations";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -17,6 +15,8 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
+import { resendVerificationEmail } from "@/actions/auth.actions";
+import { useState } from "react";
 
 const verifyRequestSchema = z.object({
     email: z.string().email({ message: "Invalid email address" }),
@@ -25,9 +25,7 @@ const verifyRequestSchema = z.object({
 type VerifyRequestFormValues = z.infer<typeof verifyRequestSchema>;
 
 export default function VerifyRequestPage() {
-    const [resendVerificationEmail, { loading, error }] = useMutation(
-        RESEND_VERIFICATION_EMAIL
-    );
+    const [loading, setLoading] = useState(false);
 
     const form = useForm<VerifyRequestFormValues>({
         resolver: zodResolver(verifyRequestSchema),
@@ -39,24 +37,22 @@ export default function VerifyRequestPage() {
     const handleResendVerificationEmail = async (
         data: VerifyRequestFormValues
     ) => {
+        setLoading(true);
         try {
-            const { data: res } = await resendVerificationEmail({
-                variables: { email: data.email },
-            });
-            console.log(res);
-            if (!res?.resendVerificationEmail?.success) {
+            const response = await resendVerificationEmail(data.email);
+
+            if (response.success) {
+                toast.success(response.message || "Verification email sent");
+            } else {
                 toast.error(
-                    res?.resendVerificationEmail?.message ||
-                        "Failed to resend verification email"
+                    response.message || "Failed to resend verification email"
                 );
-                return;
             }
-            toast.success(
-                res?.resendVerificationEmail?.message ||
-                    "Verification email sent"
-            );
         } catch (error) {
             console.error("Error resending verification email:", error);
+            toast.error("Something went wrong. Please try again.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -104,11 +100,6 @@ export default function VerifyRequestPage() {
                                     )}
                                 />
 
-                                {error && (
-                                    <div className="text-red-600 text-sm">
-                                        {error.message}
-                                    </div>
-                                )}
                                 <div className="flex items-center mt-4 gap-4">
                                     <Button
                                         type="submit"

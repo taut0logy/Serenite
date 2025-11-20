@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@apollo/client";
 import { useParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -19,7 +18,7 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { toast } from "sonner";
-import { RESET_PASSWORD } from "@/graphql/operations";
+import { resetPassword } from "@/actions/auth.actions";
 import PasswordField from "@/components/ui/password-field";
 
 const resetPasswordSchema = z
@@ -57,7 +56,6 @@ export default function ResetPasswordPage() {
 const ResetPasswordForm = ({ token }: { token: string }) => {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [resetPassword] = useMutation(RESET_PASSWORD);
     const [status, setStatus] = useState<"loading" | "success" | "error">(
         "loading"
     );
@@ -87,15 +85,7 @@ const ResetPasswordForm = ({ token }: { token: string }) => {
         setIsLoading(true);
 
         try {
-            const { data: responseData } = await resetPassword({
-                variables: {
-                    token,
-                    password: data.password,
-                },
-            });
-
-            // Extract the response from the array that's returned by the server
-            const response = responseData?.resetPassword || {};
+            const response = await resetPassword(token, data.password);
 
             if (response.success) {
                 setStatus("success");

@@ -1,13 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { useMutation } from "@apollo/client";
-import { useAuth } from "@/providers/auth-provider";
-import { signOut } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
+import { changePassword } from "@/actions/auth.actions";
 import {
     Card,
     CardContent,
@@ -29,8 +28,6 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
-import { CHANGE_PASSWORD } from "@/graphql/operations/mutations";
-
 const passwordFormSchema = z
     .object({
         currentPassword: z
@@ -51,11 +48,9 @@ const passwordFormSchema = z
 type PasswordFormValues = z.infer<typeof passwordFormSchema>;
 
 export default function PasswordChangePage() {
-    const [isChangingPassword, setIsChangingPassword] = useState(false);
-
-    const [changePassword] = useMutation(CHANGE_PASSWORD);
-
-    const { user } = useAuth();
+    const { data: session } = useSession();
+    const userId = session?.user?.id;
+    const [isPending, startTransition] = useTransition();
     const router = useRouter();
 
     const passwordForm = useForm<PasswordFormValues>({
@@ -68,38 +63,38 @@ export default function PasswordChangePage() {
     });
 
     const onPasswordSubmit = async (data: PasswordFormValues) => {
-        if (!user?.id) return;
-
-        setIsChangingPassword(true);
-        try {
-            const response = await changePassword({
-                variables: {
-                    userId: user.id,
-                    currentPassword: data.currentPassword,
-                    newPassword: data.newPassword,
-                },
-            });
-
-            const result = response.data?.changePassword;
-
-            if (result && typeof result === "object" && result?.success) {
-                toast.success(
-                    result?.message || "Password changed successfully"
-                );
-                passwordForm.reset();
-
-                // Sign out user
-                await signOut({ redirect: false });
-                router.push("/auth/login");
-            } else {
-                toast.error("Failed to change password");
-            }
-        } catch (error) {
-            console.error("Password change error:", error);
-            toast.error("Something went wrong while changing your password");
-        } finally {
-            setIsChangingPassword(false);
+        if (!userId) {
+            toast.error("User not found");
+            return;
         }
+
+        startTransition(async () => {
+            try {
+                const result = await changePassword(
+                    userId,
+                    data.currentPassword,
+                    data.newPassword
+                );
+
+                if (result.success) {
+                    toast.success(
+                        result.message || "Password changed successfully"
+                    );
+                    passwordForm.reset();
+
+                    // Sign out user
+                    await signOut({ redirect: false });
+                    router.push("/auth/login");
+                } else {
+                    toast.error(result.message || "Failed to change password");
+                }
+            } catch (error) {
+                console.error("Password change error:", error);
+                toast.error(
+                    "Something went wrong while changing your password"
+                );
+            }
+        });
     };
     return (
         <div className="container py-10 px-4 mx-auto">
@@ -182,11 +177,8 @@ export default function PasswordChangePage() {
                             />
 
                             <div className="pt-4">
-                                <Button
-                                    type="submit"
-                                    disabled={isChangingPassword}
-                                >
-                                    {isChangingPassword
+                                <Button type="submit" disabled={isPending}>
+                                    {isPending
                                         ? "Updating Password..."
                                         : "Change Password"}
                                 </Button>

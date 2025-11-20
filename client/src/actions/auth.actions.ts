@@ -8,7 +8,7 @@ import {
     sendVerificationEmail,
     sendPasswordResetEmail,
     sendOtpEmail,
-} from "./email.actions";
+} from "@/lib/email-api";
 
 // Constants
 const SALT_ROUNDS = 10;
@@ -462,6 +462,15 @@ export async function verifyOtp(
             }
         }
 
+        // Get user profile and questionnaire response for complete user data
+        const profile = await prisma.profile.findUnique({
+            where: { userId: user.id },
+        });
+
+        const questionnaireResponse = await prisma.questionnaireResponse.findUnique({
+            where: { userId: user.id },
+        });
+
         return {
             success: true,
             message: "OTP verified successfully",
@@ -472,6 +481,10 @@ export async function verifyOtp(
                 email: user.email,
                 role: user.role,
                 verified: user.verified,
+                hasPassword: !!user.hashedPassword,
+                kycVerified: user.kycVerified,
+                questionnaireCompleted: !!questionnaireResponse,
+                profile
             },
         };
     } catch (error) {
@@ -556,11 +569,51 @@ export async function check2FARequired(
             };
         }
 
-        // If no 2FA or device is trusted, return success but indicate 2FA is not required
+        // If no 2FA or device is trusted, create session and return login data
+        const token = uuidv4();
+        const expiresAt = new Date(Date.now() + TOKEN_EXPIRY);
+
+        await prisma.session.create({
+            data: {
+                token,
+                userId: user.id,
+                expiresAt,
+            },
+        });
+
+        // Get user profile and questionnaire response
+        const profile = await prisma.profile.findUnique({
+            where: { userId: user.id },
+        });
+
+        const questionnaireResponse = await prisma.questionnaireResponse.findUnique({
+            where: { userId: user.id },
+        });
+
         return {
             success: true,
-            message: "Login does not require 2FA",
+            message: "Login successful",
             requiresTwoFactor: false,
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                verified: user.verified,
+                hasPassword: !!user.hashedPassword,
+                kycVerified: user.kycVerified,
+                questionnaireCompleted: !!questionnaireResponse,
+                twoFactorEnabled: user.twoFactorEnabled,
+                profile: profile
+                    ? {
+                        firstName: profile.firstName,
+                        lastName: profile.lastName,
+                        bio: profile.bio,
+                        dob: profile.dob,
+                        avatarUrl: profile.avatarUrl,
+                    }
+                    : undefined,
+            },
         };
     } catch (error) {
         console.error("Error checking 2FA requirement:", error);
@@ -668,6 +721,15 @@ export async function verifyBackupCode(
             }
         }
 
+        // Get user profile and questionnaire response for complete user data
+        const profile = await prisma.profile.findUnique({
+            where: { userId: user.id },
+        });
+
+        const questionnaireResponse = await prisma.questionnaireResponse.findUnique({
+            where: { userId: user.id },
+        });
+
         return {
             success: true,
             message: "Backup code verified successfully",
@@ -677,6 +739,12 @@ export async function verifyBackupCode(
                 id: user.id,
                 email: user.email,
                 role: user.role,
+                verified: user.verified,
+                hasPassword: !!user.hashedPassword,
+                kycVerified: user.kycVerified,
+                questionnaireCompleted: !!questionnaireResponse,
+                twoFactorEnabled: user.twoFactorEnabled,
+                profile: profile
             },
         };
     } catch (error) {
@@ -876,6 +944,7 @@ export async function verifySession(token: string) {
                 verified: session.user.verified,
                 kycVerified: session.user.kycVerified,
                 profile: session.user.profile,
+                twoFactorEnabled: session.user.twoFactorEnabled,
                 hasPassword: session.user.hashedPassword ? true : false,
                 questionnaireCompleted: !!(session.user.mentalHealthProfile)
             },
@@ -1067,7 +1136,10 @@ export async function socialAuth(
         // Check if user with this email already exists
         const existingUser = await prisma.user.findUnique({
             where: { email },
-            include: { profile: true },
+            include: {
+                profile: true,
+                questionnaireResponse: true,
+            },
         });
 
         // Generate session token
@@ -1108,6 +1180,9 @@ export async function socialAuth(
                     role: existingUser.role,
                     verified: existingUser.verified,
                     hasPassword: existingUser.hashedPassword ? true : false,
+                    kycVerified: existingUser.kycVerified,
+                    questionnaireCompleted: !!existingUser.questionnaireResponse,
+                    twoFactorEnabled: existingUser.twoFactorEnabled,
                     profile: {
                         ...existingUser.profile,
                         avatarUrl: existingUser.profile?.avatarUrl || avatarUrl,
@@ -1134,6 +1209,7 @@ export async function socialAuth(
                 },
                 include: {
                     profile: true,
+                    questionnaireResponse: true,
                 },
             });
 
@@ -1161,6 +1237,9 @@ export async function socialAuth(
                     role: newUser.role,
                     verified: newUser.verified,
                     hasPassword: newUser.hashedPassword ? true : false,
+                    kycVerified: newUser.kycVerified,
+                    questionnaireCompleted: !!newUser.questionnaireResponse,
+                    twoFactorEnabled: newUser.twoFactorEnabled,
                     profile: newUser.profile,
                 },
             };
@@ -1379,6 +1458,36 @@ export async function regenerateBackupCodes(userId: string) {
     } catch (error) {
         console.error("Error regenerating backup codes:", error);
         throw new Error("Failed to regenerate backup codes");
+    }
+}
+
+/**
+ * Get backup codes for 2FA
+ */
+export async function getBackupCodes(userId: string) {
+    try {
+        // Check if user exists and has 2FA enabled
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { twoFactorAuth: true },
+        });
+
+        if (!user || !user.twoFactorEnabled || !user.twoFactorAuth) {
+            return {
+                success: false,
+                message: "User not found or 2FA not enabled",
+                backupCodes: [],
+            };
+        }
+
+        return {
+            success: true,
+            message: "Backup codes retrieved successfully",
+            backupCodes: user.twoFactorAuth.otpBackupCodes || [],
+        };
+    } catch (error) {
+        console.error("Error getting backup codes:", error);
+        throw new Error("Failed to get backup codes");
     }
 }
 

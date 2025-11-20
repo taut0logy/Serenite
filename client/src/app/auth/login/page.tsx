@@ -9,7 +9,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { FaGithub } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
 import { signIn } from "next-auth/react";
-import { useMutation } from "@apollo/client";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,8 +22,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { CHECK_2FA_REQUIRED } from "@/graphql/operations";
 import PasswordField from "@/components/ui/password-field";
+import { check2FARequired } from "@/actions/auth.actions";
 
 const loginSchema = z.object({
     email: z.string().email("Please enter a valid email address"),
@@ -36,7 +35,6 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [check2FARequired] = useMutation(CHECK_2FA_REQUIRED);
 
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
@@ -47,79 +45,73 @@ export default function LoginPage() {
     });
 
     async function onSubmit(data: LoginFormValues) {
+        if (isLoading) {
+            return;
+        }
+
         setIsLoading(true);
 
         try {
-            // Check if we have a device token in localStorage
+            // Get device token from localStorage if available
             const deviceToken =
                 typeof window !== "undefined"
                     ? localStorage.getItem("deviceToken")
                     : null;
 
-            // First check if 2FA is required for this user
-            const { data: checkData } = await check2FARequired({
-                variables: {
-                    email: data.email,
-                    password: data.password,
-                    deviceToken: deviceToken || undefined,
-                },
-            });
+            // First, check if 2FA is required BEFORE calling signIn
+            const checkResult = await check2FARequired(
+                data.email,
+                data.password,
+                deviceToken || undefined
+            );
 
-            const checkResult = checkData?.check2FARequired;
-            if (!checkResult?.success) {
+            // If 2FA check failed (invalid credentials), show error
+            if (!checkResult.success) {
+                toast.error("Invalid email or password");
                 setIsLoading(false);
-                toast.error(checkResult?.message || "Login failed");
-                if (
-                    checkResult?.message ===
-                    "Please verify your email before logging in"
-                ) {
-                    router.push(`/auth/verify-request`);
-                }
                 return;
             }
 
-            // If check was successful and 2FA is required
-            const requires2FA = checkResult?.requires2FA;
-            if (checkResult?.success && requires2FA) {
-                console.log("2FA required, redirecting to OTP page");
+            // If 2FA is required, redirect to OTP page
+            if (
+                checkResult.requiresTwoFactor &&
+                checkResult.userId &&
+                checkResult.tempToken
+            ) {
                 toast.info("Two-factor authentication required");
-                setIsLoading(false);
-                
-                // Get userId from the nested user object
-                const userId = checkResult?.user?.id;
-                
-                if (!userId || !checkResult.tempToken) {
-                    console.error("Missing userId or tempToken in 2FA response");
-                    toast.error("Failed to initiate 2FA verification");
-                    return;
-                }
-                
                 router.push(
-                    `/auth/verify-otp?userId=${userId}&tempToken=${checkResult.tempToken}&email=${data.email}`
+                    `/auth/verify-otp?userId=${checkResult.userId}&tempToken=${checkResult.tempToken}&email=${data.email}`
                 );
                 return;
             }
 
-            // If 2FA is not required or check failed, proceed with normal NextAuth login
-            const result = await signIn("credentials", {
-                email: data.email,
-                password: data.password,
-                deviceToken: deviceToken || "",
-                redirect: false,
-            });
+            // If we have a token, user is authenticated (no 2FA needed)
+            // Now sign them in with NextAuth using the token
+            if (checkResult.token) {
+                const result = await signIn("credentials", {
+                    token: checkResult.token,
+                    userId: checkResult.userId,
+                    redirect: false,
+                });
 
-            if (result?.error) {
-                console.error("NextAuth login error:", result.error);
-                toast.error("Invalid credentials");
+                if (result?.error) {
+                    toast.error("An error occurred during login");
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Login successful
+                toast.success("Logged in successfully");
+                router.push("/dashboard");
                 return;
             }
 
-            toast.success("Logged in successfully");
-            router.push("/dashboard");
+            // Shouldn't reach here, but handle gracefully
+            toast.error("An unexpected error occurred");
+            setIsLoading(false);
         } catch (error) {
             console.error("Login error:", error);
             toast.error("Something went wrong");
-        } finally {
             setIsLoading(false);
         }
     }

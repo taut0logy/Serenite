@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation } from "@apollo/client";
 import { signIn } from "next-auth/react";
 import { PinInput } from "@/components/ui/pin-input";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Suspense } from "react";
-import { VERIFY_OTP, VERIFY_BACKUP_CODE } from "@/graphql/operations";
+import { verifyOtp, verifyBackupCode } from "@/actions/auth.actions";
 import { Loader2 } from "lucide-react";
 
 export default function VerifyOtpPage() {
@@ -67,9 +66,6 @@ const VerifyOtpPageContent = ({
     const [isVerifying, setIsVerifying] = useState(false);
     const [trustDevice, setTrustDevice] = useState(false);
 
-    const [verifyOtp] = useMutation(VERIFY_OTP);
-    const [verifyBackupCode] = useMutation(VERIFY_BACKUP_CODE);
-
     // Redirect if missing parameters
     useEffect(() => {
         if (!userId || !tempToken || !email) {
@@ -86,44 +82,43 @@ const VerifyOtpPageContent = ({
             return;
         }
 
+        if (!userId || !tempToken) {
+            toast.error("Missing required parameters.");
+            return;
+        }
+
         setIsVerifying(true);
 
         try {
-            const deviceName = trustDevice
-                ? `${
-                      window.navigator.userAgent.includes("Mobile")
-                          ? "Mobile"
-                          : "Desktop"
-                  } - ${new Date().toLocaleDateString()}`
+            const deviceInfo = trustDevice
+                ? {
+                      name: `${
+                          window.navigator.userAgent.includes("Mobile")
+                              ? "Mobile"
+                              : "Desktop"
+                      } - ${new Date().toLocaleDateString()}`,
+                      type: window.navigator.userAgent,
+                  }
                 : undefined;
 
-            const deviceType = trustDevice
-                ? window.navigator.userAgent
-                : undefined;
+            const result = await verifyOtp(
+                userId,
+                otp,
+                tempToken,
+                trustDevice,
+                deviceInfo
+            );
 
-            const { data } = await verifyOtp({
-                variables: {
-                    userId,
-                    otp,
-                    tempToken,
-                    trustDevice,
-                    deviceName,
-                    deviceType,
-                },
-            });
-
-            const result = data?.verifyOtp;
-
-            if (result?.success) {
+            if (result.success && result.token) {
                 // Store the device token if provided
                 if (result.deviceToken) {
                     localStorage.setItem("deviceToken", result.deviceToken);
                 }
 
-                // Use NextAuth to create a session by passing the token and userId directly
+                // Use NextAuth to create a session by passing the token and userId
                 const signInResult = await signIn("credentials", {
                     token: result.token,
-                    userId: result.user.id,
+                    userId: userId,
                     redirect: false,
                 });
 
@@ -141,7 +136,7 @@ const VerifyOtpPageContent = ({
                 router.push("/dashboard");
             } else {
                 toast.error(
-                    result?.message || "Failed to verify OTP. Please try again."
+                    result.message || "Failed to verify OTP. Please try again."
                 );
             }
         } catch (error) {
@@ -158,44 +153,43 @@ const VerifyOtpPageContent = ({
             return;
         }
 
+        if (!userId || !tempToken) {
+            toast.error("Missing required parameters.");
+            return;
+        }
+
         setIsVerifying(true);
 
         try {
-            const deviceName = trustDevice
-                ? `${
-                      window.navigator.userAgent.includes("Mobile")
-                          ? "Mobile"
-                          : "Desktop"
-                  } - ${new Date().toLocaleDateString()}`
+            const deviceInfo = trustDevice
+                ? {
+                      name: `${
+                          window.navigator.userAgent.includes("Mobile")
+                              ? "Mobile"
+                              : "Desktop"
+                      } - ${new Date().toLocaleDateString()}`,
+                      type: window.navigator.userAgent,
+                  }
                 : undefined;
 
-            const deviceType = trustDevice
-                ? window.navigator.userAgent
-                : undefined;
+            const result = await verifyBackupCode(
+                userId,
+                backupCode,
+                tempToken,
+                trustDevice,
+                deviceInfo
+            );
 
-            const { data } = await verifyBackupCode({
-                variables: {
-                    userId,
-                    backupCode,
-                    tempToken,
-                    trustDevice,
-                    deviceName,
-                    deviceType,
-                },
-            });
-
-            const result = data?.verifyBackupCode;
-
-            if (result?.success) {
+            if (result.success && result.token) {
                 // Store the device token if provided
                 if (result.deviceToken) {
                     localStorage.setItem("deviceToken", result.deviceToken);
                 }
 
-                // Use NextAuth to create a session by passing the token and userId directly
+                // Use NextAuth to create a session by passing the token and userId
                 const signInResult = await signIn("credentials", {
                     token: result.token,
-                    userId: result.user.id,
+                    userId: userId,
                     redirect: false,
                 });
 
@@ -213,7 +207,7 @@ const VerifyOtpPageContent = ({
                 router.push("/dashboard");
             } else {
                 toast.error(
-                    result?.message ||
+                    result.message ||
                         "Failed to verify backup code. Please try again."
                 );
             }
@@ -265,6 +259,9 @@ const VerifyOtpPageContent = ({
                                                 length={6}
                                                 onComplete={(value) =>
                                                     setOtp(value)
+                                                }
+                                                onSubmit={() =>
+                                                    handleVerifyOtp()
                                                 }
                                                 disabled={isVerifying}
                                             />

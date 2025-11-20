@@ -7,7 +7,6 @@ import Image from "next/image";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@apollo/client";
 import {
     Upload,
     Camera,
@@ -40,8 +39,8 @@ import {
     type KYCVerificationResult,
     type KYCUploadResponse,
 } from "@/actions/kyc.actions";
+import { updateKycStatus } from "@/actions/kyc.server.actions";
 import { useAuth } from "@/providers/auth-provider";
-import { UPDATE_KYC_STATUS } from "@/graphql/operations";
 import { useRefreshSession } from "@/lib/session-utils";
 
 const kycSchema = z.object({
@@ -66,7 +65,6 @@ export default function KYCVerificationPage() {
     const router = useRouter();
     const { user } = useAuth();
     const { refreshSession } = useRefreshSession();
-    const [updateKycStatus] = useMutation(UPDATE_KYC_STATUS);
     const [isLoading, setIsLoading] = useState(false);
     const [currentStep, setCurrentStep] = useState(1);
     const [verificationResult, setVerificationResult] =
@@ -162,16 +160,14 @@ export default function KYCVerificationPage() {
                 setCurrentStep(3);
 
                 if (response.verification_result.verified) {
-                    // Update KYC status in the database
+                    // Update KYC status in the database using server action
                     try {
-                        const { data: kycUpdateData } = await updateKycStatus({
-                            variables: {
-                                userId: user?.id,
-                                kycVerified: true,
-                            },
-                        });
+                        const kycUpdateResult = await updateKycStatus(
+                            user?.id || "",
+                            true
+                        );
 
-                        if (kycUpdateData?.updateKycStatus?.success) {
+                        if (kycUpdateResult.success) {
                             // Update the session to reflect the new KYC status
                             await refreshSession();
 
@@ -181,7 +177,8 @@ export default function KYCVerificationPage() {
                             router.push("/dashboard");
                         } else {
                             toast.error(
-                                "Failed to update verification status. Please contact support."
+                                kycUpdateResult.message ||
+                                    "Failed to update verification status. Please contact support."
                             );
                         }
                     } catch (updateError) {

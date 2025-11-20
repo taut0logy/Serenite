@@ -1,4 +1,4 @@
-import * as authService from '@/services/auth.service';
+import * as authService from '@/actions/auth.actions';
 import type { Context } from '@/types/graphql';
 
 export const authResolvers = {

@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useSession } from "next-auth/react";
-import { useMutation, useQuery } from "@apollo/client";
+import {
+    enableTwoFactor,
+    disableTwoFactor,
+    regenerateBackupCodes,
+    removeTrustedDevice,
+    getTrustedDevices,
+    getBackupCodes,
+} from "@/actions/auth.actions";
 import {
     Card,
     CardContent,
@@ -34,89 +41,47 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
-import {
-    ENABLE_TWO_FACTOR,
-    DISABLE_TWO_FACTOR,
-    REGENERATE_BACKUP_CODES,
-    REMOVE_TRUSTED_DEVICE,
-    GET_TWO_FACTOR_STATUS,
-    GET_BACKUP_CODES,
-    GET_TRUSTED_DEVICES,
-} from "@/graphql/operations";
 import { TrustedDevice } from "@prisma/client";
 
 export default function SecurityPage() {
-    const { data: session } = useSession();
+    const { data: session, update } = useSession();
+    const [isPending, startTransition] = useTransition();
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showBackupCodes, setShowBackupCodes] = useState(false);
-    const userId = session?.user?.id;
-
-    const [enable2FA, { loading: enabling }] = useMutation(ENABLE_TWO_FACTOR);
-    const [disable2FA, { loading: disabling }] =
-        useMutation(DISABLE_TWO_FACTOR);
-    const [regenerateCodes, { loading: regenerating }] = useMutation(
-        REGENERATE_BACKUP_CODES
-    );
-
-    const {
-        data: statusData,
-        loading: loadingStatus,
-        refetch: refetchStatus,
-    } = useQuery(GET_TWO_FACTOR_STATUS, {
-        variables: { userId },
-        skip: !userId,
-        fetchPolicy: "network-only",
-    });
-
-    const {
-        data: backupCodesData,
-        loading: loadingBackupCodes,
-        refetch: refetchBackupCodes,
-    } = useQuery(GET_BACKUP_CODES, {
-        variables: { userId },
-        skip: !userId || !showBackupCodes,
-        fetchPolicy: "network-only",
-    });
-
+    const [loadingBackupCodes, setLoadingBackupCodes] = useState(false);
     const [is2FAEnabled, setIs2FAEnabled] = useState(false);
-
     const [devices, setDevices] = useState<TrustedDevice[]>([]);
     const [removingDevice, setRemovingDevice] = useState<string | null>(null);
+    const [loadingDevices, setLoadingDevices] = useState(false);
+    const userId = session?.user?.id;
 
-    const {
-        data: devicesData,
-        loading: loadingDevices,
-        refetch: refetchDevices,
-    } = useQuery(GET_TRUSTED_DEVICES, {
-        variables: { userId },
-        skip: !userId,
-        fetchPolicy: "network-only",
-    });
-
-    const [removeDevice] = useMutation(REMOVE_TRUSTED_DEVICE);
-
+    // Load trusted devices on mount
     useEffect(() => {
-        // Update 2FA status when data is fetched
-        if (statusData?.getUserTwoFactorStatus?.success) {
-            setIs2FAEnabled(
-                statusData.getUserTwoFactorStatus.twoFactorEnabled || false
-            );
-        }
-    }, [statusData]);
+        const loadDevices = async () => {
+            if (!userId) return;
+            
+            setLoadingDevices(true);
+            try {
+                const result = await getTrustedDevices(userId);
+                if (result.success && result.devices) {
+                    setDevices(result.devices);
+                }
+            } catch (error) {
+                console.error("Error loading devices:", error);
+            } finally {
+                setLoadingDevices(false);
+            }
+        };
 
-    useEffect(() => {
-        // Update backup codes when data is fetched
-        if (backupCodesData?.getBackupCodes?.success) {
-            setBackupCodes(backupCodesData.getBackupCodes.backupCodes || []);
-        }
-    }, [backupCodesData]);
+        loadDevices();
+    }, [userId]);
 
+    // Update 2FA status from session
     useEffect(() => {
-        // Update devices when data is fetched
-        if (devicesData?.getTrustedDevices?.success) {
-            setDevices(devicesData.getTrustedDevices.devices || []);
+        if (session?.user) {
+            setIs2FAEnabled(session.user.twoFactorEnabled || false);
         }
-    }, [devicesData]);
+    }, [session]);
 
     const handleToggle2FA = async (enabled: boolean) => {
         if (!userId) {
@@ -124,59 +89,69 @@ export default function SecurityPage() {
             return;
         }
 
-        try {
-            if (enabled) {
-                // Enable 2FA
-                const { data } = await enable2FA({
-                    variables: { userId },
-                });
+        startTransition(async () => {
+            try {
+                if (enabled) {
+                    // Enable 2FA
+                    const result = await enableTwoFactor(userId);
 
-                const result = data?.enableTwoFactor;
-
-                if (result?.success) {
-                    setIs2FAEnabled(true);
-                    setBackupCodes(result.backupCodes || []);
-                    setShowBackupCodes(true);
-                    toast.success(
-                        "Two-factor authentication enabled successfully."
-                    );
-                    refetchStatus();
+                    if (result.success) {
+                        setIs2FAEnabled(true);
+                        setBackupCodes(result.backupCodes || []);
+                        setShowBackupCodes(true);
+                        toast.success("Two-factor authentication enabled successfully.");
+                        // Update session
+                        await update();
+                    } else {
+                        toast.error(result.message || "Failed to enable two-factor authentication.");
+                    }
                 } else {
-                    toast.error(
-                        result?.message ||
-                            "Failed to enable two-factor authentication."
-                    );
-                }
-            } else {
-                // Disable 2FA
-                const { data } = await disable2FA({
-                    variables: { userId },
-                });
+                    // Disable 2FA
+                    const result = await disableTwoFactor(userId);
 
-                const result = data?.disableTwoFactor;
-
-                if (result?.success) {
-                    setIs2FAEnabled(false);
-                    setBackupCodes([]);
-                    toast.success(
-                        "Two-factor authentication disabled successfully."
-                    );
-                    refetchStatus();
-                } else {
-                    toast.error(
-                        result?.message ||
-                            "Failed to disable two-factor authentication."
-                    );
+                    if (result.success) {
+                        setIs2FAEnabled(false);
+                        setBackupCodes([]);
+                        toast.success("Two-factor authentication disabled successfully.");
+                        // Update session
+                        await update();
+                    } else {
+                        toast.error(result.message || "Failed to disable two-factor authentication.");
+                    }
                 }
+            } catch (error) {
+                console.error("2FA toggle error:", error);
+                toast.error("An error occurred. Please try again.");
             }
-        } catch (error) {
-            console.error("2FA toggle error:", error);
-            toast.error("An error occurred. Please try again.");
-        }
+        });
     };
 
-    const handleViewBackupCodes = () => {
+    const handleViewBackupCodes = async () => {
+        if (!userId) {
+            toast.error("User ID not found. Please sign in again.");
+            return;
+        }
+
         setShowBackupCodes(true);
+        
+        // If backup codes are already loaded, don't fetch again
+        if (backupCodes.length > 0) return;
+
+        setLoadingBackupCodes(true);
+        try {
+            const result = await getBackupCodes(userId);
+            
+            if (result.success) {
+                setBackupCodes(result.backupCodes || []);
+            } else {
+                toast.error(result.message || "Failed to load backup codes.");
+            }
+        } catch (error) {
+            console.error("Error loading backup codes:", error);
+            toast.error("An error occurred while loading backup codes.");
+        } finally {
+            setLoadingBackupCodes(false);
+        }
     };
 
     const handleRegenerateBackupCodes = async () => {
@@ -185,25 +160,21 @@ export default function SecurityPage() {
             return;
         }
 
-        try {
-            const { data } = await regenerateCodes({
-                variables: { userId },
-            });
+        startTransition(async () => {
+            try {
+                const result = await regenerateBackupCodes(userId);
 
-            const result = data?.regenerateBackupCodes;
-
-            if (result?.success) {
-                setBackupCodes(result.backupCodes || []);
-                toast.success("Backup codes regenerated successfully.");
-            } else {
-                toast.error(
-                    result?.message || "Failed to regenerate backup codes."
-                );
+                if (result.success) {
+                    setBackupCodes(result.backupCodes || []);
+                    toast.success("Backup codes regenerated successfully.");
+                } else {
+                    toast.error(result.message || "Failed to regenerate backup codes.");
+                }
+            } catch (error) {
+                console.error("Regenerate backup codes error:", error);
+                toast.error("An error occurred. Please try again.");
             }
-        } catch (error) {
-            console.error("Regenerate backup codes error:", error);
-            toast.error("An error occurred. Please try again.");
-        }
+        });
     };
 
     const handleRemoveDevice = async (deviceToken: string) => {
@@ -215,17 +186,17 @@ export default function SecurityPage() {
         setRemovingDevice(deviceToken);
 
         try {
-            const { data } = await removeDevice({
-                variables: { userId, deviceToken },
-            });
+            const result = await removeTrustedDevice(deviceToken, userId);
 
-            const result = data?.removeTrustedDevice;
-
-            if (result?.success) {
+            if (result.success) {
                 toast.success("Device removed successfully.");
-                refetchDevices();
+                // Refresh devices list
+                const devicesResult = await getTrustedDevices(userId);
+                if (devicesResult.success && devicesResult.devices) {
+                    setDevices(devicesResult.devices);
+                }
             } else {
-                toast.error(result?.message || "Failed to remove device.");
+                toast.error(result.message || "Failed to remove device.");
             }
         } catch (error) {
             console.error("Remove device error:", error);
@@ -288,9 +259,7 @@ export default function SecurityPage() {
                                 id="two-factor"
                                 checked={is2FAEnabled}
                                 onCheckedChange={handleToggle2FA}
-                                disabled={
-                                    enabling || disabling || loadingStatus
-                                }
+                                disabled={isPending}
                             />
                         </div>
 
@@ -352,7 +321,7 @@ export default function SecurityPage() {
                                     security.
                                 </p>
                             </div>
-                            <Link href="/profile?tab=password">
+                            <Link href="/settings/password">
                                 <Button variant="outline">Change</Button>
                             </Link>
                         </div>
@@ -435,12 +404,7 @@ export default function SecurityPage() {
             {/* Backup Codes Dialog */}
             <Dialog
                 open={showBackupCodes}
-                onOpenChange={(open) => {
-                    setShowBackupCodes(open);
-                    if (open) {
-                        refetchBackupCodes();
-                    }
-                }}
+                onOpenChange={setShowBackupCodes}
             >
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
@@ -455,7 +419,7 @@ export default function SecurityPage() {
                         <div className="flex justify-center items-center h-72">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                         </div>
-                    ) : (
+                    ) : is2FAEnabled ? (
                         <ScrollArea className="h-72 rounded-md border p-4">
                             <div className="space-y-2">
                                 {backupCodes.length > 0 ? (
@@ -474,12 +438,18 @@ export default function SecurityPage() {
                                 ) : (
                                     <p className="text-center text-muted-foreground py-8">
                                         No backup codes available. Click
-                                        `&ldquo;Regenerate Codes&rdquo;` to
+                                        &ldquo;Regenerate Codes&rdquo; to
                                         create new backup codes.
                                     </p>
                                 )}
                             </div>
                         </ScrollArea>
+                    ) : (
+                        <div className="flex justify-center items-center h-72">
+                            <p className="text-muted-foreground">
+                                Enable 2FA to view backup codes
+                            </p>
+                        </div>
                     )}
 
                     <DialogFooter className="flex flex-col sm:flex-row sm:justify-between gap-2">
@@ -494,7 +464,7 @@ export default function SecurityPage() {
                                             "Backup codes copied to clipboard"
                                         );
                                     }}
-                                    disabled={regenerating}
+                                    disabled={isPending}
                                 >
                                     Copy Codes
                                 </Button>
@@ -503,14 +473,14 @@ export default function SecurityPage() {
                             <Button
                                 variant="outline"
                                 onClick={handleRegenerateBackupCodes}
-                                disabled={regenerating}
+                                disabled={isPending}
                             >
                                 <RefreshCw
                                     className={`mr-2 h-4 w-4 ${
-                                        regenerating ? "animate-spin" : ""
+                                        isPending ? "animate-spin" : ""
                                     }`}
                                 />
-                                {regenerating
+                                {isPending
                                     ? "Regenerating..."
                                     : "Regenerate Codes"}
                             </Button>

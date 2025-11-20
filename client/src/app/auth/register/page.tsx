@@ -9,7 +9,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { FaGithub } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
-import { useMutation } from "@apollo/client";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import PasswordField from "@/components/ui/password-field";
 import { toast } from "sonner";
-import { REGISTER } from "@/graphql/operations";
+import { registerUser } from "@/actions/auth.actions";
 
 const registerSchema = z
     .object({
@@ -48,7 +47,6 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function RegisterPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [register] = useMutation(REGISTER);
 
     const form = useForm<RegisterFormValues>({
         resolver: zodResolver(registerSchema),
@@ -65,19 +63,12 @@ export default function RegisterPage() {
         setIsLoading(true);
 
         try {
-            const { data: registerData } = await register({
-                variables: {
-                    input: {
-                        email: data.email,
-                        password: data.password,
-                        firstName: data.firstName,
-                        lastName: data.lastName,
-                    },
-                },
-            });
-
-            // Extract the response from the array that's returned by the server
-            const response = registerData?.register || {};
+            const response = await registerUser(
+                data.email,
+                data.password,
+                data.firstName,
+                data.lastName
+            );
 
             if (response.success) {
                 toast.success(response.message || "Registration successful");

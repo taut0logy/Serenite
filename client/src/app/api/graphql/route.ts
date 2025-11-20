@@ -1,12 +1,11 @@
 import { createYoga } from 'graphql-yoga'
 import { schema } from '@/graphql'
 import prisma from '@/lib/prisma'
-import { verifySession } from '@/services/auth.service'
-import type { User } from 'next-auth'
+import { verifySession } from '@/actions/auth.actions'
 
 interface Context {
   prisma: typeof prisma;
-  user?: User | null;
+  user?: Awaited<ReturnType<typeof verifySession>>['user'] | null;
   token?: string | null;
   ip?: string | null;
   userAgent?: string | null;
@@ -16,7 +15,7 @@ interface Context {
 const { handleRequest } = createYoga({
   schema,
   context: async ({ request }): Promise<Context> => {
-    let user: User | null = null;
+    let user: Awaited<ReturnType<typeof verifySession>>['user'] | null = null;
     let token: string | null = null;
 
     const authHeader = request.headers.get('authorization');

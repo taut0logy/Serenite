@@ -1,7 +1,7 @@
 import type { NextApiRequest } from "next"
 import { Server } from "socket.io"
 import { type NextApiResponseWithSocket } from "@/app/typings/platform";
-import { verifySession } from '@/services/auth.service';
+import { verifySession } from '@/actions/auth.actions';
 
 export default function SocketHandler(_req: NextApiRequest, res: NextApiResponseWithSocket) {
     if (res.socket.server.io) {

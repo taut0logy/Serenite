@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"
 
+    # Google Gemini API for Moner Canvus analysis
+    GEMINI_API_KEY: str = ""
+
     # AWS S3 for temporary file storage (optional)
     USE_S3_STORAGE: bool = True
     S3_TEMP_BUCKET: str = "serenite-temp"

@@ -18,6 +18,7 @@ from api import (
     emotion,
     feedback,
     kyc,
+    moner_canvus,
 )
 import uvicorn
 
@@ -53,6 +54,7 @@ app.include_router(emotion_journal.router, prefix=settings.API_PREFIX)
 app.include_router(emotion.router, prefix=settings.API_PREFIX)
 app.include_router(feedback.router, prefix=settings.API_PREFIX)
 app.include_router(kyc.router, prefix=settings.API_PREFIX)
+app.include_router(moner_canvus.router, prefix=settings.API_PREFIX)
 
 
 @app.exception_handler(Exception)

@@ -24,6 +24,7 @@ import {
     Video,
     BookOpen,
     Circle,
+    Palette,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -60,6 +61,12 @@ const getNavItems = (role?: string) => {
             title: "Breathe",
             href: "/breathing-exercise",
             icon: Circle,
+            roles: ["USER", "HOST", "MANAGER", "ADMIN"],
+        },
+        {
+            title: "Moner Canvus",
+            href: "/moner-canvus",
+            icon: Palette,
             roles: ["USER", "HOST", "MANAGER", "ADMIN"],
         },
         {

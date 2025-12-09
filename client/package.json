@@ -45,6 +45,14 @@
         "@stream-io/node-sdk": "^0.5.1",
         "@stream-io/video-react-sdk": "^1.19.3",
         "@tanstack/react-table": "^8.20.6",
+        "@tiptap/extension-color": "^3.13.0",
+        "@tiptap/extension-font-family": "^3.13.0",
+        "@tiptap/extension-highlight": "^3.13.0",
+        "@tiptap/extension-image": "^3.13.0",
+        "@tiptap/extension-placeholder": "^3.13.0",
+        "@tiptap/extension-text-style": "^3.13.0",
+        "@tiptap/react": "^3.13.0",
+        "@tiptap/starter-kit": "^3.13.0",
         "@types/react-datepicker": "^6.2.0",
         "@vapi-ai/web": "^2.5.2",
         "axios": "^1.7.9",
@@ -94,6 +102,7 @@
         "zustand": "^5.0.7"
     },
     "devDependencies": {
+        "@tailwindcss/typography": "^0.5.19",
         "@types/bcrypt": "^5.0.2",
         "@types/bcryptjs": "^2.4.6",
         "@types/node": "^20",

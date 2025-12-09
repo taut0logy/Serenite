@@ -17,6 +17,7 @@ import {
     MoonStar,
     SunMedium,
     AlertCircle,
+    Headphones,
 } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -74,6 +75,7 @@ import EmotionJournal from "@/components/mental-health-assistant/emotion-journal
 import EmotionInsights from "@/components/mental-health-assistant/emotion-insights";
 import FacialEmotionCapture from "@/components/mental-health-assistant/facial-emotion-capture";
 import VoiceEmotionCapture from "@/components/mental-health-assistant/voice-emotion-capture";
+import VoiceAssistantModal from "@/components/mental-health-assistant/voice-assistant-modal";
 
 export default function MentalHealthAssistant() {
     const [messages, setMessages] = useState<Message[]>([
@@ -106,6 +108,7 @@ export default function MentalHealthAssistant() {
     const [userId, setUserId] = useState<string | null>(null);
     const [isFaceModalOpen, setIsFaceModalOpen] = useState<boolean>(false);
     const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
+    const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState<boolean>(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1218,6 +1221,27 @@ export default function MentalHealthAssistant() {
                         >
                             <Send className="h-4 w-4" />
                         </Button>
+
+                        {/* Voice Assistant Call Button */}
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="outline"
+                                        className="h-10 w-10 rounded-full shadow-sm bg-gradient-to-br from-purple-500/10 to-fuchsia-500/10 border-purple-300/50 hover:from-purple-500/20 hover:to-fuchsia-500/20 hover:border-purple-400/70 dark:from-purple-500/20 dark:to-fuchsia-500/20 dark:border-purple-500/30 dark:hover:from-purple-500/30 dark:hover:to-fuchsia-500/30"
+                                        onClick={() => setIsVoiceAssistantOpen(true)}
+                                        disabled={isLoading || isRecording}
+                                    >
+                                        <Headphones className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    Talk with Serenity - Voice Assistant
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     </form>
 
                     <div className="mt-2 text-center">
@@ -1246,6 +1270,12 @@ export default function MentalHealthAssistant() {
                 isOpen={isVoiceModalOpen}
                 onClose={() => setIsVoiceModalOpen(false)}
                 onEmotionDetected={handleVoiceEmotionDetected}
+            />
+
+            {/* VAPI Voice Assistant Modal */}
+            <VoiceAssistantModal
+                isOpen={isVoiceAssistantOpen}
+                onClose={() => setIsVoiceAssistantOpen(false)}
             />
 
             {/* Hidden file inputs */}

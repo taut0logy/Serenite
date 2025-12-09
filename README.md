@@ -26,8 +26,8 @@ The **Private & Intuitive Online Support Group System** is a comprehensive menta
 
 -   **Multi-layered Authentication**: NextAuth with JWT strategy, database sessions
 -   **Two-Factor Authentication**: Enhanced security with device session tracking
--   **OAuth Integration**: Google, LinkedIn, and GitHub sign-in support
--   **KYC Verification**: Face matching against valid ID cards using Deepface
+-   **OAuth Integration**: Google and GitHub sign-in support
+-   **KYC Verification**: Face matching against valid ID cards using facial recognition
 -   **Role-based Access Control**: Granular permissions and authorization
 
 ### 🧠 Intelligent Mental Health Assessment
@@ -116,8 +116,8 @@ The **Private & Intuitive Online Support Group System** is a comprehensive menta
 
 -   **Language Models**:
     -   llama-3.3-70b-versatile (Conversational AI)
-    -   all-MiniLM-L6-v2 (Vector embeddings)
-    -   Deepface VGG-Face (Facial recognition for KYC)
+    -   embed-multilingual-v3.0 (Vector embeddings)
+    -   Amazon ReKognition (Facial recognition)
 -   **AI Framework**: LangChain for RAG pipelines, LangGraph for agentic workflows
 -   **Search Integration**: Tavily for web search capabilities
 
@@ -130,8 +130,8 @@ The **Private & Intuitive Online Support Group System** is a comprehensive menta
 ### Authentication & Security
 
 -   **Auth System**: NextAuth with JWT strategy
--   **OAuth Providers**: Google, LinkedIn, GitHub integration
--   **Biometric Verification**: Deepface for KYC face matching
+-   **OAuth Providers**: Google and GitHub integration
+-   **Biometric Verification**: Amazon Rekognition for KYC face matching
 -   **Encryption**: AES-GCM for end-to-end encryption
 
 ## 🚀 Getting Started
@@ -141,7 +141,8 @@ The **Private & Intuitive Online Support Group System** is a comprehensive menta
 -   Node.js 20+
 -   PostgreSQL database
 -   Python 3.10+ (for FastAPI services)
--   Astra DB account (for vector storage)
+-   GetStream account for video conferencing
+-   API keys for AI services (llama, Tavily, Amazon Rekognition)
 
 ### Installation
 
@@ -227,7 +228,7 @@ Our platform is built on evidence-based psychological assessments and interventi
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the GNU General Public License (GPL) - see the LICENSE file for details.
 
 ---
 

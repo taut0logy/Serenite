@@ -81,16 +81,16 @@ export default auth((req) => {
 
   // CASE 6: User has password but questionnaire not completed, redirect to questionnaire
   // Only redirect to questionnaire from dashboard and other main app pages, not from questionnaire itself
-  if (isAuthenticated && hasPassword && !questionnaireCompleted && path !== '/questionnaire') {
-    // Only redirect from main app pages, not from auth pages
-    const shouldRedirectToQuestionnaire = ['/dashboard', '/profile', '/settings', '/mental-health-assistant', '/breathing-exercise', '/diary'].some(prefix =>
-      path === prefix || path.startsWith(`${prefix}/`)
-    );
+  // if (isAuthenticated && hasPassword && !questionnaireCompleted && path !== '/questionnaire') {
+  //   // Only redirect from main app pages, not from auth pages
+  //   const shouldRedirectToQuestionnaire = ['/dashboard', '/profile', '/settings', '/mental-health-assistant', '/breathing-exercise', '/diary'].some(prefix =>
+  //     path === prefix || path.startsWith(`${prefix}/`)
+  //   );
 
-    if (shouldRedirectToQuestionnaire) {
-      return NextResponse.redirect(new URL('/questionnaire', req.url));
-    }
-  }
+  //   if (shouldRedirectToQuestionnaire) {
+  //     return NextResponse.redirect(new URL('/questionnaire', req.url));
+  //   }
+  // }
 
   // CASE 7: Questionnaire completed but user tries to access questionnaire page
   if (questionnaireCompleted && path === '/questionnaire') {

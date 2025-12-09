@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 import CanvasPane, { CanvasPaneRef } from "@/components/moner-canvus/CanvasPane";
 import FaceTracker from "@/components/moner-canvus/FaceTracker";
 import AnalysisPanel from "@/components/moner-canvus/AnalysisPanel";
+import SessionHistory from "@/components/moner-canvus/SessionHistory";
 import {
   StrokeEvent,
   EraseEvent,
@@ -231,6 +232,31 @@ export default function MonerCanvusPage() {
                 <p>Emotions captured: {emotionsRef.current.length}</p>
               </div>
             </div>
+          )}
+
+          {/* Past Sessions */}
+          {!isRunning && (
+            <SessionHistory 
+              userId={user?.id || "anonymous"} 
+              onSelectSession={(session) => {
+                // Convert stored session to AnalysisResponse format
+                setAnalysis({
+                  sessionId: session.session_id,
+                  emotionalSummary: session.emotional_summary,
+                  drawingSummary: session.drawing_summary,
+                  suggestions: session.suggestions,
+                  tags: session.tags,
+                  riskFlags: { isHighDistress: session.high_distress, notes: "" },
+                  metrics: {
+                    strokeCount: session.stroke_count,
+                    colorCount: session.color_count,
+                    avgSpeed: 0,
+                    sessionDurationMs: session.duration_seconds * 1000,
+                    emotionSnapshotCount: 0,
+                  },
+                });
+              }}
+            />
           )}
 
           {/* Tips */}

@@ -6,17 +6,63 @@ This module contains:
 - Pydantic models for data validation
 - Gemini API client for image analysis
 - Summary statistics computation
+- PostgreSQL storage for sessions
 """
 
 import os
 import json
 import base64
 import logging
+import uuid
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
+from sqlalchemy import create_engine, text
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Database Initialization (following diary pattern)
+# ============================================================================
+
+# Try to import settings and initialize database connection
+_db_engine = None
+_pg_vector_store = None
+
+def _init_database():
+    """Initialize database connection lazily."""
+    global _db_engine, _pg_vector_store
+    
+    if _db_engine is not None:
+        return True
+    
+    try:
+        from config.settings import settings
+        from langchain_postgres import PGVector
+        from services.embeddings_adapter import get_embeddings
+        
+        # Initialize database engine
+        _db_engine = create_engine(settings.DATABASE_URL)
+        with _db_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Moner Canvus: Connected to PostgreSQL database")
+        
+        # Initialize embeddings
+        embeddings = get_embeddings()
+        
+        # Connect to vector store
+        _pg_vector_store = PGVector(
+            embeddings=embeddings,
+            connection=settings.DATABASE_URL,
+            collection_name="moner_canvus_sessions",
+            use_jsonb=True,
+        )
+        logger.info("Moner Canvus: Connected to PostgreSQL vector store")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Moner Canvus: Database not available - {str(e)}")
+        return False
 
 
 # ============================================================================
@@ -342,3 +388,212 @@ def _create_fallback_response(payload: MonerCanvusPayload, error_message: str) -
             emotionSnapshotCount=summary["emotionSnapshotCount"],
         )
     )
+
+
+# ============================================================================
+# Database Storage Functions
+# ============================================================================
+
+class StoredCanvusSession(BaseModel):
+    """A stored Moner Canvus session."""
+    id: str
+    user_id: str
+    session_id: str
+    image_data: str  # Base64 PNG
+    emotional_summary: str
+    drawing_summary: str
+    suggestions: List[str]
+    tags: List[str]
+    high_distress: bool
+    stroke_count: int
+    color_count: int
+    duration_seconds: float
+    created_at: datetime
+
+
+def store_canvus_session(
+    user_id: str,
+    payload: MonerCanvusPayload,
+    analysis: AnalysisResponse
+) -> Optional[StoredCanvusSession]:
+    """
+    Store a Moner Canvus session in PostgreSQL.
+    
+    Args:
+        user_id: The user's ID from authentication
+        payload: The original session payload
+        analysis: The Gemini analysis response
+        
+    Returns:
+        The stored session or None if storage failed
+    """
+    if not _init_database():
+        logger.warning("Cannot store session - database not available")
+        return None
+    
+    try:
+        doc_id = str(uuid.uuid4())
+        created_at = datetime.utcnow()
+        duration_seconds = payload.metadata.durationMs / 1000.0
+        
+        # Create document metadata
+        document = {
+            "id": doc_id,
+            "user_id": user_id,
+            "session_id": payload.metadata.sessionId,
+            "image_data": payload.finalImageBase64,
+            "emotional_summary": analysis.emotionalSummary,
+            "drawing_summary": analysis.drawingSummary,
+            "suggestions": json.dumps(analysis.suggestions),
+            "tags": json.dumps(analysis.tags),
+            "high_distress": analysis.riskFlags.isHighDistress,
+            "stroke_count": analysis.metrics.strokeCount,
+            "color_count": analysis.metrics.colorCount,
+            "duration_seconds": duration_seconds,
+            "created_at": created_at.isoformat(),
+        }
+        
+        # Create text for embedding - combine summaries for semantic search
+        text_for_embedding = f"{analysis.emotionalSummary} {analysis.drawingSummary} {' '.join(analysis.tags)}"
+        text_for_embedding = text_for_embedding[:1000]  # Limit for embedding
+        
+        # Store in PostgreSQL
+        _pg_vector_store.add_texts(
+            texts=[text_for_embedding],
+            metadatas=[document],
+            ids=[doc_id]
+        )
+        
+        logger.info(f"Stored Moner Canvus session {doc_id} for user {user_id}")
+        
+        return StoredCanvusSession(
+            id=doc_id,
+            user_id=user_id,
+            session_id=payload.metadata.sessionId,
+            image_data=payload.finalImageBase64,
+            emotional_summary=analysis.emotionalSummary,
+            drawing_summary=analysis.drawingSummary,
+            suggestions=analysis.suggestions,
+            tags=analysis.tags,
+            high_distress=analysis.riskFlags.isHighDistress,
+            stroke_count=analysis.metrics.strokeCount,
+            color_count=analysis.metrics.colorCount,
+            duration_seconds=duration_seconds,
+            created_at=created_at,
+        )
+        
+    except Exception as e:
+        logger.error(f"Error storing Moner Canvus session: {str(e)}")
+        return None
+
+
+def get_user_sessions(user_id: str, limit: int = 20) -> List[StoredCanvusSession]:
+    """
+    Get all Moner Canvus sessions for a user.
+    
+    Args:
+        user_id: The user's ID
+        limit: Maximum number of sessions to return
+        
+    Returns:
+        List of stored sessions, newest first
+    """
+    if not _init_database():
+        logger.warning("Cannot fetch sessions - database not available")
+        return []
+    
+    try:
+        with _db_engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT id, document, cmetadata 
+                    FROM langchain_pg_embedding 
+                    WHERE cmetadata->>'user_id' = :user_id 
+                    AND collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = 'moner_canvus_sessions')
+                    ORDER BY cmetadata->>'created_at' DESC
+                    LIMIT :limit
+                """),
+                {"user_id": user_id, "limit": limit}
+            )
+            
+            sessions = []
+            for row in result:
+                metadata = row.cmetadata
+                sessions.append(
+                    StoredCanvusSession(
+                        id=metadata["id"],
+                        user_id=metadata["user_id"],
+                        session_id=metadata["session_id"],
+                        image_data=metadata["image_data"],
+                        emotional_summary=metadata["emotional_summary"],
+                        drawing_summary=metadata["drawing_summary"],
+                        suggestions=json.loads(metadata["suggestions"]) if isinstance(metadata["suggestions"], str) else metadata["suggestions"],
+                        tags=json.loads(metadata["tags"]) if isinstance(metadata["tags"], str) else metadata["tags"],
+                        high_distress=metadata["high_distress"],
+                        stroke_count=metadata["stroke_count"],
+                        color_count=metadata["color_count"],
+                        duration_seconds=metadata["duration_seconds"],
+                        created_at=datetime.fromisoformat(metadata["created_at"]),
+                    )
+                )
+            
+            logger.info(f"Fetched {len(sessions)} Moner Canvus sessions for user {user_id}")
+            return sessions
+            
+    except Exception as e:
+        logger.error(f"Error fetching Moner Canvus sessions: {str(e)}")
+        return []
+
+
+def get_session_by_id(session_id: str, user_id: str) -> Optional[StoredCanvusSession]:
+    """
+    Get a specific Moner Canvus session by ID.
+    
+    Args:
+        session_id: The session's UUID
+        user_id: The user's ID (for authorization)
+        
+    Returns:
+        The session or None if not found
+    """
+    if not _init_database():
+        return None
+    
+    try:
+        with _db_engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT cmetadata 
+                    FROM langchain_pg_embedding 
+                    WHERE cmetadata->>'id' = :session_id 
+                    AND cmetadata->>'user_id' = :user_id
+                    AND collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = 'moner_canvus_sessions')
+                    LIMIT 1
+                """),
+                {"session_id": session_id, "user_id": user_id}
+            )
+            
+            row = result.fetchone()
+            if not row:
+                return None
+            
+            metadata = row.cmetadata
+            return StoredCanvusSession(
+                id=metadata["id"],
+                user_id=metadata["user_id"],
+                session_id=metadata["session_id"],
+                image_data=metadata["image_data"],
+                emotional_summary=metadata["emotional_summary"],
+                drawing_summary=metadata["drawing_summary"],
+                suggestions=json.loads(metadata["suggestions"]) if isinstance(metadata["suggestions"], str) else metadata["suggestions"],
+                tags=json.loads(metadata["tags"]) if isinstance(metadata["tags"], str) else metadata["tags"],
+                high_distress=metadata["high_distress"],
+                stroke_count=metadata["stroke_count"],
+                color_count=metadata["color_count"],
+                duration_seconds=metadata["duration_seconds"],
+                created_at=datetime.fromisoformat(metadata["created_at"]),
+            )
+            
+    except Exception as e:
+        logger.error(f"Error fetching session {session_id}: {str(e)}")
+        return None

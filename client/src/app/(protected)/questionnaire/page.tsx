@@ -1,20 +1,22 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
     QuestionnaireIntro,
     QuestionnaireSlide,
     QuestionnaireCompletion,
+    QuestionnaireReview,
 } from "@/components/questionnaire";
-import { QuestionnaireReview } from "@/components/questionnaire/questionnaire-review";
 import { useQuestionnaireStore } from "@/stores/use-questionnaire-store";
 import { useQuestionnaire } from "@/hooks/use-questionnaire";
 import { useRefreshSession } from "@/lib/session-utils";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export default function QuestionnairePage() {
     const store = useQuestionnaireStore();
     const { refreshSession } = useRefreshSession();
+    const router = useRouter();
     const {
         submitQuestionnaire,
         isSubmitting,
@@ -23,12 +25,10 @@ export default function QuestionnairePage() {
         findFirstIncompleteSlide,
     } = useQuestionnaire();
 
-    // Scroll to top when state or slide changes
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
     }, [store.state, store.currentSlide]);
 
-    // Handle submission
     const handleSubmit = async () => {
         try {
             const result = await submitQuestionnaire();
@@ -36,8 +36,9 @@ export default function QuestionnairePage() {
             if (result.success) {
                 toast.success("Thanks a lot! Let your journey begin.");
 
-                // Refresh session for updated user data
                 await refreshSession();
+
+                router.push("/dashboard");
 
             }
         } catch (error) {
@@ -70,9 +71,23 @@ export default function QuestionnairePage() {
         store.setState("review");
     };
 
-    const handleEditFromReview = (slideIndex: number) => {
+    const [editStartIndex, setEditStartIndex] = useState<number | null>(null);
+    const [isEditingFromReview, setIsEditingFromReview] = useState(false);
+    useEffect(() => {
+        if (editStartIndex !== null) {
+            setEditStartIndex(null);
+        }
+    }, [editStartIndex]);
+
+    const handleEditFromReview = (questionIndex: number) => {
+        setEditStartIndex(questionIndex);
+        setIsEditingFromReview(true);
         store.setState("progress");
-        store.setCurrentSlide(slideIndex);
+    };
+
+    const handleFinishEditing = () => {
+        setIsEditingFromReview(false);
+        store.setState("review");
     };
 
     const handleBackFromReview = () => {
@@ -100,9 +115,8 @@ export default function QuestionnairePage() {
         return (
             <QuestionnaireReview
                 responses={store.responses}
-                onEdit={handleEditFromReview}
+                onEditAtIndex={handleEditFromReview}
                 onBack={handleBackFromReview}
-                onReEdit={handleReEdit}
                 onSubmit={handleSubmit}
             />
         );
@@ -118,20 +132,30 @@ export default function QuestionnairePage() {
         );
     }
 
-    const currentSlideData = store.slides[store.currentSlide];
+    const allQuestions = store.slides.flatMap((slide) => slide.questions);
+
+    const firstIncompleteIndex = allQuestions.findIndex(
+        (q) => store.responses[q.id] === undefined
+    );
+
+    const calculatedIndex = firstIncompleteIndex === -1
+        ? (Object.keys(store.responses).length === allQuestions.length ? allQuestions.length - 1 : 0)
+        : firstIncompleteIndex;
+
+    const initialIndex = editStartIndex !== null ? editStartIndex : calculatedIndex;
+
 
     return (
         <QuestionnaireSlide
-            questions={currentSlideData.questions}
+            questions={allQuestions}
             responses={store.responses}
             onResponseChange={store.setResponse}
             onNext={handleNext}
             onPrevious={handlePrevious}
-            canGoNext={store.canGoNext()}
-            canGoPrevious={store.canGoPrevious()}
-            currentSlide={store.currentSlide + 1}
-            totalSlides={store.totalSlides}
-            allPreviousCompleted={store.allPreviousCompleted}
+            initialIndex={initialIndex}
+            onComplete={() => store.setState("completion")}
+            onBackToIntro={() => store.setState("intro")}
+            onFinishEditing={isEditingFromReview ? handleFinishEditing : undefined}
         />
     );
 }

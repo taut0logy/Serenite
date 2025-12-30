@@ -7,6 +7,7 @@ import {
     ArrowRight,
     Eye,
     Loader2,
+    Lock
 } from "lucide-react";
 
 interface QuestionnaireCompletionProps {
@@ -22,7 +23,7 @@ export function QuestionnaireCompletion({
 }: QuestionnaireCompletionProps) {
 
     return (
-        <div className="max-w-4xl mx-auto p-6 space-y-8 min-h-[calc(100vh-4rem)] flex flex-col justify-center">
+        <div className="max-w-4xl mx-auto p-6 space-y-8 min-h-[calc(100vh-65px)] flex flex-col justify-center">
             {/* Completion Card */}
             <Card className="shadow-xl border-2 border-border/50 bg-gradient-to-br from-card to-muted/20">
                 <CardHeader className="text-center pb-6">
@@ -30,7 +31,7 @@ export function QuestionnaireCompletion({
                         <CheckCircle2 className="w-12 h-12 text-green-600 dark:text-green-400" />
                     </div>
                     <CardTitle className="text-3xl font-bold text-foreground mb-4">
-                        🎉 Assessment Complete!
+                        Done!
                     </CardTitle>
                 </CardHeader>
 
@@ -105,9 +106,10 @@ export function QuestionnaireCompletion({
                     </div>
 
                     {/* Security notice */}
-                    <div className="text-center p-4 bg-muted/20 rounded-lg border border-border/30">
+                    <div className="flex items-center justify-center text-center p-4 bg-muted/20 rounded-lg border border-border/30">
+                        <Lock className="mr-2 h-4 w-4" />
                         <p className="text-sm text-muted-foreground">
-                            🔒 Your responses are completely confidential and
+                            Your responses are completely confidential and
                             securely encrypted
                         </p>
                     </div>

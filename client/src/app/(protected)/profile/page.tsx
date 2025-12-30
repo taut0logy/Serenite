@@ -88,7 +88,7 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
         defaultValues: {
             firstName: user?.firstName, //|| user?.name?.split(' ')[0] || '',
             lastName: user?.lastName, // || user?.name?.split(' ').slice(1).join(' ') || '',
-            bio: user?.bio,
+            bio: user?.bio || "",
             avatarUrl: user?.image || "",
         },
     });

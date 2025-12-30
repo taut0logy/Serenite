@@ -19,7 +19,7 @@ export function QuestionnaireIntro({
     hasInitialized = false,
 }: QuestionnaireIntroProps) {
     return (
-        <div className="max-w-4xl mx-auto p-6 min-h-[calc(100vh-4rem)] flex flex-col justify-center">
+        <div className="max-w-4xl mx-auto p-6 min-h-[calc(100vh-65px)] flex flex-col justify-center">
             {/* Welcome Card */}
             <Card className="shadow-xl border-2 border-border/50 bg-gradient-to-br from-card to-muted/20">
                 <CardHeader className="text-center pb-6">

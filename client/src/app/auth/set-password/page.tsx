@@ -18,6 +18,7 @@ import { setPassword } from "@/actions/auth.actions";
 import { useAuth } from "@/providers/auth-provider";
 import PasswordField from "@/components/ui/password-field";
 import { useRefreshSession } from "@/lib/session-utils";
+import { useRouter } from "next/navigation";
 
 const setPasswordSchema = z
     .object({
@@ -46,6 +47,7 @@ const SetPasswordForm = () => {
 
     const { user } = useAuth();
     const { refreshSession } = useRefreshSession();
+    const router = useRouter();
 
     const form = useForm<SetPasswordFormValues>({
         resolver: zodResolver(setPasswordSchema),
@@ -73,6 +75,7 @@ const SetPasswordForm = () => {
 
                 // Refresh the session to get updated user data
                 await refreshSession();
+                router.push("/dashboard");
             } else {
                 setStatus("error");
                 setMessage(response.message || "Failed to set password");

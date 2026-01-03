@@ -109,9 +109,9 @@ export default auth((req) => {
   }
 
   // CASE 7: Questionnaire completed but user tries to access questionnaire page
-  // if (isAuthenticated && questionnaireCompleted && path === '/questionnaire') {
-  //   return NextResponse.redirect(new URL('/dashboard', req.url));
-  // }
+  if (isAuthenticated && questionnaireCompleted && path === '/questionnaire') {
+    return NextResponse.redirect(new URL('/dashboard', req.url));
+  }
 
   // CASE 8: Path requires verification but user is not verified
   if (isVerifiedPath && isAuthenticated && !isVerified) {

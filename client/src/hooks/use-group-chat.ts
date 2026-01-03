@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useSocket } from "@/providers/socket-provider";
-import { ChatMessage } from "@/components/meeting/chat-message";
+import { ChatMessage, ReplyInfo } from "@/components/meeting/chat-message";
 
 interface UseGroupChatProps {
     meetingId: string;
@@ -17,6 +17,14 @@ interface ChatMessagePayload {
     userAvatar?: string;
     content: string;
     timestamp: string;
+    meetingId: string;
+    replyTo?: ReplyInfo;
+    isDeleted?: boolean;
+}
+
+interface DeleteMessagePayload {
+    messageId: string;
+    deletedBy: string;
     meetingId: string;
 }
 
@@ -64,6 +72,8 @@ export const useGroupChat = ({
                 content: payload.content,
                 timestamp: new Date(payload.timestamp),
                 isCurrentUser: payload.userId === session?.user?.id,
+                replyTo: payload.replyTo,
+                isDeleted: payload.isDeleted || false,
             };
 
             setMessages(prev => {
@@ -71,6 +81,55 @@ export const useGroupChat = ({
                 // Keep only the last maxMessages
                 return updated.slice(-maxMessages);
             });
+        };
+
+        const handleMessageDeleted = (payload: DeleteMessagePayload) => {
+            console.log("[Chat] Received delete event:", payload);
+            // Only process deletes for this meeting
+            if (payload.meetingId !== meetingId) {
+                console.log("[Chat] Ignoring delete - different meeting");
+                return;
+            }
+
+            console.log("[Chat] Processing delete for message:", payload.messageId);
+            setMessages(prev => {
+                const updated = prev.map(msg =>
+                    msg.id === payload.messageId
+                        ? { ...msg, isDeleted: true, content: "" }
+                        : msg
+                );
+                console.log("[Chat] Messages after delete:", updated);
+                return updated;
+            });
+        };
+
+        // Handle chat history on join
+        const handleChatHistory = (history: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            userAvatar?: string;
+            content: string;
+            timestamp: string;
+            meetingId: string;
+            isDeleted?: boolean;
+            replyTo?: ReplyInfo;
+        }>) => {
+            console.log("[Chat] Received chat history:", history.length, "messages");
+            
+            const formattedMessages: ChatMessage[] = history.map((msg) => ({
+                id: msg.id,
+                userId: msg.userId,
+                userName: msg.userName,
+                userAvatar: msg.userAvatar,
+                content: msg.content,
+                timestamp: new Date(msg.timestamp),
+                isCurrentUser: msg.userId === session?.user?.id,
+                isDeleted: msg.isDeleted || false,
+                replyTo: msg.replyTo,
+            }));
+
+            setMessages(formattedMessages);
         };
 
         const handleUserJoined = (data: { userId: string; userName: string }) => {
@@ -109,6 +168,8 @@ export const useGroupChat = ({
         socket.on("connect", handleConnect);
         socket.on("disconnect", handleDisconnect);
         socket.on("chat-message", handleChatMessage);
+        socket.on("chat-message-deleted", handleMessageDeleted);
+        socket.on("chat-history", handleChatHistory);
         socket.on("user-joined-meeting", handleUserJoined);
         socket.on("user-left-meeting", handleUserLeft);
 
@@ -116,6 +177,8 @@ export const useGroupChat = ({
             socket.off("connect", handleConnect);
             socket.off("disconnect", handleDisconnect);
             socket.off("chat-message", handleChatMessage);
+            socket.off("chat-message-deleted", handleMessageDeleted);
+            socket.off("chat-history", handleChatHistory);
             socket.off("user-joined-meeting", handleUserJoined);
             socket.off("user-left-meeting", handleUserLeft);
 
@@ -126,22 +189,36 @@ export const useGroupChat = ({
         };
     }, [socket, meetingId, session?.user?.id, maxMessages]);
 
-    const sendMessage = useCallback((content: string) => {
+    const sendMessage = useCallback((content: string, replyTo?: ReplyInfo) => {
         if (!socket || !socket.connected || !session?.user) {
             console.warn("Cannot send message: Socket not connected or user not authenticated");
             return;
         }
 
-        const messagePayload: Omit<ChatMessagePayload, "id" | "timestamp"> = {
+        const messagePayload = {
             userId: session.user.id,
             userName: session.user.firstName || "Unknown User",
             userAvatar: session.user.image || undefined,
             content,
             meetingId,
+            replyTo,
         };
 
         // Emit the message to the server
         socket.emit("send-chat-message", messagePayload);
+    }, [socket, session?.user, meetingId]);
+
+    const deleteMessage = useCallback((messageId: string) => {
+        if (!socket || !socket.connected || !session?.user) {
+            console.warn("Cannot delete message: Socket not connected or user not authenticated");
+            return;
+        }
+
+        console.log("[Chat] Emitting delete-chat-message:", { messageId, meetingId });
+        socket.emit("delete-chat-message", {
+            messageId,
+            meetingId,
+        });
     }, [socket, session?.user, meetingId]);
 
     const clearMessages = useCallback(() => {
@@ -151,7 +228,9 @@ export const useGroupChat = ({
     return {
         messages,
         sendMessage,
+        deleteMessage,
         clearMessages,
         isConnected,
     };
 };
+

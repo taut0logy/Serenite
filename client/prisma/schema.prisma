@@ -9,77 +9,111 @@ datasource db {
 }
 
 model User {
-  id             String               @id @default(uuid())
-  email          String               @unique
-  hashedPassword String?
-  role           Role                 @default(USER)
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  verified       Boolean              @default(false)
-  kycVerified    Boolean              @default(false)
-  verificationToken String?           @unique
-  resetToken     String?              @unique
-  resetTokenExpiry DateTime?
-  
+  id                String    @id @default(uuid())
+  email             String    @unique
+  hashedPassword    String?
+  role              Role      @default(USER)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  verified          Boolean   @default(false)
+  kycVerified       Boolean   @default(false)
+  verificationToken String?   @unique
+  resetToken        String?   @unique
+  resetTokenExpiry  DateTime?
+
   // Two-factor authentication fields
-  twoFactorEnabled Boolean            @default(false)
-  twoFactorAuth   TwoFactorAuth?
-  trustedDevices  TrustedDevice[]
+  twoFactorEnabled Boolean         @default(false)
+  twoFactorAuth    TwoFactorAuth?
+  trustedDevices   TrustedDevice[]
 
-  profile        Profile?
-  questionnaireResponse QuestionnaireResponse?
-  mentalHealthProfile MentalHealthProfile?
-  sessions       Session[]
-  supportGroups  SupportGroup[]      @relation("SupportGroupMembers")
-  meetings       Meeting[]           @relation("MeetingParticipants")
-  notifications  Notification[]
-  messagesSent   Message[]            @relation("Sender")
-  messagesReceived Message[]          @relation("Receiver")
-  calendarEvents CalendarEvent[]
-  feedbacks      Feedback[]
-  reportsMade    Report[]             @relation("Reporter")
-  reportsReceived ReportTarget[]      @relation("ReportedUser")
-  pollsCreated   Poll[]
-  pollsVoted     PollVote[]
+  profile                Profile?
+  questionnaireResponses QuestionnaireResponse[]
+  mentalHealthProfile    MentalHealthProfile?
+  sessions               Session[]
+  supportGroups          SupportGroup[]          @relation("SupportGroupMembers")
+  meetings               Meeting[]               @relation("MeetingParticipants")
+  notifications          Notification[]
+  messagesSent           Message[]               @relation("Sender")
+  messagesReceived       Message[]               @relation("Receiver")
+  calendarEvents         CalendarEvent[]
+  feedbacks              Feedback[]
+  reportsMade            Report[]                @relation("Reporter")
+  reportsReceived        ReportTarget[]          @relation("ReportedUser")
+  pollsCreated           Poll[]
+  pollsVoted             PollVote[]
 
-  posts                 Post[]
-  comments              Comment[]
-  reactions             Reaction[]
+  posts     Post[]
+  comments  Comment[]
+  reactions Reaction[]
+
+  recommendations UserRecommendation?
 }
 
 model Profile {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   firstName String
   lastName  String
   dob       DateTime?
   bio       String?
   avatarUrl String?
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model QuestionnaireResponse {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  responses Json
-  isComplete Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(uuid())
+  userId        String
+  encryptedData Bytes? // AES-GCM encrypted JSON of responses
+  iv            Bytes? // Initialization vector for AES-GCM
+  salt          Bytes? // PBKDF2 salt for key derivation
+  isComplete    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model MentalHealthProfile {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  tags      String[] 
-  narrative_summary String
-  recommendations String[]
-  timestamp DateTime @default(now())
+  id     String @id @default(uuid())
+  userId String @unique
 
+  // Cluster scores (plaintext, used for matching) - 0.0 to 1.0
+  distress          Float @default(0)
+  fearAvoidance     Float @default(0)
+  traumaStress      Float @default(0)
+  cognitivePatterns Float @default(0)
+  dailyFunctioning  Float @default(0)
+
+  // Computed severity
+  overallSeverity        SeverityLevel @default(MINIMAL)
+  requiresClinicalReview Boolean       @default(false)
+
+  timestamp DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([overallSeverity])
+}
+
+enum SeverityLevel {
+  MINIMAL
+  MILD
+  MODERATE
+  SEVERE
+}
+
+model UserRecommendation {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  recommendations Json
+  generatedAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -91,7 +125,7 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
-  meta      Json?    // Added for 2FA session metadata
+  meta      Json? // Added for 2FA session metadata
 }
 
 enum Role {
@@ -117,47 +151,60 @@ enum Weekday {
   SATURDAY
 }
 
-
 model SupportGroup {
-  id        String   @id @default(uuid())
-  name      String
+  id          String  @id @default(uuid())
+  shareableId String  @unique @default(cuid()) // Short, shareable ID for joining
+  name        String
   description String?
-  
-  type      SupportGroupType @default(WEEKLY)
-  tags      String[]
-  
+
+  type SupportGroupType @default(WEEKLY)
+  tags String[] // Keep for display/search
+
+  // Target cluster profile (what kind of users this group is for) - 0.0 to 1.0
+  targetDistress          Float @default(0)
+  targetFearAvoidance     Float @default(0)
+  targetTraumaStress      Float @default(0)
+  targetCognitivePatterns Float @default(0)
+  targetDailyFunctioning  Float @default(0)
+
+  // Severity range this group is suitable for
+  minSeverity SeverityLevel @default(MILD)
+  maxSeverity SeverityLevel @default(SEVERE)
+
+  // Capacity
+  maxMembers Int @default(12)
+
   // Recurring meeting schedule fields
-  meetingDayOfWeek    Weekday? @default(FRIDAY)
-  //set limits to day o month values
-  meetingDayOfMonth   Int?
-  meetingTime         String?   // HH:MM format (e.g., "17:00" for 5 PM)
-  nextMeetingDate     DateTime? // Automatically calculated next meeting date
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  members   User[]   @relation("SupportGroupMembers")
+  meetingDayOfWeek  Weekday?  @default(FRIDAY)
+  meetingDayOfMonth Int?
+  meetingTime       String? // HH:MM format (e.g., "17:00" for 5 PM)
+  nextMeetingDate   DateTime? // Automatically calculated next meeting date
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  members   User[]    @relation("SupportGroupMembers")
   meetings  Meeting[]
-  
+
+  @@index([shareableId])
   @@index([name])
   @@index([nextMeetingDate])
 }
 
 model Meeting {
-  id            String      @id @default(uuid())
-  startTime     DateTime
-  endTime       DateTime?
+  id             String        @id @default(uuid())
+  startTime      DateTime
+  endTime        DateTime?
   supportGroupId String?
-  supportGroup  SupportGroup? @relation(fields: [supportGroupId], references: [id], onDelete: Cascade)
-  participants  User[] @relation("MeetingParticipants")
-  status        MeetingStatus @default(PENDING)
-  messages      Message[]
-  feedback      Feedback[]
-  reports       Report[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  polls         Poll[]
-  recordings    Recording[]
-
+  supportGroup   SupportGroup? @relation(fields: [supportGroupId], references: [id], onDelete: Cascade)
+  participants   User[]        @relation("MeetingParticipants")
+  status         MeetingStatus @default(PENDING)
+  messages       Message[]
+  feedback       Feedback[]
+  reports        Report[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  polls          Poll[]
+  recordings     Recording[]
 }
 
 enum MeetingStatus {
@@ -167,27 +214,27 @@ enum MeetingStatus {
 }
 
 enum ParticipantStatus {
-  PENDING      // This is the default status when a user is invited to a meeting
-  ACCEPTED     // The user has accepted the meeting invitation
-  DECLINED    // The user has declined the meeting invitation
-  MUTED       // The user has been muted by the host
-  REMOVED     // The user has been removed from the meeting by the host
+  PENDING // This is the default status when a user is invited to a meeting
+  ACCEPTED // The user has accepted the meeting invitation
+  DECLINED // The user has declined the meeting invitation
+  MUTED // The user has been muted by the host
+  REMOVED // The user has been removed from the meeting by the host
   CAMERA_OFF // The user's camera is turned off by the host
   HAND_RAISED // The user has raised their hand
 }
 
 model Notification {
-  id        String               @id @default(uuid())
+  id        String           @id @default(uuid())
   userId    String
   type      NotificationType
   message   String
-  read      Boolean              @default(false)
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
-  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status    NotificationStatus   @default(UNREAD)
-  meta      Json?
+  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status NotificationStatus @default(UNREAD)
+  meta   Json?
 }
 
 enum NotificationType {
@@ -211,20 +258,24 @@ enum NotificationStatus {
 }
 
 model Message {
-  id        String   @id @default(uuid())
-  senderId  String
-  meetingId String?
-  receiverId String?
-  replyToId String?
-  replyTo   Message? @relation("MessageReply", fields: [replyToId], references: [id], onDelete: Cascade)
-  replies    Message[] @relation("MessageReply")
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sender    User     @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
-  meeting   Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  receiver  User?    @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  id          String       @id @default(uuid())
+  senderId    String
+  meetingId   String?
+  receiverId  String?
+  replyToId   String?
+  replyTo     Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: Cascade)
+  replies     Message[]    @relation("MessageReply")
+  content     String
+  isDeleted   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  sender      User         @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  meeting     Meeting?     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  receiver    User?        @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
   attachments Attachment[]
+
+  @@index([meetingId])
+  @@index([senderId])
 }
 
 model Attachment {
@@ -234,7 +285,7 @@ model Attachment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
 model Feedback {
@@ -246,8 +297,8 @@ model Feedback {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model CalendarEvent {
@@ -260,116 +311,116 @@ model CalendarEvent {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Report {
-  id          String         @id @default(uuid())
-  reporterId  String
-  meetingId   String
-  reason      String
-  createdAt   DateTime       @default(now())
+  id         String   @id @default(uuid())
+  reporterId String
+  meetingId  String
+  reason     String
+  createdAt  DateTime @default(now())
 
-  reporter    User           @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
-  meeting     Meeting        @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  targets     ReportTarget[]
+  reporter User           @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  meeting  Meeting        @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  targets  ReportTarget[]
 }
 
 model ReportTarget {
-  id        String   @id @default(uuid())
-  reportId  String
-  userId    String
+  id       String @id @default(uuid())
+  reportId String
+  userId   String
 
-  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  reportedUser User  @relation("ReportedUser", fields: [userId], references: [id], onDelete: Cascade)
+  report       Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportedUser User   @relation("ReportedUser", fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model TwoFactorAuth {
-  id            String   @id @default(uuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  secret        String?
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secret         String?
   otpBackupCodes String[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model TrustedDevice {
-  id            String   @id @default(uuid())
-  userId        String
-  deviceToken   String   @unique
-  deviceName    String
-  deviceType    String?
-  ipAddress     String?
-  lastUsed      DateTime @default(now())
-  expiresAt     DateTime
-  createdAt     DateTime @default(now())
-  
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id          String   @id @default(uuid())
+  userId      String
+  deviceToken String   @unique
+  deviceName  String
+  deviceType  String?
+  ipAddress   String?
+  lastUsed    DateTime @default(now())
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([deviceToken])
   @@index([userId])
 }
 
 model Poll {
-  id          String      @id @default(uuid())
-  meetingId   String
-  question    String
-  isActive    Boolean     @default(true)
-  isAnonymous Boolean     @default(false)
-  isMultipleChoice Boolean @default(false)
-  createdById   String
-  createdAt   DateTime    @default(now())
-  endTime     DateTime?
-  options     PollOption[]
-  votes       PollVote[]
-  meeting     Meeting     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  createdBy User        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  id               String       @id @default(uuid())
+  meetingId        String
+  question         String
+  isActive         Boolean      @default(true)
+  isAnonymous      Boolean      @default(false)
+  isMultipleChoice Boolean      @default(false)
+  createdById      String
+  createdAt        DateTime     @default(now())
+  endTime          DateTime?
+  options          PollOption[]
+  votes            PollVote[]
+  meeting          Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdBy        User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
 }
 
 model PollOption {
-  id      String   @id @default(uuid())
-  pollId  String
-  text    String
-  votes   Int      @default(0)
-  poll    Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  pollId String
+  text   String
+  votes  Int    @default(0)
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
 }
 
 model PollVote {
-  id      String   @id @default(uuid())
-  pollId  String
-  userId  String
-  optionIds String[] // Comma-separated for multiple choice
+  id        String   @id @default(uuid())
+  pollId    String
+  userId    String
+  optionIds String[]
   createdAt DateTime @default(now())
-  poll    Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poll      Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Recording {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   meetingId String
   url       String
   startedAt DateTime
   endedAt   DateTime?
-  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  meeting   Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 // Community feature models
 model Post {
-  id                 String      @id @default(cuid())
-  title              String
-  content            String      @db.Text
-  isAnonymous        Boolean     @default(false)
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  userId             String
-  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  comments           Comment[]
-  reactions          Reaction[]
-  tags               String[]
-  
+  id          String     @id @default(cuid())
+  title       String
+  content     String     @db.Text
+  isAnonymous Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  reactions   Reaction[]
+  tags        String[]
+
   @@index([userId])
 }
 
@@ -382,31 +433,31 @@ enum ReactionType {
 }
 
 model Reaction {
-  id          String       @id @default(cuid())
-  type        ReactionType
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  postId      String
-  post        Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
-  
+  id        String       @id @default(cuid())
+  type      ReactionType
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+
   @@unique([userId, postId, type])
   @@index([postId])
   @@index([userId])
 }
 
 model Comment {
-  id          String    @id @default(cuid())
-  content     String    @db.Text
-  isAnonymous Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+  isAnonymous Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   postId      String
-  post        Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
-  
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
   @@index([postId])
   @@index([userId])
 }

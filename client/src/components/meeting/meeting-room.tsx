@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Loader from "./loader";
 import { GroupChatPanel } from "./group-chat-panel";
-import { CustomCallControls } from "./custom-call-controls";
+import { CallControls } from "./call-controls";
 import { EnhancedParticipantsList } from "./participants-list";
 import { SpeakingIndicator } from "./speaking-indicator";
 import { useGroupChat } from "@/hooks/use-group-chat";
@@ -44,7 +44,7 @@ const MeetingRoom = ({ id }: { id?: string }) => {
     const meetingId = id || "default-meeting";
 
     // Initialize group chat
-    const { messages, sendMessage, isConnected } = useGroupChat({
+    const { messages, sendMessage, deleteMessage, isConnected } = useGroupChat({
         meetingId,
     });
 
@@ -81,10 +81,9 @@ const MeetingRoom = ({ id }: { id?: string }) => {
                 } catch (error) {
                     console.error("Reconnection failed:", error);
                     setLastError(
-                        `Reconnection failed: ${
-                            error instanceof Error
-                                ? error.message
-                                : "Unknown error"
+                        `Reconnection failed: ${error instanceof Error
+                            ? error.message
+                            : "Unknown error"
                         }`
                     );
                 }
@@ -100,7 +99,7 @@ const MeetingRoom = ({ id }: { id?: string }) => {
         switch (callingState) {
             case CallingState.JOINING:
                 return (
-                    <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] bg-slate-900">
+                    <div className="flex items-center justify-center min-h-[calc(100vh-65px)] bg-slate-900">
                         <div className="text-center space-y-4">
                             <Loader />
                             <p className="text-white text-lg">
@@ -112,7 +111,7 @@ const MeetingRoom = ({ id }: { id?: string }) => {
 
             case CallingState.RECONNECTING:
                 return (
-                    <div className="flex items-center justify-center min-[calc(100vh-4rem)] bg-slate-900">
+                    <div className="flex items-center justify-center min-[calc(100vh-65px)] bg-slate-900">
                         <div className="text-center space-y-4">
                             <RefreshCw className="h-8 w-8 animate-spin text-white mx-auto" />
                             <p className="text-white text-lg">
@@ -128,7 +127,7 @@ const MeetingRoom = ({ id }: { id?: string }) => {
             case CallingState.OFFLINE:
             case CallingState.RECONNECTING_FAILED:
                 return (
-                    <div className="flex items-center justify-center min-h-screen bg-slate-900">
+                    <div className="flex items-center justify-center min-h-[calc(100vh-65px)] bg-slate-900">
                         <div className="text-center space-y-4 max-w-md">
                             <Alert className="border-red-600 bg-red-900/20">
                                 <AlertTriangle className="h-4 w-4 text-red-400" />
@@ -167,7 +166,7 @@ const MeetingRoom = ({ id }: { id?: string }) => {
 
             case CallingState.LEFT:
                 return (
-                    <div className="flex items-center justify-center h-[calc(100vh-4rem)] bg-slate-900">
+                    <div className="flex items-center justify-center h-[calc(100vh-65px)] bg-slate-900">
                         <div className="text-center space-y-4">
                             <p className="text-white text-lg">
                                 You have left the meeting
@@ -186,7 +185,7 @@ const MeetingRoom = ({ id }: { id?: string }) => {
             case CallingState.UNKNOWN:
             default:
                 return (
-                    <div className="flex items-center justify-center h-[calc(100vh-4rem)] bg-slate-900">
+                    <div className="flex items-center justify-center h-[calc(100vh-65px)] bg-slate-900">
                         <div className="text-center space-y-4">
                             <Loader />
                             <p className="text-white text-lg">
@@ -236,19 +235,17 @@ const MeetingRoom = ({ id }: { id?: string }) => {
     };
 
     return (
-        <section className="relative w-full bg-slate-900 text-white h-[calc(100vh-4rem)] overflow-hidden">
+        <section className="relative w-full bg-slate-900 text-white h-[calc(100vh-65px)] flex flex-col overflow-hidden">
             {/* Speaking Indicator */}
             <SpeakingIndicator />
 
             {/* Main Video Area */}
-            <div className="relative flex h-full w-full">
+            <div className="relative flex flex-1 w-full min-h-0">
                 {/* Video Layout Container - Properly sized for different layouts */}
-                <div className="flex-1 flex flex-col h-full">
+                <div className="flex-1 flex flex-col h-full min-h-0">
                     {/* Video Feed Area with improved grid sizing */}
-                    <div className="flex-1 overflow-hidden p-2 pb-20">
-                        <div className="w-full h-full max-w-none mx-auto">
-                            <CallLayout />
-                        </div>
+                    <div className="flex-1 overflow-y-auto p-2 min-h-0">
+                        <CallLayout />
                     </div>
                 </div>
 
@@ -284,23 +281,25 @@ const MeetingRoom = ({ id }: { id?: string }) => {
                         onClose={() => setShowChat(false)}
                         messages={messages}
                         onSendMessage={sendMessage}
+                        onDeleteMessage={deleteMessage}
                         participantCount={participantCount || 0}
                         isConnected={isConnected}
                     />
                 </div>
             </div>
 
-            {/* Custom Call Controls with proper z-index */}
-            <CustomCallControls
-                onLeave={() => router.push("/dashboard")}
-                layout={layout}
-                onLayoutChange={setLayout}
-                showParticipants={showParticipants}
-                onToggleParticipants={handleToggleParticipants}
-                showChat={showChat}
-                onToggleChat={handleToggleChat}
-                isPersonalRoom={isPersonalRoom}
-            />
+            <div className="flex-shrink-0">
+                <CallControls
+                    onLeave={() => router.push("/dashboard")}
+                    layout={layout}
+                    onLayoutChange={setLayout}
+                    showParticipants={showParticipants}
+                    onToggleParticipants={handleToggleParticipants}
+                    showChat={showChat}
+                    onToggleChat={handleToggleChat}
+                    isPersonalRoom={isPersonalRoom}
+                />
+            </div>
         </section>
     );
 };

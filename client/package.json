@@ -9,11 +9,11 @@
         "lint": "next lint",
         "gen": "prisma generate",
         "db:push": "prisma db push",
-        "db:seed": "tsx prisma/seed.ts",
-        "db:seed:complete": "tsx prisma/seed-complete.ts"
+        "seed:u": "tsx prisma/seed-users.ts",
+        "seed:g": "tsx prisma/seed-groups.ts"
     },
     "prisma": {
-        "seed": "tsx prisma/seed.ts"
+        "seed": "tsx prisma/seed-groups.ts"
     },
     "dependencies": {
         "@apollo/client": "^3.13.9",

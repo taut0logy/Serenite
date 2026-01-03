@@ -42,7 +42,7 @@ interface CustomCallControlsProps {
     isPersonalRoom?: boolean;
 }
 
-export const CustomCallControls = ({
+export const CallControls = ({
     onLeave,
     layout,
     onLayoutChange,
@@ -85,7 +85,7 @@ export const CustomCallControls = ({
     };
 
     return (
-        <div className="meeting-controls-bar absolute bottom-0 left-0 right-0 h-18 bg-slate-800/95 backdrop-blur-md border-t border-slate-700">
+        <div className="meeting-controls-bar w-full h-18 bg-slate-800/65 backdrop-blur-md border-t border-slate-700">
             <div className="flex items-center justify-center gap-2 px-6 py-3 h-full max-w-7xl mx-auto">
                 {/* Main Controls - Center */}
                 <div className="flex items-center gap-3">
@@ -208,7 +208,7 @@ export const CustomCallControls = ({
                             {/* Layout Options */}
                             <DropdownMenuItem
                                 className="hover:bg-slate-700 focus:bg-slate-700 cursor-pointer px-3 py-2"
-                                onSelect={() => {}}
+                                onSelect={() => { }}
                             >
                                 <LayoutList size={16} className="mr-2" />
                                 Layout Options

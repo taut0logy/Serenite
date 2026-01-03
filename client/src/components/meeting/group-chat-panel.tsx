@@ -5,7 +5,7 @@ import { X, MessageSquare, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { ChatMessageComponent, type ChatMessage } from "./chat-message";
+import { ChatMessageComponent, type ChatMessage, type ReplyInfo } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +13,8 @@ interface GroupChatPanelProps {
     isOpen: boolean;
     onClose: () => void;
     messages: ChatMessage[];
-    onSendMessage: (message: string) => void;
+    onSendMessage: (message: string, replyTo?: ReplyInfo) => void;
+    onDeleteMessage?: (messageId: string) => void;
     participantCount: number;
     isConnected: boolean;
 }
@@ -23,11 +24,13 @@ export const GroupChatPanel = ({
     onClose,
     messages,
     onSendMessage,
+    onDeleteMessage,
     participantCount,
     isConnected,
 }: GroupChatPanelProps) => {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [replyingTo, setReplyingTo] = useState<ReplyInfo | null>(null);
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -45,13 +48,33 @@ export const GroupChatPanel = ({
     useEffect(() => {
         if (!isOpen && messages.length > 0) {
             const lastMessage = messages[messages.length - 1];
-            if (!lastMessage.isCurrentUser) {
+            if (!lastMessage.isCurrentUser && !lastMessage.isDeleted) {
                 setUnreadCount((prev) => prev + 1);
             }
         } else if (isOpen) {
             setUnreadCount(0);
         }
     }, [messages, isOpen]);
+
+    // Handle reply click
+    const handleReply = (message: ChatMessage) => {
+        setReplyingTo({
+            id: message.id,
+            userName: message.userName,
+            content: message.content,
+        });
+    };
+
+    // Handle cancel reply
+    const handleCancelReply = () => {
+        setReplyingTo(null);
+    };
+
+    // Handle send with reply
+    const handleSendMessage = (content: string, replyTo?: ReplyInfo) => {
+        onSendMessage(content, replyTo);
+        setReplyingTo(null);
+    };
 
     return (
         <div
@@ -108,9 +131,9 @@ export const GroupChatPanel = ({
                 </div>
             </div>
 
-            {/* Messages Area - Account for controls height */}
-            <div className="flex-1 flex flex-col min-h-0 pb-20">
-                <ScrollArea ref={scrollAreaRef} className="flex-1 px-2">
+            {/* Messages Area */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <ScrollArea ref={scrollAreaRef} className="flex-1 px-2 h-full">
                     <div className="py-2">
                         {messages.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-32 text-center text-slate-400">
@@ -129,24 +152,29 @@ export const GroupChatPanel = ({
                                     <ChatMessageComponent
                                         key={message.id}
                                         message={message}
+                                        onReply={handleReply}
+                                        onDelete={onDeleteMessage}
                                     />
                                 ))}
                             </div>
                         )}
                     </div>
                 </ScrollArea>
+            </div>
 
-                {/* Chat Input - Fixed at bottom but above controls */}
-                <div className="absolute bottom-20 left-0 right-0 bg-slate-800 border-t border-slate-700">
-                    <ChatInput
-                        onSendMessage={onSendMessage}
-                        disabled={!isConnected}
-                        placeholder={
-                            isConnected ? "Type a message..." : "Connecting..."
-                        }
-                    />
-                </div>
+            {/* Chat Input */}
+            <div className="flex-shrink-0 border-t border-slate-700">
+                <ChatInput
+                    onSendMessage={handleSendMessage}
+                    disabled={!isConnected}
+                    placeholder={
+                        isConnected ? "Type a message..." : "Connecting..."
+                    }
+                    replyingTo={replyingTo}
+                    onCancelReply={handleCancelReply}
+                />
             </div>
         </div>
     );
 };
+

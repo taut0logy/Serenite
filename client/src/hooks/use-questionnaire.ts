@@ -1,153 +1,227 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { saveQuestionnaireProgress, getQuestionnaireProgress, completeQuestionnaire } from '@/actions/questionnaire.actions';
+import { 
+    saveEncryptedResponses, 
+    getEncryptedResponses, 
+    completeQuestionnaire 
+} from '@/actions/questionnaire.actions';
+import { verifyPassword } from '@/actions/auth.actions';
 import { useQuestionnaireStore } from '@/stores/use-questionnaire-store';
 import { QuestionnaireResponses } from '@/types/questionnaire';
+import { computeProfile } from '@/lib/profiling';
+import { 
+    encryptResponses, 
+    decryptResponses, 
+    arrayBufferToBase64, 
+    base64ToArrayBuffer,
+    base64ToUint8Array 
+} from '@/lib/encryption';
 
 export function useQuestionnaire() {
     const { data: session } = useSession();
-    const store = useQuestionnaireStore();
+    
+    // Use stable references to store methods
+    const setResponses = useQuestionnaireStore(s => s.setResponses);
+    const setIsSubmitting = useQuestionnaireStore(s => s.setIsSubmitting);
+    const setState = useQuestionnaireStore(s => s.setState);
+    const responses = useQuestionnaireStore(s => s.responses);
+    const isLoading = useQuestionnaireStore(s => s.isLoading);
+    const isSubmitting = useQuestionnaireStore(s => s.isSubmitting);
+    const getFirstUnansweredIndex = useQuestionnaireStore(s => s.getFirstUnansweredIndex);
+    
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [hasInitialized, setHasInitialized] = useState(false);
+    const [password, setPassword] = useState<string | null>(null);
+    const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+    
+    // Ref to track if save is in progress (prevents double-saves)
+    const isSaving = useRef(false);
+    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Helper function to find the first slide with unanswered questions
-    const findFirstIncompleteSlide = useCallback((responses: QuestionnaireResponses) => {
-        const slides = store.slides;
-
-        for (let i = 0; i < slides.length; i++) {
-            const slideQuestions = slides[i].questions;
-            const hasUnansweredQuestions = slideQuestions.some(q => responses[q.id] === undefined);
-
-            if (hasUnansweredQuestions) {
-                return i;
-            }
-        }
-
-        // If all slides are complete, return the last slide
-        return slides.length - 1;
-    }, [store.slides]);
-
-    // Auto-save to database with debouncing
-    const saveToDatabase = useCallback(async (responses: QuestionnaireResponses) => {
-        if (!session?.user || Object.keys(responses).length === 0) {
-            return { success: false, error: 'User not authenticated or no responses' };
+    /**
+     * Verify and set the user's password for encryption/decryption.
+     */
+    const verifyAndSetPassword = useCallback(async (pwd: string): Promise<{ success: boolean; error?: string }> => {
+        if (!session?.user?.id) {
+            return { success: false, error: 'User not authenticated' };
         }
 
         try {
-            const result = await saveQuestionnaireProgress(responses);
+            const result = await verifyPassword(session.user.id, pwd);
+            
+            if (!result.success) {
+                return { success: false, error: result.message || 'Incorrect password' };
+            }
+
+            setPassword(pwd);
+            setIsPasswordVerified(true);
+            return { success: true };
+        } catch (error) {
+            console.error('Error verifying password:', error);
+            return { success: false, error: 'Failed to verify password' };
+        }
+    }, [session?.user?.id]);
+
+    /**
+     * Save encrypted responses to database.
+     */
+    const saveToDatabase = useCallback(async (responsesToSave: QuestionnaireResponses) => {
+        if (!session?.user || Object.keys(responsesToSave).length === 0) {
+            return { success: false, error: 'User not authenticated or no responses' };
+        }
+
+        if (!password || !isPasswordVerified) {
+            return { success: false, error: 'Password not verified' };
+        }
+
+        if (isSaving.current) {
+            return { success: false, error: 'Save already in progress' };
+        }
+
+        isSaving.current = true;
+        try {
+            const { encrypted, iv, salt } = await encryptResponses(responsesToSave, password);
+            const encryptedBase64 = arrayBufferToBase64(encrypted);
+            const ivBase64 = arrayBufferToBase64(iv.buffer as ArrayBuffer);
+            const saltBase64 = arrayBufferToBase64(salt.buffer as ArrayBuffer);
+
+            const result = await saveEncryptedResponses(encryptedBase64, ivBase64, saltBase64);
             return result;
         } catch (error) {
-            console.error('Failed to save to database:', error);
-            return { success: false, error: 'Failed to save to database' };
+            console.error('Failed to encrypt and save:', error);
+            return { success: false, error: 'Failed to encrypt and save responses' };
+        } finally {
+            isSaving.current = false;
         }
-    }, [session]);
+    }, [session?.user, password, isPasswordVerified]);
 
-    // Load progress from database
+    /**
+     * Load and decrypt responses from database.
+     */
     const loadFromDatabase = useCallback(async () => {
         if (!session?.user) {
             return { success: false, error: 'User not authenticated' };
         }
 
-        console.log('Loading questionnaire progress from database...');
+        if (!password || !isPasswordVerified) {
+            return { success: false, error: 'Password not verified' };
+        }
+
         try {
-            const result = await getQuestionnaireProgress();
-            console.log('Database result:', result);
+            const result = await getEncryptedResponses();
 
-            if (result.success && result.data) {
-                console.log('Setting responses in store:', result.data);
-                store.setResponses(result.data);
+            if (result.success && result.data?.encryptedData) {
+                try {
+                    const encrypted = base64ToArrayBuffer(result.data.encryptedData);
+                    const iv = base64ToUint8Array(result.data.iv);
+                    const salt = base64ToUint8Array(result.data.salt);
 
-                // Find the first slide with unanswered questions
-                const targetSlide = findFirstIncompleteSlide(result.data);
-
-                console.log(`Setting current slide to ${targetSlide} (first slide with unanswered questions)`);
-                store.setCurrentSlide(targetSlide);
-
-                return { success: true, data: result.data };
+                    const decryptedResponses = await decryptResponses(encrypted, iv, salt, password);
+                    setResponses(decryptedResponses);
+                    return { success: true, data: decryptedResponses };
+                } catch (decryptError) {
+                    console.error('Failed to decrypt responses:', decryptError);
+                    return { success: false, error: 'Failed to decrypt responses' };
+                }
             } else {
-                // No saved progress or error - start fresh
-                store.setResponses({});
-                store.setCurrentSlide(0);
+                // No encrypted data - start fresh
+                setResponses({});
                 return { success: true, data: null };
             }
         } catch (error) {
             console.error('Failed to load from database:', error);
-            // On error, start fresh
-            store.setResponses({});
-            store.setCurrentSlide(0);
+            setResponses({});
             return { success: false, error: 'Failed to load from database' };
         }
-    }, [session, store, findFirstIncompleteSlide]);
+    }, [session?.user, password, isPasswordVerified, setResponses]);
 
-    // Complete questionnaire
+    /**
+     * Complete questionnaire: encrypt responses and compute profile locally.
+     */
     const submitQuestionnaire = useCallback(async () => {
         if (!session?.user) {
             throw new Error('User not authenticated');
         }
 
-        store.setIsSubmitting(true);
+        if (!password || !isPasswordVerified) {
+            throw new Error('Password not verified');
+        }
+
+        setIsSubmitting(true);
         try {
-            const result = await completeQuestionnaire(store.responses);
+            // 1. Compute profile locally (deterministic, no LLM)
+            const profile = computeProfile(responses);
+
+            // 2. Encrypt responses locally
+            const { encrypted, iv, salt } = await encryptResponses(responses, password);
+            const encryptedBase64 = arrayBufferToBase64(encrypted);
+            const ivBase64 = arrayBufferToBase64(iv.buffer as ArrayBuffer);
+            const saltBase64 = arrayBufferToBase64(salt.buffer as ArrayBuffer);
+
+            // 3. Send profile (plaintext) + encrypted responses to server
+            const result = await completeQuestionnaire(
+                profile,
+                encryptedBase64,
+                ivBase64,
+                saltBase64
+            );
+
             if (result.success) {
-                store.setResponses({});
-                store.setState('intro');
-                store.setCurrentSlide(0);
+                setResponses({});
+                setState('intro');
                 return result;
             } else {
-                console.error('Failed to complete questionnaire:', result.error);
                 throw new Error(result.error || 'Failed to complete questionnaire');
             }
         } finally {
-            store.setIsSubmitting(false);
+            setIsSubmitting(false);
         }
-    }, [session, store]);
+    }, [session?.user, password, isPasswordVerified, responses, setIsSubmitting, setResponses, setState]);
 
-    // Initialize: Load from database when session is ready
+    // Initialize: Load from database when password is verified
     useEffect(() => {
-        if (!session?.user || hasInitialized) return;
+        if (!session?.user || hasInitialized || !password || !isPasswordVerified) return;
 
-        console.log('Initializing questionnaire - loading from database...');
         setIsInitialLoading(true);
-
         loadFromDatabase().finally(() => {
             setIsInitialLoading(false);
             setHasInitialized(true);
         });
-    }, [session, hasInitialized, loadFromDatabase]);
+    }, [session?.user, hasInitialized, loadFromDatabase, password, isPasswordVerified]);
 
-    // Auto-save responses to database when they change (only after initialization)
+    // Auto-save responses with debouncing (single effect, prevents race conditions)
     useEffect(() => {
-        if (!session?.user || !hasInitialized || Object.keys(store.responses).length === 0) return;
+        if (!session?.user || !hasInitialized || !password || !isPasswordVerified) return;
+        if (Object.keys(responses).length === 0) return;
 
-        const timeoutId = setTimeout(async () => {
-            await saveToDatabase(store.responses);
-        }, 2000); // Save to database 2 seconds after last change
+        // Clear any pending save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
 
-        return () => clearTimeout(timeoutId);
-    }, [store.responses, session, saveToDatabase, hasInitialized]);
+        // Debounce save
+        saveTimeoutRef.current = setTimeout(() => {
+            saveToDatabase(responses);
+        }, 2000);
 
-    // Auto-save when current slide changes (only after initialization)
-    useEffect(() => {
-        if (!session?.user || !hasInitialized || Object.keys(store.responses).length === 0) return;
-
-        const timeoutId = setTimeout(async () => {
-            await saveToDatabase(store.responses);
-        }, 1000); // Save to database 1 second after slide change
-
-        return () => clearTimeout(timeoutId);
-    }, [store.currentSlide, session, saveToDatabase, store.responses, hasInitialized]);
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, [responses, session?.user, hasInitialized, password, isPasswordVerified, saveToDatabase]);
 
     return {
-        saveToDatabase,
-        loadFromDatabase,
         submitQuestionnaire,
-        isLoading: store.isLoading,
-        isSubmitting: store.isSubmitting,
+        verifyAndSetPassword,
+        isLoading,
+        isSubmitting,
         isInitialLoading,
         hasInitialized,
-        findFirstIncompleteSlide,
+        needsPassword: !isPasswordVerified,
+        getFirstUnansweredIndex,
     };
 }
 
@@ -161,7 +235,6 @@ export function useKeyboardNavigation(
 ) {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            // Only handle if not typing in an input
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
                 return;
             }

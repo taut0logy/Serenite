@@ -1,33 +1,62 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
     QuestionnaireIntro,
     QuestionnaireSlide,
     QuestionnaireCompletion,
     QuestionnaireReview,
+    QuestionnairePasswordPrompt,
 } from "@/components/questionnaire";
 import { useQuestionnaireStore } from "@/stores/use-questionnaire-store";
 import { useQuestionnaire } from "@/hooks/use-questionnaire";
 import { useRefreshSession } from "@/lib/session-utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 export default function QuestionnairePage() {
-    const store = useQuestionnaireStore();
+    const { data: session } = useSession();
     const { refreshSession } = useRefreshSession();
-    const router = useRouter();
+
+    // Store selectors for optimized re-renders
+    const state = useQuestionnaireStore(s => s.state);
+    const setState = useQuestionnaireStore(s => s.setState);
+    const responses = useQuestionnaireStore(s => s.responses);
+    const setResponse = useQuestionnaireStore(s => s.setResponse);
+    const questions = useQuestionnaireStore(s => s.questions);
+    const hasSavedProgress = useQuestionnaireStore(s => s.hasSavedProgress);
+    const getFirstUnansweredIndex = useQuestionnaireStore(s => s.getFirstUnansweredIndex);
+
     const {
         submitQuestionnaire,
+        verifyAndSetPassword,
         isSubmitting,
         isInitialLoading,
         hasInitialized,
-        findFirstIncompleteSlide,
+        needsPassword,
     } = useQuestionnaire();
+
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
+    const [editStartIndex, setEditStartIndex] = useState<number | null>(null);
+    const [isEditingFromReview, setIsEditingFromReview] = useState(false);
 
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
-    }, [store.state, store.currentSlide]);
+    }, [state]);
+
+    // Handle password submission with server verification
+    const handlePasswordSubmit = useCallback(async (password: string) => {
+        setIsVerifyingPassword(true);
+        setPasswordError(null);
+
+        const result = await verifyAndSetPassword(password);
+        setIsVerifyingPassword(false);
+
+        if (!result.success) {
+            setPasswordError(result.error || 'Incorrect password');
+        }
+    }, [verifyAndSetPassword]);
 
     const handleSubmit = async () => {
         try {
@@ -35,86 +64,68 @@ export default function QuestionnairePage() {
 
             if (result.success) {
                 toast.success("Thanks a lot! Let your journey begin.");
-
                 await refreshSession();
-
-                router.push("/dashboard");
-
+                //router.push("/dashboard");
             }
         } catch (error) {
             console.error("Error submitting questionnaire:", error);
-            toast.error("Error submitting questionnaire. Please try again.");
+            if (error instanceof Error && error.message.includes("Password")) {
+                toast.error("Password verification failed. Please refresh and try again.");
+            } else {
+                toast.error("Error submitting questionnaire. Please try again.");
+            }
         }
     };
 
     const handleStart = () => {
-        store.setState("progress");
-    };
-
-    const handleNext = () => {
-        if (store.canGoNext()) {
-            if (store.currentSlide < store.totalSlides - 1) {
-                store.setCurrentSlide(store.currentSlide + 1);
-            } else {
-                store.setState("completion");
-            }
-        }
-    };
-
-    const handlePrevious = () => {
-        if (store.canGoPrevious()) {
-            store.setCurrentSlide(store.currentSlide - 1);
-        }
+        setState("progress");
     };
 
     const handleReview = () => {
-        store.setState("review");
+        setState("review");
     };
-
-    const [editStartIndex, setEditStartIndex] = useState<number | null>(null);
-    const [isEditingFromReview, setIsEditingFromReview] = useState(false);
-    useEffect(() => {
-        if (editStartIndex !== null) {
-            setEditStartIndex(null);
-        }
-    }, [editStartIndex]);
 
     const handleEditFromReview = (questionIndex: number) => {
         setEditStartIndex(questionIndex);
         setIsEditingFromReview(true);
-        store.setState("progress");
+        setState("progress");
     };
 
     const handleFinishEditing = () => {
         setIsEditingFromReview(false);
-        store.setState("review");
+        setState("review");
     };
 
     const handleBackFromReview = () => {
-        store.setState("completion");
+        setState("completion");
     };
 
-    const handleReEdit = () => {
-        store.setState("progress");
-        const targetSlide = findFirstIncompleteSlide(store.responses);
-        store.setCurrentSlide(targetSlide);
-    };
+    // Show password prompt if password is needed (not yet verified)
+    if (needsPassword && session?.user) {
+        return (
+            <QuestionnairePasswordPrompt
+                onPasswordSubmit={handlePasswordSubmit}
+                isLoading={isVerifyingPassword}
+                error={passwordError}
+            />
+        );
+    }
 
-    if (store.state === "intro") {
+    if (state === "intro") {
         return (
             <QuestionnaireIntro
                 onStart={handleStart}
-                hasSavedProgress={store.hasSavedProgress}
+                hasSavedProgress={hasSavedProgress}
                 isLoading={isInitialLoading}
                 hasInitialized={hasInitialized}
             />
         );
     }
 
-    if (store.state === "review") {
+    if (state === "review") {
         return (
             <QuestionnaireReview
-                responses={store.responses}
+                responses={responses}
                 onEditAtIndex={handleEditFromReview}
                 onBack={handleBackFromReview}
                 onSubmit={handleSubmit}
@@ -122,7 +133,7 @@ export default function QuestionnairePage() {
         );
     }
 
-    if (store.state === "completion") {
+    if (state === "completion") {
         return (
             <QuestionnaireCompletion
                 onSubmit={handleSubmit}
@@ -132,29 +143,24 @@ export default function QuestionnairePage() {
         );
     }
 
-    const allQuestions = store.slides.flatMap((slide) => slide.questions);
-
-    const firstIncompleteIndex = allQuestions.findIndex(
-        (q) => store.responses[q.id] === undefined
-    );
-
-    const calculatedIndex = firstIncompleteIndex === -1
-        ? (Object.keys(store.responses).length === allQuestions.length ? allQuestions.length - 1 : 0)
-        : firstIncompleteIndex;
-
-    const initialIndex = editStartIndex !== null ? editStartIndex : calculatedIndex;
-
+    // Progress state - calculate initial index
+    const firstUnansweredIndex = getFirstUnansweredIndex();
+    const initialIndex = editStartIndex !== null ? editStartIndex : firstUnansweredIndex;
 
     return (
         <QuestionnaireSlide
-            questions={allQuestions}
-            responses={store.responses}
-            onResponseChange={store.setResponse}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
+            questions={questions}
+            responses={responses}
+            onResponseChange={(questionId, value) => {
+                setResponse(questionId, value);
+                // Clear editStartIndex when user makes a change
+                if (editStartIndex !== null) {
+                    setEditStartIndex(null);
+                }
+            }}
             initialIndex={initialIndex}
-            onComplete={() => store.setState("completion")}
-            onBackToIntro={() => store.setState("intro")}
+            onComplete={() => setState("completion")}
+            onBackToIntro={() => setState("intro")}
             onFinishEditing={isEditingFromReview ? handleFinishEditing : undefined}
         />
     );

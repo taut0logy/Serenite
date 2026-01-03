@@ -467,8 +467,8 @@ export async function verifyOtp(
             where: { userId: user.id },
         });
 
-        const questionnaireResponse = await prisma.questionnaireResponse.findUnique({
-            where: { userId: user.id },
+        const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+            where: { userId: user.id, isComplete: true },
         });
 
         return {
@@ -586,8 +586,8 @@ export async function check2FARequired(
             where: { userId: user.id },
         });
 
-        const questionnaireResponse = await prisma.questionnaireResponse.findUnique({
-            where: { userId: user.id },
+        const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+            where: { userId: user.id, isComplete: true },
         });
 
         return {
@@ -726,8 +726,8 @@ export async function verifyBackupCode(
             where: { userId: user.id },
         });
 
-        const questionnaireResponse = await prisma.questionnaireResponse.findUnique({
-            where: { userId: user.id },
+        const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+            where: { userId: user.id, isComplete: true },
         });
 
         return {
@@ -904,7 +904,10 @@ export async function verifySession(token: string) {
                     include: {
                         profile: true,
                         mentalHealthProfile: true,
-                        questionnaireResponse: true,
+                        questionnaireResponses: {
+                            where: { isComplete: true },
+                            take: 1,
+                        },
                     },
                 },
             },
@@ -913,8 +916,8 @@ export async function verifySession(token: string) {
         // Check if session exists and is not expired
         if (!session || session.expiresAt < new Date()) {
             if (session) {
-                // Delete expired session
-                await prisma.session.delete({
+                // Delete expired session (use deleteMany to avoid race condition)
+                await prisma.session.deleteMany({
                     where: { id: session.id },
                 });
             }
@@ -925,13 +928,22 @@ export async function verifySession(token: string) {
             };
         }
 
-        // Update session expiry
-        await prisma.session.update({
-            where: { id: session.id },
-            data: {
-                expiresAt: new Date(Date.now() + TOKEN_EXPIRY),
-            },
-        });
+        // Update session expiry (wrap in try-catch for race conditions)
+        try {
+            await prisma.session.update({
+                where: { id: session.id },
+                data: {
+                    expiresAt: new Date(Date.now() + TOKEN_EXPIRY),
+                },
+            });
+        } catch (error) {
+            // Session may have been deleted by another request, return invalid
+            console.warn("Session update failed, may have been deleted:", error);
+            return {
+                valid: false,
+                user: null,
+            };
+        }
 
         // console.log("User Mental Health Profile:", session.user.mentalHealthProfile);
 
@@ -1138,7 +1150,10 @@ export async function socialAuth(
             where: { email },
             include: {
                 profile: true,
-                questionnaireResponse: true,
+                questionnaireResponses: {
+                    where: { isComplete: true },
+                    take: 1,
+                },
             },
         });
 
@@ -1181,7 +1196,7 @@ export async function socialAuth(
                     verified: existingUser.verified,
                     hasPassword: existingUser.hashedPassword ? true : false,
                     kycVerified: existingUser.kycVerified,
-                    questionnaireCompleted: !!existingUser.questionnaireResponse,
+                    questionnaireCompleted: existingUser.questionnaireResponses && existingUser.questionnaireResponses.length > 0,
                     twoFactorEnabled: existingUser.twoFactorEnabled,
                     profile: {
                         ...existingUser.profile,
@@ -1209,7 +1224,10 @@ export async function socialAuth(
                 },
                 include: {
                     profile: true,
-                    questionnaireResponse: true,
+                    questionnaireResponses: {
+                        where: { isComplete: true },
+                        take: 1,
+                    },
                 },
             });
 
@@ -1238,7 +1256,7 @@ export async function socialAuth(
                     verified: newUser.verified,
                     hasPassword: newUser.hashedPassword ? true : false,
                     kycVerified: newUser.kycVerified,
-                    questionnaireCompleted: !!newUser.questionnaireResponse,
+                    questionnaireCompleted: newUser.questionnaireResponses && newUser.questionnaireResponses.length > 0,
                     twoFactorEnabled: newUser.twoFactorEnabled,
                     profile: newUser.profile,
                 },
@@ -1384,6 +1402,104 @@ export async function changePassword(
         };
     } catch (error) {
         console.error("Error changing password:", error);
+        throw new Error("Failed to change password");
+    }
+}
+
+/**
+ * Change password with re-encryption of questionnaire responses.
+ * The re-encryption happens client-side and the new encrypted data is passed to this function.
+ * This ensures the server never sees the raw questionnaire responses.
+ * 
+ * @param userId - User ID
+ * @param currentPassword - Current password for verification
+ * @param newPassword - New password
+ * @param reencryptedData - Re-encrypted questionnaire responses (Base64)
+ * @param newIv - New IV for the re-encrypted data (Base64)
+ * @param newSalt - New salt for the re-encrypted data (Base64)
+ */
+export async function changePasswordWithReencryption(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    reencryptedData?: string,
+    newIv?: string,
+    newSalt?: string
+) {
+    try {
+        // Check if user exists
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+        });
+
+        if (!user || !user.hashedPassword) {
+            return {
+                success: false,
+                message: "User not found or password cannot be changed",
+            };
+        }
+
+        // Verify current password
+        const isPasswordValid = await bcrypt.compare(
+            currentPassword,
+            user.hashedPassword
+        );
+        if (!isPasswordValid) {
+            return {
+                success: false,
+                message: "Current password is incorrect",
+            };
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+        // Use transaction to update both password and re-encrypted data atomically
+        await prisma.$transaction(async (tx) => {
+            // Update password
+            await tx.user.update({
+                where: { id: userId },
+                data: { hashedPassword },
+            });
+
+            // Update re-encrypted questionnaire responses if provided
+            if (reencryptedData && newIv && newSalt) {
+                const encryptedBuffer = Buffer.from(reencryptedData, "base64");
+                const ivBuffer = Buffer.from(newIv, "base64");
+                const saltBuffer = Buffer.from(newSalt, "base64");
+
+                // Update the latest incomplete questionnaire response
+                const latestResponse = await tx.questionnaireResponse.findFirst({
+                    where: { userId, isComplete: false },
+                    orderBy: { createdAt: 'desc' },
+                });
+
+                if (latestResponse) {
+                    await tx.questionnaireResponse.update({
+                        where: { id: latestResponse.id },
+                        data: {
+                            encryptedData: encryptedBuffer,
+                            iv: ivBuffer,
+                            salt: saltBuffer,
+                            updatedAt: new Date(),
+                        },
+                    });
+                }
+            }
+
+            // Invalidate all existing sessions for security
+            await tx.session.deleteMany({
+                where: { userId },
+            });
+        });
+
+        return {
+            success: true,
+            message:
+                "Password changed successfully. Please log in again with your new password.",
+        };
+    } catch (error) {
+        console.error("Error changing password with re-encryption:", error);
         throw new Error("Failed to change password");
     }
 }

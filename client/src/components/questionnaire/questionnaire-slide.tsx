@@ -14,12 +14,10 @@ interface QuestionnaireSlideProps {
     questions: Question[];
     responses: Record<string, number>;
     onResponseChange: (questionId: string, value: number) => void;
-    onNext: () => void;
-    onPrevious: () => void;
     initialIndex: number;
     onComplete: () => void;
     onBackToIntro: () => void;
-    onFinishEditing?: () => void; // Optional: shown when editing from review
+    onFinishEditing?: () => void;
 }
 
 export function QuestionnaireSlide({
@@ -88,6 +86,7 @@ export function QuestionnaireSlide({
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [curr?.id, index, questions.length]);
 
     if (!curr) return null;
@@ -251,7 +250,7 @@ export function QuestionnaireSlide({
                         <div className="mt-4">
                             <Button
                                 onClick={onFinishEditing}
-                                
+
                                 className="w-full h-12"
                             >
                                 <Check className="w-4 h-4 mr-2" />

@@ -6,6 +6,7 @@ from langchain_postgres import PGVector
 from sqlalchemy import create_engine, text
 from datetime import datetime
 import uuid
+import re
 from utils.logger import logger
 from config.settings import settings
 from services.embeddings_adapter import get_embeddings
@@ -206,9 +207,11 @@ def store_diary_entry(entry: DiaryEntry) -> StoredDiaryEntry:
 
         # Create document for vector store
         doc_id = str(uuid.uuid4())
+        has_img = "<img" in entry.content if entry.content else False
+        logger.info(f"Storing entry with has_img={has_img}, content_len={len(entry.content) if entry.content else 0}")
         document = {
             "id": doc_id,
-            "content": entry.content,
+            "content": entry.content,  # Store full HTML content in metadata for retrieval
             "date": entry.date,
             "user_id": entry.user_id,
             "mood": mood_analysis.mood,
@@ -217,10 +220,20 @@ def store_diary_entry(entry: DiaryEntry) -> StoredDiaryEntry:
             "created_at": datetime.utcnow().isoformat(),
         }
 
-        # Store in PostgreSQL
+        # Store in PostgreSQL - use plain text for embeddings, but store full content in metadata
         logger.info(f"Storing entry in PostgreSQL with ID: {doc_id}")
+        # Strip HTML for embedding generation (better semantic search)
+        try:
+            text_for_embedding = re.sub(r'<[^>]*>', '', entry.content).strip()
+            # Ensure we have some text for embedding, fallback to a placeholder if content is only images
+            if not text_for_embedding:
+                text_for_embedding = "diary entry with images"
+            text_for_embedding = text_for_embedding[:1000]
+        except Exception:
+            text_for_embedding = entry.content[:1000] if entry.content else "diary entry"
+        
         pg_vector_store.add_texts(
-            texts=[entry.content], metadatas=[document], ids=[doc_id]
+            texts=[text_for_embedding], metadatas=[document], ids=[doc_id]
         )
 
         # Return stored entry
@@ -244,12 +257,49 @@ def store_diary_entry(entry: DiaryEntry) -> StoredDiaryEntry:
 def search_diary_entries(
     query: str, user_id: str, limit: int = 5
 ) -> List[StoredDiaryEntry]:
-    """Search diary entries using semantic search."""
+    """Search diary entries using semantic search, or return all entries if query is empty."""
     logger.info(
         f"Searching entries for user_id: {user_id}, query: {query}, limit: {limit}"
     )
     try:
-        # Search in vector store
+        # If query is empty or "recent", return all entries for the user
+        if not query.strip() or query.strip().lower() == "recent":
+            logger.info("Empty/recent query - fetching all entries from database")
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT id, document, cmetadata 
+                        FROM langchain_pg_embedding 
+                        WHERE cmetadata->>'user_id' = :user_id 
+                        AND collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = 'diary_entries')
+                        ORDER BY cmetadata->>'created_at' DESC
+                        LIMIT :limit
+                    """),
+                    {"user_id": user_id, "limit": limit}
+                )
+                entries = []
+                for row in result:
+                    metadata = row.cmetadata
+                    content = metadata.get("content", row.document)
+                    # Log whether the content has images
+                    has_img = "<img" in content if content else False
+                    logger.info(f"Entry {metadata['id']}: has_img={has_img}, content_len={len(content) if content else 0}")
+                    entries.append(
+                        StoredDiaryEntry(
+                            id=metadata["id"],
+                            content=content,  # Use metadata content (has full HTML)
+                            date=metadata["date"],
+                            user_id=metadata["user_id"],
+                            mood=metadata["mood"],
+                            analysis=metadata["analysis"],
+                            confidence=metadata["confidence"],
+                            created_at=datetime.fromisoformat(metadata["created_at"]),
+                        )
+                    )
+                logger.info(f"Fetched {len(entries)} entries for user {user_id}")
+                return entries
+        
+        # Search in vector store for specific queries
         logger.info("Performing similarity search in vector store")
         results = pg_vector_store.similarity_search_with_score(
             query=query, k=limit, filter={"user_id": user_id}
@@ -258,11 +308,15 @@ def search_diary_entries(
         # Format results
         entries = []
         for doc, score in results:
+            # Filter out irrelevant results (threshold determined empirically)
+            if score > 0.35:
+                continue
+                
             metadata = doc.metadata
             entries.append(
                 StoredDiaryEntry(
                     id=metadata["id"],
-                    content=doc.page_content,
+                    content=metadata.get("content", doc.page_content),  # Use metadata content (has full HTML)
                     date=metadata["date"],
                     user_id=metadata["user_id"],
                     mood=metadata["mood"],
@@ -277,3 +331,4 @@ def search_diary_entries(
     except Exception as e:
         logger.error(f"Error searching diary entries: {str(e)}")
         raise
+

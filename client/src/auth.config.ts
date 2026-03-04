@@ -37,7 +37,6 @@ export const authConfig = {
         image: token?.picture as string | undefined,
         role: token?.role as string | undefined,
         email_verified: (token?.email_verified as boolean) || false,
-        emailVerified: null, // Required by AdapterUser
         hasPassword: (token?.hasPassword as boolean) || false,
         kycVerified: (token?.kycVerified as boolean) || false,
         twoFactorEnabled: (token?.twoFactorEnabled as boolean) || false,
@@ -50,11 +49,13 @@ export const authConfig = {
         avatarUrl: profile?.avatarUrl,
       };
 
-      session.accessToken = token.accessToken as string;
+      // NOTE: accessToken (raw DB session token) is intentionally NOT included here.
+      // It remains in the server-side JWT cookie only. Use getServerAccessToken()
+      // in server components/actions when the token is needed.
 
       return session;
     },
   },
   providers: [], // Configured in auth.ts
-  debug: true,
+  debug: process.env.NODE_ENV === 'development',
 } satisfies NextAuthConfig;

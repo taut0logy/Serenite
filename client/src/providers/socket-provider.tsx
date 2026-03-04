@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
+
 interface SocketContextType {
   socket: Socket | null;
   isConnected: boolean;
@@ -19,12 +20,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const maxReconnectAttempts = 5;
   const socketUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  const token = session?.accessToken;
+
+  // Gate connection on whether a user is authenticated.
+  // withCredentials sends the NextAuth session cookie automatically — no raw token needed.
+  const isAuthenticated = !!session?.user?.id;
 
   useEffect(() => {
-    if (!token) {
+    if (!isAuthenticated) {
       if (socket) {
-        console.log('No session token, disconnecting socket');
+        console.log('No authenticated session, disconnecting socket');
         socket.disconnect();
         setSocket(null);
         setIsConnected(false);
@@ -32,18 +36,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    console.log(`Initializing socket connection to: ${socketUrl} with token`);
+    console.log(`Initializing socket connection to: ${socketUrl}`);
     const socketInstance = io(socketUrl, {
-      auth: {
-        token: token,
-      },
+      withCredentials: true,   // sends the NextAuth session cookie automatically
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: maxReconnectAttempts,
       reconnectionDelay: 1000,
       path: '/api/socket',
-      //transports: ['websocket', 'polling'],
-      //timeout: 10000,
     });
 
     socketInstance.on('connect', () => {
@@ -64,7 +64,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
     socketInstance.on('connect_error', async (err) => {
       console.error('Socket connection error:', err.message);
-      await fetch('/api/socket') // Ensure server is ready
+      await fetch('/api/socket'); // Ensure server is ready
       setIsConnected(false);
     });
 
@@ -93,7 +93,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!socket) return;
@@ -121,7 +121,3 @@ export function useSocket() {
   }
   return context.socket;
 }
-
-
-
-

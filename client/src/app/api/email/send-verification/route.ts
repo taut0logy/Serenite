@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendVerificationEmail } from '@/actions/email.actions';
-
-//export const runtime = 'nodejs'; // Force Node.js runtime for nodemailer
+import { validateInternalKey } from '@/lib/internal-api-guard';
 
 export async function POST(request: NextRequest) {
+    const deny = validateInternalKey(request);
+    if (deny) return deny;
+
     try {
         const { email, token } = await request.json();
 

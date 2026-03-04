@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  // output   = "../src/lib/generated/prisma"
+  output   = "../src/lib/generated/prisma"
 }
 
 datasource db {
@@ -20,6 +20,11 @@ model User {
   resetToken        String?   @unique
   resetTokenExpiry  DateTime?
 
+  // Account security
+  failedLoginAttempts     Int       @default(0)
+  lockedUntil             DateTime?
+  verificationTokenExpiry DateTime?
+
   // Two-factor authentication fields
   twoFactorEnabled Boolean         @default(false)
   twoFactorAuth    TwoFactorAuth?
@@ -29,6 +34,7 @@ model User {
   questionnaireResponses QuestionnaireResponse[]
   mentalHealthProfile    MentalHealthProfile?
   sessions               Session[]
+  socialAccounts         SocialAccount[]
   supportGroups          SupportGroup[]          @relation("SupportGroupMembers")
   meetings               Meeting[]               @relation("MeetingParticipants")
   notifications          Notification[]
@@ -47,6 +53,7 @@ model User {
 
   recommendations UserRecommendation?
 }
+
 
 model Profile {
   id        String    @id @default(uuid())
@@ -124,8 +131,18 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
-  meta      Json? // Added for 2FA session metadata
+  meta      Json?    // 2FA session metadata (e.g. requiresTwoFactor, otpAttempts)
+
+  // Device metadata for audit trail
+  userAgent String?
+  ipAddress String?
+
+  // OTP brute-force protection on temp sessions
+  otpAttempts Int @default(0)
+
+  meetingSessions MeetingSession[]
 }
+
 
 enum Role {
   ADMIN
@@ -204,7 +221,9 @@ model Meeting {
   updatedAt      DateTime      @updatedAt
   polls          Poll[]
   recordings     Recording[]
+  meetingSessions MeetingSession[]
 }
+
 
 enum MeetingStatus {
   PENDING
@@ -360,6 +379,41 @@ model TrustedDevice {
   @@index([deviceToken])
   @@index([userId])
 }
+
+// Tracks which social OAuth provider accounts are linked to a user
+model SocialAccount {
+  id         String   @id @default(uuid())
+  userId     String
+  provider   String   // e.g. "github", "google"
+  providerId String   // the provider's user ID
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@index([userId])
+}
+
+// Tracks which specific device session is active in a meeting call.
+// Prevents >1 device from the same account joining the same call.
+model MeetingSession {
+  id            String    @id @default(uuid())
+  meetingId     String
+  sessionId     String
+  userId        String    // denormalized for fast lookup
+  joinedAt      DateTime  @default(now())
+  leftAt        DateTime?
+  isActive      Boolean   @default(true)
+  lastHeartbeat DateTime  @default(now()) // updated every 30s by client; stale > 2min = inactive
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, sessionId])
+  @@index([meetingId, userId, isActive]) // "is any device from userId in this meeting?"
+  @@index([lastHeartbeat])               // stale session sweeps
+}
+
 
 model Poll {
   id               String       @id @default(uuid())

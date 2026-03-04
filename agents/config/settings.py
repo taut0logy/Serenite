@@ -8,10 +8,13 @@ class Settings(BaseSettings):
     # App settings
     APP_NAME: str = "Serenite API"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False  # Override with DEBUG=True in .env for development
 
     CLIENT_URL: str = "http://localhost:3000"
-    GRAPHQL_ENDPOINT: str = f"{CLIENT_URL}/api/graphql"
+    TOKEN_VERIFY_ENDPOINT: str = f"{CLIENT_URL}/api/token/verify"  # Internal REST endpoint
+
+    # Shared secret between Next.js and FastAPI (generate with: openssl rand -hex 32)
+    INTERNAL_API_KEY: str
 
     AUTH_TIMEOUT: int = 10  # seconds
 

@@ -24,6 +24,8 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import PasswordField from "@/components/ui/password-field";
 import { check2FARequired } from "@/actions/auth.actions";
+import { AlertCircle, Lock } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const loginSchema = z.object({
     email: z.string().email("Please enter a valid email address"),
@@ -35,6 +37,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [isLocked, setIsLocked] = useState(false);
 
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
@@ -50,6 +54,8 @@ export default function LoginPage() {
         }
 
         setIsLoading(true);
+        setErrorMessage(null);
+        setIsLocked(false);
 
         try {
             // Get device token from localStorage if available
@@ -65,9 +71,13 @@ export default function LoginPage() {
                 deviceToken || undefined
             );
 
-            // If 2FA check failed (invalid credentials), show error
+            // If 2FA check failed, surface the real server message
             if (!checkResult.success) {
-                toast.error("Invalid email or password");
+                const msg = checkResult.message || "Invalid email or password";
+                // Detect lockout to show a specific UI treatment
+                const locked = msg.toLowerCase().includes("locked");
+                setIsLocked(locked);
+                setErrorMessage(msg);
                 setIsLoading(false);
                 return;
             }
@@ -95,7 +105,7 @@ export default function LoginPage() {
                 });
 
                 if (result?.error) {
-                    toast.error("An error occurred during login");
+                    setErrorMessage("An error occurred during login");
                     setIsLoading(false);
                     return;
                 }
@@ -107,11 +117,11 @@ export default function LoginPage() {
             }
 
             // Shouldn't reach here, but handle gracefully
-            toast.error("An unexpected error occurred");
+            setErrorMessage("An unexpected error occurred");
             setIsLoading(false);
         } catch (error) {
             console.error("Login error:", error);
-            toast.error("Something went wrong");
+            setErrorMessage("Something went wrong. Please try again.");
             setIsLoading(false);
         }
     }
@@ -184,6 +194,19 @@ export default function LoginPage() {
                                         </Link>
                                     </div>
                                 </div>
+
+                                {/* Error / Lockout alert */}
+                                {errorMessage && (
+                                    <Alert
+                                        variant="destructive"
+                                        className={isLocked ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-500" : ""}
+                                    >
+                                        {isLocked
+                                            ? <Lock className="h-4 w-4" />
+                                            : <AlertCircle className="h-4 w-4" />}
+                                        <AlertDescription>{errorMessage}</AlertDescription>
+                                    </Alert>
+                                )}
 
                                 <Button
                                     type="submit"

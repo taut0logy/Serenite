@@ -19,6 +19,7 @@ import { useAuth } from "@/providers/auth-provider";
 import PasswordField from "@/components/ui/password-field";
 import { useRefreshSession } from "@/lib/session-utils";
 import { useRouter } from "next/navigation";
+import { Info } from "lucide-react";
 
 const setPasswordSchema = z
     .object({
@@ -40,10 +41,7 @@ export default function SetPasswordPage() {
 
 const SetPasswordForm = () => {
     const [isLoading, setIsLoading] = useState(false);
-    const [status, setStatus] = useState<"loading" | "success" | "error">(
-        "loading"
-    );
-    const [message, setMessage] = useState<string>("");
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const { user } = useAuth();
     const { refreshSession } = useRefreshSession();
@@ -69,28 +67,19 @@ const SetPasswordForm = () => {
             const response = await setPassword(user.id, data.password);
 
             if (response.success) {
-                setStatus("success");
-                setMessage(response.message || "Password set successfully");
                 toast.success(response.message || "Password set successfully");
-
                 // Refresh the session to get updated user data
                 await refreshSession();
                 router.push("/dashboard");
             } else {
-                setStatus("error");
-                setMessage(response.message || "Failed to set password");
+                setErrorMsg(response.message || "Failed to set password");
                 toast.error(response.message || "Failed to set password");
             }
         } catch (error) {
-            setStatus("error");
-            let message = "Something went wrong";
-
-            if (error instanceof Error) {
-                message = error.message;
-            }
-
-            setMessage(message);
-            toast.error(message);
+            let msg = "Something went wrong";
+            if (error instanceof Error) msg = error.message;
+            setErrorMsg(msg);
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }
@@ -102,8 +91,18 @@ const SetPasswordForm = () => {
                 <div className="text-center">
                     <h1 className="text-3xl font-bold">Set a Password</h1>
                     <p className="mt-2 text-sm text-muted-foreground">
-                        Welcome! Please set a new password for your account.
+                        Welcome! Please set a password for your account.
                     </p>
+                </div>
+
+                {/* Context callout for social auth users */}
+                <div className="flex items-start gap-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-400">
+                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>
+                        You signed up with a social account. Setting a password lets you log in
+                        with email and enables sensitive actions like changing your email or
+                        enabling two-factor authentication.
+                    </span>
                 </div>
 
                 <div className="mt-8">
@@ -142,16 +141,8 @@ const SetPasswordForm = () => {
                                     )}
                                 />
 
-                                {status === "error" && (
-                                    <div className="text-red-500 text-sm">
-                                        {message}
-                                    </div>
-                                )}
-
-                                {status === "success" && (
-                                    <div className="text-green-500 text-sm">
-                                        {message}
-                                    </div>
+                                {errorMsg && (
+                                    <p className="text-sm text-red-500">{errorMsg}</p>
                                 )}
 
                                 <Button

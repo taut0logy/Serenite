@@ -1,48 +1,53 @@
-# Use Python 3.11 slim as base image
-FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
-# Create app directory
 WORKDIR /app
 
-# Create necessary directories for volumes
-RUN mkdir -p /app/services/uploads \
-    && mkdir -p /app/logs \
-    && chmod 755 /app/services/uploads \
-    && chmod 755 /app/logs
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
-# Install system dependencies including Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    python3-dev \
     libpq-dev \
-    curl \
-    nano \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --upgrade -r requirements.txt
+COPY pyproject.toml uv.lock ./
 
-# Copy application code
-COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev
 
-# Create volume mount points
-VOLUME ["/app/services/uploads", "/tmp", "/root/.cache", "/app/logs"]
+FROM python:3.12-slim-bookworm AS production
 
-# Expose port
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH" \
+    ENVIRONMENT=production
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 appgroup && \
+    useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser
+
+RUN mkdir -p /app/services/uploads /app/logs /app/tmp /root/.cache && \
+    chown -R appuser:appgroup /app /root/.cache
+
+ENV TMPDIR=/app/tmp
+
+COPY --from=builder --chown=appuser:appgroup /app/.venv /app/.venv
+
+COPY --chown=appuser:appgroup . .
+
+VOLUME ["/app/services/uploads", "/app/logs", "/root/.cache", "/app/tmp"]
+
+USER appuser
+
 EXPOSE 8000
 
-# # Set healthcheck
-# HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-#     CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl --fail http://localhost:8000/health || exit 1
 
-# Start command
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

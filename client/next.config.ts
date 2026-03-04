@@ -14,9 +14,6 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },

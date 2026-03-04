@@ -1,163 +1,145 @@
-from fastapi import Request, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+"""
+FastAPI authentication middleware — Phase 3 redesign.
+
+Replaces the previous approach of calling the GraphQL endpoint with a direct
+call to the hardened REST endpoint POST /api/token/verify, protected by a
+shared INTERNAL_API_KEY.
+
+Includes a TTL-based in-memory cache (cachetools) to avoid hammering the
+Next.js server on every request.  Cache key = SHA-256 hash of the raw token.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from typing import Any
+
 import httpx
-from typing import Optional, Dict, Any
+from cachetools import TTLCache
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from config.settings import settings
 from utils.logger import logger
 
-security = HTTPBearer(auto_error=False)  # Don't auto-error, handle manually
+# Never log or cache raw tokens — only hash digests.
+_cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=1000, ttl=30)
+
+security = HTTPBearer(auto_error=False)
 
 
-class AuthMiddleware:
+def _token_hash(token: str) -> str:
+    """SHA-256 digest of a token, used as cache key."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
-    async def verify_session(self, token: str) -> Optional[Dict[str, Any]]:
-        """
-        Verify session using GraphQL verifySession mutation
-        """
-        query = """
-        mutation VerifySession($token: String!) {
-            verifySession(token: $token) {
-                valid
-                user {
-                    id
-                    email
-                    verified
-                    kycVerified
-                    role
-                    hasPassword
-                    questionnaireCompleted
-                    profile {
-                        firstName
-                        lastName
-                        bio
-                        dob
-                        avatarUrl
-                    }
-                }
-            }
-        }
-        """
 
-        variables = {"token": token}
+async def _verify_token(token: str) -> dict[str, Any] | None:
+    """
+    Call POST /api/token/verify on the Next.js server.
+    Returns the user dict on success, or None on failure.
+    Caches the result for 30 seconds per token hash.
+    """
+    cache_key = _token_hash(token)
 
-        payload = {"query": query, "variables": variables}
+    # 1. Return from cache if available
+    if cache_key in _cache:
+        return _cache[cache_key]
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    settings.GRAPHQL_ENDPOINT,
-                    json=payload,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {token}",
-                    },
-                    timeout=settings.AUTH_TIMEOUT,
-                )
+    # 2. Call the REST verify endpoint
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                settings.TOKEN_VERIFY_ENDPOINT,
+                json={"token": token},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Internal-API-Key": settings.INTERNAL_API_KEY,
+                },
+                timeout=settings.AUTH_TIMEOUT,
+            )
 
-                if response.status_code != 200:
-                    if settings.DEBUG:
-                        logger.error(
-                            f"GraphQL request failed with status {response.status_code}: {response.text}"
-                        )
-                    return None
-
-                data = response.json()
-
-                if "errors" in data:
-                    if settings.DEBUG:
-                        logger.error(f"GraphQL errors: {data['errors']}")
-                    return None
-
-                verify_result = data.get("data", {}).get("verifySession")
-
-                if verify_result and verify_result.get("valid"):
-                    return verify_result.get("user")
-
-                return None
-
-        except httpx.TimeoutException:
-            logger.error("GraphQL request timeout")
-            return None
-        except Exception as e:
+        if response.status_code != 200:
             if settings.DEBUG:
-                logger.error(f"Error verifying session: {str(e)}")
+                logger.error(
+                    f"[auth] Token verify returned HTTP {response.status_code}"
+                )
             return None
 
+        data = response.json()
+        if not data.get("valid") or not data.get("user"):
+            return None
 
-auth_middleware = AuthMiddleware()
+        user = data["user"]
+        _cache[cache_key] = user
+        return user
+
+    except httpx.TimeoutException:
+        logger.error("[auth] Token verify request timed out")
+        return None
+    except Exception as exc:
+        logger.error(f"[auth] Token verify error: {exc}")
+        return None
 
 
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> Dict[str, Any]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, Any]:
     """
-    Dependency to get current authenticated user
-    Supports both Bearer token and NextAuth session token
+    FastAPI dependency — resolves the authenticated user.
+
+    Token extraction order:
+      1. Authorization: Bearer <token>   (primary — set by the Next.js proxy)
+      2. authjs.session-token cookie     (fallback for same-domain callers)
     """
-    token = None
+    token: str | None = None
 
     if credentials:
         token = credentials.credentials
-        logger.info(f"Token from Authorization header: {token[:20]}...")
 
     if not token:
-        token = request.cookies.get("authjs.session-token") or request.cookies.get(
-            "__Secure-authjs.session-token"
-        )
-        if token:
-            logger.info(f"Token from cookie: {token[:20]}...")
+        token = request.cookies.get("__Secure-authjs.session-token") or \
+                request.cookies.get("authjs.session-token")
 
     if not token:
-        logger.error("No authentication token provided in headers or cookies")
         raise HTTPException(
             status_code=401,
-            detail="No authentication token provided",
+            detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    logger.info(f"Verifying token with GraphQL endpoint: {settings.GRAPHQL_ENDPOINT}")
-    user = await auth_middleware.verify_session(token)
+    user = await _verify_token(token)
 
     if not user:
-        logger.error("Token verification failed - user is None")
         raise HTTPException(
             status_code=401,
-            detail="Invalid or expired session token",
+            detail="Invalid or expired session",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not user.get("verified"):
-        logger.warning(f"User {user.get('id')} is not verified")
         raise HTTPException(
             status_code=403,
-            detail="User account not verified",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Email not verified",
         )
 
-    logger.info(f"Successfully authenticated user: {user.get('id')}")
     return user
 
 
 async def require_admin(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
-    """
-    Dependency that requires admin role
-    """
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Dependency — requires ADMIN role."""
     if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
-
     return current_user
 
 
 async def require_role(
-    role: str, current_user: Dict[str, Any] = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Dependency that requires specific user role
-    """
+    role: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Dependency — requires a specific role."""
     if current_user.get("role") != role:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-
     return current_user

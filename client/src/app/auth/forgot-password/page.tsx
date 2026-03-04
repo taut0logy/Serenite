@@ -6,6 +6,7 @@ import Link from "next/link";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -29,8 +30,8 @@ type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 export default function ForgotPasswordPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [status, setStatus] = useState<"success" | "error" | null>(null);
-    const [message, setMessage] = useState<string>("");
+    const [submitted, setSubmitted] = useState(false);
+    const [submittedEmail, setSubmittedEmail] = useState("");
 
     const form = useForm<ForgotPasswordFormValues>({
         resolver: zodResolver(forgotPasswordSchema),
@@ -46,9 +47,8 @@ export default function ForgotPasswordPage() {
             const response = await forgotPassword(data.email);
 
             if (response.success) {
-                setStatus("success");
-                setMessage(response.message || "Password reset link sent");
-                router.push("/auth/verify-request");
+                setSubmittedEmail(data.email);
+                setSubmitted(true);
             } else {
                 toast.error(response.message || "Failed to send reset link");
             }
@@ -57,13 +57,44 @@ export default function ForgotPasswordPage() {
             if (error instanceof Error) {
                 errorMessage = error.message;
             }
-            setStatus("error");
-            setMessage(errorMessage);
             toast.error(errorMessage);
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Success state — show confirmation instead of the form
+    if (submitted) {
+        return (
+            <div className="flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+                <div className="w-full max-w-md space-y-8 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                        <CheckCircle2 className="h-8 w-8 text-primary" />
+                    </div>
+                    <h1 className="text-3xl font-bold">Check your inbox</h1>
+                    <p className="text-sm text-muted-foreground">
+                        If an account exists for <strong>{submittedEmail}</strong>, we&apos;ve sent a
+                        password reset link. It expires in 24 hours.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        Didn&apos;t receive it? Check your spam folder or try again.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                        <Link href="/auth/login">
+                            <Button className="w-full">Back to sign in</Button>
+                        </Link>
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => setSubmitted(false)}
+                        >
+                            Try a different email
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
@@ -101,17 +132,7 @@ export default function ForgotPasswordPage() {
                                     )}
                                 />
 
-                                {status === "error" && (
-                                    <div className="text-red-600 text-sm">
-                                        {message}
-                                    </div>
-                                )}
-
-                                {status === "success" && (
-                                    <div className="text-green-600 text-sm">
-                                        {message}
-                                    </div>
-                                )}
+                                {/* Remove the old status blocks, errors shown via toast */}
 
                                 <Button
                                     type="submit"

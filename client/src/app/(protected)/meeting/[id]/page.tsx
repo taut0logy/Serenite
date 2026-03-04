@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { StreamCall, StreamTheme } from "@stream-io/video-react-sdk";
@@ -49,6 +49,9 @@ const MeetingPageContent = ({ id }: { id: string }) => {
     const [showWaitingRoom, setShowWaitingRoom] = useState(false);
     const [meetingEnded, setMeetingEnded] = useState(false);
 
+    // Per-device call enforcement
+    const meetingSessionIdRef = useRef<string | null>(null);
+
     // Check if user can join meeting
     const checkMeetingAccess = useCallback(async () => {
         if (!id) return;
@@ -73,8 +76,24 @@ const MeetingPageContent = ({ id }: { id: string }) => {
                     await startMeeting(id);
                 }
 
-                // Join as participant
+                // Join as participant (DB record)
                 await joinMeetingAsParticipant(id);
+
+                // Per-device call enforcement: check with the server whether
+                // another device from this account is already in the call.
+                const joinRes = await fetch(`/api/meetings/${id}/join`, {
+                    method: 'POST',
+                    credentials: 'include',
+                });
+                if (joinRes.status === 409) {
+                    setError('Your account is already in this call on another device.');
+                    setIsCheckingAccess(false);
+                    return;
+                }
+                if (joinRes.ok) {
+                    const joinData = await joinRes.json();
+                    meetingSessionIdRef.current = joinData.meetingSessionId ?? null;
+                }
             } else {
                 // Handle various rejection reasons
                 switch (result.result?.reason) {
@@ -111,6 +130,33 @@ const MeetingPageContent = ({ id }: { id: string }) => {
             await startMeeting(id);
         }
     }, [id]);
+
+    // Heartbeat: keep the MeetingSession alive every 30 seconds while in the live call.
+    // If this stops (network failure, tab close, etc.) the join endpoint will
+    // consider the device inactive after SESSION_TIMEOUT_MS (~5 min).
+    useEffect(() => {
+        if (!isSetupComplete || !id) return;
+
+        const sendHeartbeat = async () => {
+            try {
+                await fetch(`/api/meetings/${id}/heartbeat`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        meetingSessionId: meetingSessionIdRef.current,
+                    }),
+                });
+            } catch {
+                // Non-critical — heartbeat failures are expected on flaky networks.
+                // The 5-minute inactivity window gives plenty of grace time.
+            }
+        };
+
+        sendHeartbeat(); // Immediate on setup complete
+        const interval = setInterval(sendHeartbeat, 30_000); // Every 30s
+        return () => clearInterval(interval);
+    }, [isSetupComplete, id]);
 
     // Handle meeting end
     const handleMeetingEnd = useCallback(async () => {

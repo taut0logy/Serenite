@@ -30,7 +30,9 @@ declare module "next-auth" {
       dob?: string;
       avatarUrl?: string;
     };
-    accessToken?: string;
+    // NOTE: accessToken is intentionally omitted from Session.
+    // The raw DB token is kept server-side only (in the encrypted JWT cookie).
+    // Use getServerAccessToken() in server components/actions.
   }
 
   interface User {

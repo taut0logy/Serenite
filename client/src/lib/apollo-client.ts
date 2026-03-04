@@ -10,13 +10,11 @@ import { onError } from "@apollo/client/link/error";
 
 let client: ApolloClient<NormalizedCacheObject> | null = null;
 
-let authToken: string | null = null;
-
 function createApolloClient() {
-  // Create an http link for GraphQL API
+  // Cookie-based auth: same-domain /api/graphql receives the NextAuth JWT cookie automatically.
   const httpLink = createHttpLink({
     uri: process.env.NEXT_PUBLIC_GRAPHQL_URL || "api/graphql",
-    //credentials: "include", // Same-origin credentials for cookies
+    credentials: "include", // send session cookie on every request
   });
 
   // Error handling link
@@ -33,20 +31,9 @@ function createApolloClient() {
     }
   });
 
-  // Authentication link to add headers
-  const authLink = setContext(async (_, { headers }) => {
-    // Return the headers with the auth token if available
-    return {
-      headers: {
-        ...headers,
-        authorization: authToken ? `Bearer ${authToken}` : "",
-      },
-    };
-  });
-
   // Create Apollo Client instance
   return new ApolloClient({
-    link: from([errorLink, authLink, httpLink]),
+    link: from([errorLink, httpLink]),
     //cache: new InMemoryCache(),
     cache: new InMemoryCache({
       typePolicies: {
@@ -134,21 +121,13 @@ export const getClient = () => {
   return client;
 }
 
-
-// Function to set the auth token for Apollo requests
-export const setAuthToken = (token: string | null) => {
-  // console.log(
-  //   "Setting auth token for Apollo client:",
-  //   token ? "token-exists" : "no-token"
-  // );
-  authToken = token;
-  client = createApolloClient();
-  return client;
-};
+// setAuthToken is no longer used (browser uses cookie auth).
+// Kept here only for potential server-side calls via getAuthenticatedClient.
 
 /**
- * Get Apollo client with a specific auth token for server-side calls
+ * Get Apollo client with a specific auth token for server-side calls.
  * Use this in NextAuth callbacks where ApolloWrapper isn't available
+ * and a Bearer token is needed to authenticate with the GraphQL route.
  */
 export const getAuthenticatedClient = (token: string) => {
   // Create a one-time client with the token

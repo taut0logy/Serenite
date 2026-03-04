@@ -12,7 +12,11 @@ import {
 
 // Constants
 const SALT_ROUNDS = 10;
-const TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+const TOKEN_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const VERIFICATION_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_OTP_ATTEMPTS = 5;
 
 /**
  * Register a new user
@@ -40,8 +44,9 @@ export async function registerUser(
         // Hash password
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-        // Generate verification token
+        // Generate verification token with 24h expiry
         const verificationToken = crypto.randomBytes(32).toString("hex");
+        const verificationTokenExpiry = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_MS);
 
         // Create user
         const user = await prisma.user.create({
@@ -49,6 +54,7 @@ export async function registerUser(
                 email,
                 hashedPassword,
                 verificationToken,
+                verificationTokenExpiry,
                 profile: {
                     create: {
                         firstName,
@@ -98,14 +104,16 @@ export async function resendVerificationEmail(email: string) {
             };
         }
 
-        // Generate verification token
+        // Generate verification token with 24h expiry
         const verificationToken = crypto.randomBytes(32).toString("hex");
+        const verificationTokenExpiry = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_MS);
 
-        // Update user with new verification token
+        // Update user with new verification token + expiry
         await prisma.user.update({
             where: { id: user.id },
             data: {
                 verificationToken,
+                verificationTokenExpiry,
             },
         });
 
@@ -139,12 +147,21 @@ export async function verifyEmail(token: string) {
             };
         }
 
+        // Check if token has expired
+        if (user.verificationTokenExpiry && user.verificationTokenExpiry < new Date()) {
+            return {
+                success: false,
+                message: "Verification link has expired. Please request a new one.",
+            };
+        }
+
         // Update user to verified
         await prisma.user.update({
             where: { id: user.id },
             data: {
                 verified: true,
                 verificationToken: null,
+                verificationTokenExpiry: null,
             },
         });
 
@@ -159,10 +176,11 @@ export async function verifyEmail(token: string) {
 }
 
 /**
- * Generate a 6-digit OTP code
+ * Generate a cryptographically secure 6-digit OTP code
  */
 function generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    // crypto.randomInt is CSPRNG — safe for auth codes
+    return crypto.randomInt(100000, 1000000).toString();
 }
 
 /**
@@ -197,21 +215,25 @@ export async function enableTwoFactor(userId: string) {
         }
 
         // Generate backup codes
-        const backupCodes = generateBackupCodes();
+        // Generate backup codes (plaintext returned once to user; hashed before storage)
+        const plainCodes = generateBackupCodes();
+        const hashedCodes = await Promise.all(
+            plainCodes.map((c) => bcrypt.hash(c, SALT_ROUNDS))
+        );
 
-        // Create or update 2FA record
+        // Create or update 2FA record with hashed backup codes
         if (user.twoFactorAuth) {
             await prisma.twoFactorAuth.update({
                 where: { userId },
                 data: {
-                    otpBackupCodes: backupCodes,
+                    otpBackupCodes: hashedCodes,
                 },
             });
         } else {
             await prisma.twoFactorAuth.create({
                 data: {
                     userId,
-                    otpBackupCodes: backupCodes,
+                    otpBackupCodes: hashedCodes,
                 },
             });
         }
@@ -227,7 +249,7 @@ export async function enableTwoFactor(userId: string) {
         return {
             success: true,
             message: "Two-factor authentication enabled successfully",
-            backupCodes,
+            backupCodes: plainCodes, // Return PLAINTEXT codes once — user must save these
         };
     } catch (error) {
         console.error("Error enabling 2FA:", error);
@@ -328,6 +350,7 @@ export async function generateAndSendOtp(userId: string) {
                 token: tempToken,
                 userId: user.id,
                 expiresAt,
+                otpAttempts: 0,
                 // Store metadata to indicate this session requires 2FA
                 meta: {
                     requiresTwoFactor: true,
@@ -387,29 +410,44 @@ export async function verifyOtp(
             };
         }
 
+        // Check OTP attempt limit on this temp session
+        if ((tempSession.otpAttempts ?? 0) >= MAX_OTP_ATTEMPTS) {
+            await prisma.session.delete({ where: { id: tempSession.id } });
+            return {
+                success: false,
+                message: "Too many incorrect attempts. Please log in again.",
+            };
+        }
+
         // Check if OTP matches (or is a valid backup code)
         let otpValid = false;
 
-        // Check if it's a backup code
-        if (user.twoFactorAuth.otpBackupCodes.includes(otp)) {
-            otpValid = true;
-            // Remove the used backup code
-            const updatedBackupCodes = user.twoFactorAuth.otpBackupCodes.filter(
-                (code) => code !== otp
-            );
-            await prisma.twoFactorAuth.update({
-                where: { userId },
-                data: {
-                    otpBackupCodes: updatedBackupCodes,
-                },
-            });
+        // Check if it's a backup code (hash-compare each stored hash)
+        for (const storedHash of user.twoFactorAuth.otpBackupCodes) {
+            if (await bcrypt.compare(otp, storedHash)) {
+                otpValid = true;
+                // Remove the used backup code
+                const updatedBackupCodes = user.twoFactorAuth.otpBackupCodes.filter(
+                    (h) => h !== storedHash
+                );
+                await prisma.twoFactorAuth.update({
+                    where: { userId },
+                    data: { otpBackupCodes: updatedBackupCodes },
+                });
+                break;
+            }
         }
         // Otherwise check if it's the current OTP
-        else if (user.twoFactorAuth.secret) {
+        if (!otpValid && user.twoFactorAuth.secret) {
             otpValid = await bcrypt.compare(otp, user.twoFactorAuth.secret);
         }
 
         if (!otpValid) {
+            // Increment OTP attempt counter on the temp session
+            await prisma.session.update({
+                where: { id: tempSession.id },
+                data: { otpAttempts: { increment: 1 } },
+            });
             return {
                 success: false,
                 message: "Invalid OTP code",
@@ -519,6 +557,15 @@ export async function check2FARequired(
             };
         }
 
+        // Check account lockout
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+            const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+            return {
+                success: false,
+                message: `Account locked due to too many failed attempts. Try again in ${minutesLeft} minute(s).`,
+            };
+        }
+
         // Check if user is verified
         if (!user.verified) {
             return {
@@ -530,10 +577,29 @@ export async function check2FARequired(
         // Verify password
         const isPasswordValid = await bcrypt.compare(password, user.hashedPassword);
         if (!isPasswordValid) {
+            // Increment failure counter; lock if threshold exceeded
+            const newCount = (user.failedLoginAttempts ?? 0) + 1;
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    failedLoginAttempts: newCount,
+                    lockedUntil: newCount >= MAX_FAILED_ATTEMPTS
+                        ? new Date(Date.now() + LOCKOUT_DURATION_MS)
+                        : undefined,
+                },
+            });
             return {
                 success: false,
                 message: "The password is incorrect",
             };
+        }
+
+        // Successful auth — reset lockout counter
+        if (user.failedLoginAttempts > 0) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { failedLoginAttempts: 0, lockedUntil: null },
+            });
         }
 
         // If device token provided and 2FA is enabled, validate the device
@@ -661,8 +727,16 @@ export async function verifyBackupCode(
             };
         }
 
-        // Check if backup code is valid
-        const isValidCode = user.twoFactorAuth.otpBackupCodes.includes(backupCode);
+        // Check if backup code is valid (hash-compare each stored bcrypt hash)
+        let isValidCode = false;
+        let matchedHash: string | undefined;
+        for (const storedHash of user.twoFactorAuth.otpBackupCodes) {
+            if (await bcrypt.compare(backupCode, storedHash)) {
+                isValidCode = true;
+                matchedHash = storedHash;
+                break;
+            }
+        }
 
         if (!isValidCode) {
             return {
@@ -673,7 +747,7 @@ export async function verifyBackupCode(
 
         // Remove the used backup code
         const updatedBackupCodes = user.twoFactorAuth.otpBackupCodes.filter(
-            (code) => code !== backupCode
+            (h) => h !== matchedHash
         );
         await prisma.twoFactorAuth.update({
             where: { userId },
@@ -780,6 +854,17 @@ export async function loginUser(
             };
         }
 
+        // Check account lockout
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+            const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+            return {
+                success: false,
+                message: `Account locked. Try again in ${minutesLeft} minute(s).`,
+                token: null,
+                user: null,
+            };
+        }
+
         // Check if user is verified
         if (!user.verified) {
             return {
@@ -793,12 +878,30 @@ export async function loginUser(
         // Verify password
         const isPasswordValid = await bcrypt.compare(password, user.hashedPassword);
         if (!isPasswordValid) {
+            const newCount = (user.failedLoginAttempts ?? 0) + 1;
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    failedLoginAttempts: newCount,
+                    lockedUntil: newCount >= MAX_FAILED_ATTEMPTS
+                        ? new Date(Date.now() + LOCKOUT_DURATION_MS)
+                        : undefined,
+                },
+            });
             return {
                 success: false,
                 message: "Invalid email or password",
                 token: null,
                 user: null,
             };
+        }
+
+        // Successful auth — reset lockout counter
+        if (user.failedLoginAttempts > 0) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { failedLoginAttempts: 0, lockedUntil: null },
+            });
         }
 
         // If device token provided, validate it
@@ -914,13 +1017,17 @@ export async function verifySession(token: string) {
         });
 
         // Check if session exists and is not expired
-        if (!session || session.expiresAt < new Date()) {
-            if (session) {
-                // Delete expired session (use deleteMany to avoid race condition)
-                await prisma.session.deleteMany({
-                    where: { id: session.id },
-                });
-            }
+        if (!session) {
+            console.error(`❌ [verifySession] Session not found for token: ${token.substring(0, 8)}...`);
+            return { valid: false, user: null };
+        }
+
+        if (session.expiresAt < new Date()) {
+            console.warn(`❌ [verifySession] Session expired at ${session.expiresAt.toISOString()}. Current time: ${new Date().toISOString()}`);
+            // Delete expired session (use deleteMany to avoid race condition)
+            await prisma.session.deleteMany({
+                where: { id: session.id },
+            });
 
             return {
                 valid: false,
@@ -1123,7 +1230,12 @@ export async function getUserById(id: string) {
 }
 
 /**
- * Social authentication - login or register via social provider
+ * Social authentication - login or register via social provider.
+ *
+ * Lookup order:
+ *   1. By (provider, providerId) in SocialAccount table — most reliable.
+ *   2. By email — handles first-time OAuth login for existing email-registered users.
+ * On each login the SocialAccount row is upserted to stay consistent.
  */
 export async function socialAuth(
     email: string,
@@ -1135,57 +1247,80 @@ export async function socialAuth(
     avatarUrl?: string
 ) {
     try {
-        // Split full name into first and last name if not provided
+        // Parse name into first/last if not split already
         let parsedFirstName = firstName;
         let parsedLastName = lastName;
-
         if (!firstName && !lastName && name) {
-            const nameParts = name.split(" ");
-            parsedFirstName = nameParts[0] || "";
-            parsedLastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+            const parts = name.split(" ");
+            parsedFirstName = parts[0] || "";
+            parsedLastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
         }
 
-        // Check if user with this email already exists
-        const existingUser = await prisma.user.findUnique({
-            where: { email },
+        const token = uuidv4();
+        const expiresAt = new Date(Date.now() + TOKEN_EXPIRY);
+
+        // 1. Try looking up by (provider, providerId) — prevents email collisions
+        const socialAccount = await prisma.socialAccount.findUnique({
+            where: { provider_providerId: { provider, providerId } },
             include: {
-                profile: true,
-                questionnaireResponses: {
-                    where: { isComplete: true },
-                    take: 1,
+                user: {
+                    include: {
+                        profile: true,
+                        questionnaireResponses: { where: { isComplete: true }, take: 1 },
+                    },
                 },
             },
         });
 
-        // Generate session token
-        const token = uuidv4();
-        const expiresAt = new Date(Date.now() + TOKEN_EXPIRY);
+        if (socialAccount) {
+            // Known social account — create session and return
+            const user = socialAccount.user;
 
-        if (existingUser) {
-            // User exists - check if accounts need to be linked
-            // First, link the social account
-            await linkAccount(existingUser.id, provider, providerId);
-
-            console.log("User already exists", existingUser);
-
-            // Update avatar URL if not already set and one is provided
-            if (!existingUser.profile?.avatarUrl && avatarUrl) {
-                await prisma.profile.update({
-                    where: { userId: existingUser.id },
-                    data: { avatarUrl },
-                });
+            // Backfill avatar if missing
+            if (!user.profile?.avatarUrl && avatarUrl) {
+                await prisma.profile.update({ where: { userId: user.id }, data: { avatarUrl } });
             }
 
-            // Create session for existing user
-            await prisma.session.create({
-                data: {
-                    token,
-                    userId: existingUser.id,
-                    expiresAt,
-                },
-            });
+            await prisma.session.create({ data: { token, userId: user.id, expiresAt } });
 
-            const response = {
+            return {
+                success: true,
+                message: "Login successful",
+                token,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    role: user.role,
+                    verified: user.verified,
+                    hasPassword: !!user.hashedPassword,
+                    kycVerified: user.kycVerified,
+                    questionnaireCompleted: user.questionnaireResponses.length > 0,
+                    twoFactorEnabled: user.twoFactorEnabled,
+                    profile: { ...user.profile, avatarUrl: user.profile?.avatarUrl || avatarUrl },
+                },
+            };
+        }
+
+        // 2. Check by email — existing user signing in with a new provider for the first time
+        const existingUser = await prisma.user.findUnique({
+            where: { email },
+            include: {
+                profile: true,
+                questionnaireResponses: { where: { isComplete: true }, take: 1 },
+            },
+        });
+
+        if (existingUser) {
+            // Link this new social account to the existing user
+            await linkAccount(existingUser.id, provider, providerId);
+
+            if (!existingUser.profile?.avatarUrl && avatarUrl) {
+                await prisma.profile.update({ where: { userId: existingUser.id }, data: { avatarUrl } });
+            }
+
+            await prisma.session.create({ data: { token, userId: existingUser.id, expiresAt } });
+
+            return {
                 success: true,
                 message: "Login successful",
                 token,
@@ -1194,77 +1329,53 @@ export async function socialAuth(
                     email: existingUser.email,
                     role: existingUser.role,
                     verified: existingUser.verified,
-                    hasPassword: existingUser.hashedPassword ? true : false,
+                    hasPassword: !!existingUser.hashedPassword,
                     kycVerified: existingUser.kycVerified,
-                    questionnaireCompleted: existingUser.questionnaireResponses && existingUser.questionnaireResponses.length > 0,
+                    questionnaireCompleted: existingUser.questionnaireResponses.length > 0,
                     twoFactorEnabled: existingUser.twoFactorEnabled,
-                    profile: {
-                        ...existingUser.profile,
-                        avatarUrl: existingUser.profile?.avatarUrl || avatarUrl,
-                    },
+                    profile: { ...existingUser.profile, avatarUrl: existingUser.profile?.avatarUrl || avatarUrl },
                 },
             };
-
-            console.log("User logged in via social auth", response);
-            return response;
-        } else {
-            // User doesn't exist - create new user
-            const newUser = await prisma.user.create({
-                data: {
-                    email,
-                    verified: true, // Social logins are pre-verified
-                    role: "USER",
-                    profile: {
-                        create: {
-                            firstName: parsedFirstName || "",
-                            lastName: parsedLastName || "",
-                            avatarUrl: avatarUrl,
-                        },
-                    },
-                },
-                include: {
-                    profile: true,
-                    questionnaireResponses: {
-                        where: { isComplete: true },
-                        take: 1,
-                    },
-                },
-            });
-
-            // Link the account
-            await linkAccount(newUser.id, provider, providerId);
-
-            // console.log("New user created", newUser);
-
-            // Create session
-            await prisma.session.create({
-                data: {
-                    token,
-                    userId: newUser.id,
-                    expiresAt,
-                },
-            });
-
-            const response = {
-                success: true,
-                message: "Account created and logged in successfully",
-                token,
-                user: {
-                    id: newUser.id,
-                    email: newUser.email,
-                    role: newUser.role,
-                    verified: newUser.verified,
-                    hasPassword: newUser.hashedPassword ? true : false,
-                    kycVerified: newUser.kycVerified,
-                    questionnaireCompleted: newUser.questionnaireResponses && newUser.questionnaireResponses.length > 0,
-                    twoFactorEnabled: newUser.twoFactorEnabled,
-                    profile: newUser.profile,
-                },
-            };
-
-            console.log("New user logged in via social auth", response);
-            return response;
         }
+
+        // 3. Brand new user — create account + link social provider
+        const newUser = await prisma.user.create({
+            data: {
+                email,
+                verified: true, // Social logins are pre-verified by the provider
+                profile: {
+                    create: {
+                        firstName: parsedFirstName || "",
+                        lastName: parsedLastName || "",
+                        avatarUrl,
+                    },
+                },
+            },
+            include: {
+                profile: true,
+                questionnaireResponses: { where: { isComplete: true }, take: 1 },
+            },
+        });
+
+        await linkAccount(newUser.id, provider, providerId);
+        await prisma.session.create({ data: { token, userId: newUser.id, expiresAt } });
+
+        return {
+            success: true,
+            message: "Account created and logged in successfully",
+            token,
+            user: {
+                id: newUser.id,
+                email: newUser.email,
+                role: newUser.role,
+                verified: newUser.verified,
+                hasPassword: !!newUser.hashedPassword,
+                kycVerified: newUser.kycVerified,
+                questionnaireCompleted: false,
+                twoFactorEnabled: newUser.twoFactorEnabled,
+                profile: newUser.profile,
+            },
+        };
     } catch (error) {
         console.error("Error in social authentication:", error);
         throw new Error("Failed to authenticate with social provider");
@@ -1272,7 +1383,8 @@ export async function socialAuth(
 }
 
 /**
- * Link a social account to an existing user
+ * Link a social provider account to an existing user.
+ * Uses upsert to ensure idempotency (safe to call on every OAuth login).
  */
 export async function linkAccount(
     userId: string,
@@ -1280,13 +1392,11 @@ export async function linkAccount(
     providerId: string
 ) {
     try {
-        // Check if we need to update the prisma schema to add UserAccount model
-        // For now, we'll handle this with a simple implementation
-
-        // Since we can't modify the schema, we'll return a success message
-        // In a real implementation, you would store the link in a UserAccount table
-
-        console.info(`Linked ${provider} account ${providerId} to user ${userId}`);
+        await prisma.socialAccount.upsert({
+            where: { provider_providerId: { provider, providerId } },
+            create: { userId, provider, providerId },
+            update: { userId }, // Re-link if it was previously linked to another account
+        });
 
         return {
             success: true,
@@ -1295,6 +1405,55 @@ export async function linkAccount(
     } catch (error) {
         console.error("Error linking account:", error);
         throw new Error("Failed to link account");
+    }
+}
+
+/**
+ * Get all social accounts linked to a user.
+ */
+export async function getSocialAccounts(userId: string) {
+    try {
+        const accounts = await prisma.socialAccount.findMany({
+            where: { userId },
+            select: { id: true, provider: true, createdAt: true },
+            orderBy: { createdAt: 'asc' },
+        });
+        return { success: true, accounts };
+    } catch (error) {
+        console.error("Error getting social accounts:", error);
+        throw new Error("Failed to get social accounts");
+    }
+}
+
+/**
+ * Unlink a social provider from a user.
+ * Guard: cannot unlink if it's the only auth method (no password and only 1 social account).
+ */
+export async function unlinkSocialAccount(userId: string, provider: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { socialAccounts: true },
+        });
+
+        if (!user) return { success: false, message: "User not found" };
+
+        // Safety guard: at least one auth method must remain
+        if (!user.hashedPassword && user.socialAccounts.length <= 1) {
+            return {
+                success: false,
+                message: "Cannot remove your only authentication method. Set a password first.",
+            };
+        }
+
+        await prisma.socialAccount.deleteMany({
+            where: { userId, provider },
+        });
+
+        return { success: true, message: `${provider} account unlinked successfully` };
+    } catch (error) {
+        console.error("Error unlinking social account:", error);
+        throw new Error("Failed to unlink social account");
     }
 }
 
@@ -1761,8 +1920,9 @@ export async function getTrustedDevices(userId: string) {
 }
 
 /**
- * Verify password
-  */
+ * Verify password — used for confirm-password dialogs and questionnaire unlock.
+ * Shares the same lockout counter as login to prevent brute-force via the UI.
+ */
 export async function verifyPassword(userId: string, password: string) {
     try {
         // Find user
@@ -1777,13 +1937,41 @@ export async function verifyPassword(userId: string, password: string) {
             };
         }
 
+        // Check account lockout
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+            const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+            return {
+                success: false,
+                message: `Account locked. Try again in ${minutesLeft} minute(s).`,
+            };
+        }
+
         // Verify password
         const isPasswordValid = await bcrypt.compare(password, user.hashedPassword);
         if (!isPasswordValid) {
+            // Share lockout counter with login
+            const newCount = (user.failedLoginAttempts ?? 0) + 1;
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    failedLoginAttempts: newCount,
+                    lockedUntil: newCount >= MAX_FAILED_ATTEMPTS
+                        ? new Date(Date.now() + LOCKOUT_DURATION_MS)
+                        : undefined,
+                },
+            });
             return {
                 success: false,
                 message: "The password is incorrect",
             };
+        }
+
+        // Reset lockout counter on success
+        if (user.failedLoginAttempts > 0) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { failedLoginAttempts: 0, lockedUntil: null },
+            });
         }
 
         return {

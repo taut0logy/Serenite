@@ -54,7 +54,8 @@ const VerifyEmailContent = ({ token }: { token: string }) => {
                     setMessage(
                         response.message || "Email verified successfully"
                     );
-                    router.push("/auth/login");
+                    // Delay so the user can see the success state before redirecting
+                    setTimeout(() => router.push("/auth/login"), 500);
                 } else {
                     setStatus("error");
                     setMessage(response.message || "Failed to verify email");

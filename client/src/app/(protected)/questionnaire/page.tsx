@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
     QuestionnaireIntro,
     QuestionnaireSlide,
@@ -10,13 +11,12 @@ import {
 } from "@/components/questionnaire";
 import { useQuestionnaireStore } from "@/stores/use-questionnaire-store";
 import { useQuestionnaire } from "@/hooks/use-questionnaire";
-import { useRefreshSession } from "@/lib/session-utils";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 
 export default function QuestionnairePage() {
     const { data: session } = useSession();
-    const { refreshSession } = useRefreshSession();
+    const router = useRouter();
 
     // Store selectors for optimized re-renders
     const state = useQuestionnaireStore(s => s.state);
@@ -64,8 +64,12 @@ export default function QuestionnairePage() {
 
             if (result.success) {
                 toast.success("Thanks a lot! Let your journey begin.");
-                await refreshSession();
-                //router.push("/dashboard");
+                // Navigate to dashboard — the middleware will pick up the completed
+                // questionnaire on next load and the session will refresh lazily.
+                // Do NOT call refreshSession() here: it triggers a JWT update mid-flight
+                // which causes the middleware to redirect while the server action is
+                // still in progress, producing "unexpected response from server".
+                router.push("/dashboard");
             }
         } catch (error) {
             console.error("Error submitting questionnaire:", error);

@@ -69,15 +69,11 @@ const ResetPasswordForm = ({ token }: { token: string }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [pendingFormData, setPendingFormData] = useState<ResetPasswordFormValues | null>(null);
-    const [status, setStatus] = useState<"loading" | "success" | "error">(
-        "loading"
-    );
-    const [message, setMessage] = useState<string>("");
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     useEffect(() => {
         if (!token) {
-            setStatus("error");
-            setMessage("Invalid reset token");
+            setErrorMsg("Invalid reset token");
         }
     }, [token]);
 
@@ -110,15 +106,10 @@ const ResetPasswordForm = ({ token }: { token: string }) => {
             const response = await resetPassword(token, pendingFormData.password);
 
             if (response.success) {
-                setStatus("success");
-                setMessage(response.message || "Password reset successfully");
-                toast.success(
-                    response.message || "Password reset successfully"
-                );
+                toast.success(response.message || "Password reset successfully");
                 router.push("/auth/login");
             } else {
-                setStatus("error");
-                setMessage(response.message || "Failed to reset password");
+                setErrorMsg(response.message || "Failed to reset password");
                 toast.error(response.message || "Failed to reset password");
             }
         } catch (error) {
@@ -126,8 +117,7 @@ const ResetPasswordForm = ({ token }: { token: string }) => {
             if (error instanceof Error) {
                 errorMessage = error.message;
             }
-            setStatus("error");
-            setMessage(errorMessage);
+            setErrorMsg(errorMessage);
             toast.error(errorMessage);
         } finally {
             setIsLoading(false);
@@ -192,16 +182,9 @@ const ResetPasswordForm = ({ token }: { token: string }) => {
                                         </span>
                                     </div>
 
-                                    {status === "error" && (
-                                        <div className="text-red-600 text-sm">
-                                            {message}
-                                        </div>
-                                    )}
-
-                                    {status === "success" && (
-                                        <div className="text-green-600 text-sm">
-                                            {message}
-                                        </div>
+                                    {/* Error message */}
+                                    {errorMsg && (
+                                        <p className="text-red-600 text-sm">{errorMsg}</p>
                                     )}
 
                                     <Button

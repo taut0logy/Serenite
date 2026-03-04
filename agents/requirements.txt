@@ -6,7 +6,7 @@ langchain-community
 langchain-cohere
 langchain-tavily
 # langchain-astradb
-# langchain-huggingface
+langchain-huggingface
 langchain-postgres
 langgraph
 
@@ -16,7 +16,7 @@ cohere
 google-genai
 
 # Vector Databases and Embeddings
-# sentence-transformers
+sentence-transformers
 
 # Database and Storage
 psycopg2-binary
@@ -35,6 +35,7 @@ nest-asyncio
 
 # HTTP Clients and Networking
 httpx
+cachetools
 requests
 
 # Computer Vision and Image Processing

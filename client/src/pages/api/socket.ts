@@ -3,6 +3,23 @@ import { Server } from "socket.io"
 import { type NextApiResponseWithSocket } from "@/app/typings/platform";
 import { verifySession } from '@/actions/auth.actions';
 
+/**
+ * Parse a specific cookie value from a raw Cookie header string.
+ */
+function parseCookie(cookieHeader: string | undefined, name: string): string | undefined {
+    if (!cookieHeader) return undefined;
+    const match = cookieHeader.split(';').find(c => c.trim().startsWith(`${name}=`));
+    return match ? decodeURIComponent(match.trim().slice(name.length + 1)) : undefined;
+}
+
+import { getToken } from "next-auth/jwt"
+
+export const config = {
+    api: {
+        bodyParser: false,
+    },
+}
+
 export default function SocketHandler(_req: NextApiRequest, res: NextApiResponseWithSocket) {
     if (res.socket.server.io) {
         res.end();
@@ -12,7 +29,7 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
         path: '/api/socket',
         addTrailingSlash: false,
         cors: {
-            origin: '*',
+            origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
             credentials: true,
             methods: ['GET', 'POST'],
         },
@@ -20,36 +37,51 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
 
     io.use(async (socket, next) => {
         try {
-            const token = socket.handshake.auth.token
+            console.log(`[Socket Auth] Handshake received from ${socket.id}`);
+            
+            // Use getToken to extract the Auth.js JWT from the handshake request.
+            // This automatically handles cookie parsing, decryption, and salt management.
+            const token = await getToken({
+                req: socket.request as any,
+                secret: process.env.AUTH_SECRET || '',
+            });
 
             if (!token) {
-                console.error('❌ [Socket] No authentication token provided')
-                return next(new Error('Authentication token required'))
+                console.error('❌ [Socket Auth] No JWT token found in handshake request');
+                return next(new Error('Authentication required'));
             }
 
-            // Verify the session token
-            const { valid, user } = await verifySession(token)
+            const databaseAccessToken = token?.accessToken as string | undefined;
+
+            if (!databaseAccessToken) {
+                console.error('❌ [Socket Auth] Access token missing from JWT payload');
+                console.debug('[Socket Auth] JWT Payload structure:', JSON.stringify(token, null, 2));
+                return next(new Error('Invalid session structure'));
+            }
+
+            // Verify the internal database accessToken against the database
+            const { valid, user } = await verifySession(databaseAccessToken)
 
             if (!valid || !user) {
-                console.error('❌ [Socket] Invalid authentication token')
-                return next(new Error('Invalid authentication token'))
+                console.error('❌ [Socket Auth] Database session check failed for token');
+                return next(new Error('Invalid session'))
             }
 
             // Attach user data to socket
             socket.data.userId = user.id
             socket.data.email = user.email
             socket.data.name = user.profile?.firstName
-
-            console.log(`✅ [Socket] User authenticated: ${user.email} (${user.id})`)
+            
+            console.log(`✅ [Socket Auth] Handshake successful for user: ${user.email}`);
             next()
         } catch (error) {
-            console.error('❌ [Socket] Authentication error:', error)
+            console.error('❌ [Socket Auth] Unexpected error during handshake:', error)
             next(new Error('Socket Authentication failed'))
         }
     })
 
     io.on('connection', (socket) => {
-        console.log('[socket] client connected', socket.id)
+        console.log('[Socket] Client connected:', socket.id)
 
         socket.on('ping', (data) => {
             console.log('[socket]', data)
@@ -370,6 +402,4 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
     (global as any).io = io
     res.socket.server.io = io;
     res.end();
-
-    res.send({});
 }

@@ -26,6 +26,9 @@ import PasswordField from "@/components/ui/password-field";
 import { check2FARequired } from "@/actions/auth.actions";
 import { AlertCircle, Lock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useEncryption } from "@/providers/encryption-provider";
+import SafeWordDisplay from "@/components/questionnaire/SafeWordDisplay";
+
 
 const loginSchema = z.object({
     email: z.string().email("Please enter a valid email address"),
@@ -39,6 +42,8 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isLocked, setIsLocked] = useState(false);
+    const [safeWords, setSafeWords] = useState<string[] | null>(null);
+    const { unlockWithPassword, setupNewKey } = useEncryption();
 
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
@@ -110,7 +115,18 @@ export default function LoginPage() {
                     return;
                 }
 
-                // Login successful
+                // Auto-unlock the encryption vault with the password already in hand.
+                const unlockResult = await unlockWithPassword(data.password);
+                if (unlockResult.needsSetup) {
+                    // First login — generate MK and show safe phrase before navigating
+                    const { safeWords: words } = await setupNewKey(data.password);
+                    setSafeWords(words);
+                    toast.success("Logged in successfully");
+                    setIsLoading(false);
+                    return; // Navigation happens after user confirms safe words
+                }
+                // Existing user — vault unlocked (or failed silently; questionnaire page handles it)
+
                 toast.success("Logged in successfully");
                 router.push("/dashboard");
                 return;
@@ -136,130 +152,143 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-            <div className="w-full max-w-md space-y-8">
-                <div className="text-center">
-                    <h1 className="text-3xl font-bold">Welcome back</h1>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                        Sign in to your account
-                    </p>
-                </div>
+        <>
+            {/* Safe phrase modal — shown on first login (first-time MK setup) */}
+            {safeWords && (
+                <SafeWordDisplay
+                    words={safeWords}
+                    onConfirmed={() => router.push('/dashboard')}
+                    asDialog
+                />
+            )}
 
-                <div className="mt-8">
-                    <div className="space-y-6">
-                        <Form {...form}>
-                            <form
-                                onSubmit={form.handleSubmit(onSubmit)}
-                                className="space-y-4"
-                            >
-                                <FormField
-                                    control={form.control}
-                                    name="email"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Email</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    type="email"
-                                                    placeholder="name@example.com"
-                                                    disabled={isLoading}
-                                                    {...field}
-                                                />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="password"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Password</FormLabel>
-                                            <FormControl>
-                                                <PasswordField field={field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+            <div className="flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+                <div className="w-full max-w-md space-y-8">
+                    <div className="text-center">
+                        <h1 className="text-3xl font-bold">Welcome back</h1>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            Sign in to your account
 
-                                <div className="flex items-center justify-between">
-                                    <div className="text-sm">
-                                        <Link
-                                            href="/auth/forgot-password"
-                                            className="text-sm text-primary hover:underline"
-                                        >
-                                            Forgot password?
-                                        </Link>
+                        </p>
+                    </div>
+
+                    <div className="mt-8">
+                        <div className="space-y-6">
+                            <Form {...form}>
+                                <form
+                                    onSubmit={form.handleSubmit(onSubmit)}
+                                    className="space-y-4"
+                                >
+                                    <FormField
+                                        control={form.control}
+                                        name="email"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Email</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="email"
+                                                        placeholder="name@example.com"
+                                                        disabled={isLoading}
+                                                        {...field}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="password"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Password</FormLabel>
+                                                <FormControl>
+                                                    <PasswordField field={field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-sm">
+                                            <Link
+                                                href="/auth/forgot-password"
+                                                className="text-sm text-primary hover:underline"
+                                            >
+                                                Forgot password?
+                                            </Link>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Error / Lockout alert */}
-                                {errorMessage && (
-                                    <Alert
-                                        variant="destructive"
-                                        className={isLocked ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-500" : ""}
+                                    {/* Error / Lockout alert */}
+                                    {errorMessage && (
+                                        <Alert
+                                            variant="destructive"
+                                            className={isLocked ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-500" : ""}
+                                        >
+                                            {isLocked
+                                                ? <Lock className="h-4 w-4" />
+                                                : <AlertCircle className="h-4 w-4" />}
+                                            <AlertDescription>{errorMessage}</AlertDescription>
+                                        </Alert>
+                                    )}
+
+                                    <Button
+                                        type="submit"
+                                        className="w-full"
+                                        disabled={isLoading}
                                     >
-                                        {isLocked
-                                            ? <Lock className="h-4 w-4" />
-                                            : <AlertCircle className="h-4 w-4" />}
-                                        <AlertDescription>{errorMessage}</AlertDescription>
-                                    </Alert>
-                                )}
+                                        {isLoading ? "Signing in..." : "Sign in"}
+                                    </Button>
+                                </form>
+                            </Form>
 
+                            <div className="relative">
+                                <div className="absolute inset-0 flex items-center">
+                                    <Separator className="w-full" />
+                                </div>
+                                <div className="relative flex justify-center text-xs uppercase">
+                                    <span className="bg-background px-2 text-muted-foreground">
+                                        Or continue with
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2">
                                 <Button
-                                    type="submit"
-                                    className="w-full"
+                                    variant="outline"
+                                    className="flex-1"
+                                    onClick={() => handleOAuthSignIn("github")}
                                     disabled={isLoading}
                                 >
-                                    {isLoading ? "Signing in..." : "Sign in"}
+                                    <FaGithub className="mr-2 h-4 w-4" /> GitHub
                                 </Button>
-                            </form>
-                        </Form>
-
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                                <Separator className="w-full" />
+                                <Button
+                                    variant="outline"
+                                    className="flex-1 items-center justify-center"
+                                    onClick={() => handleOAuthSignIn("google")}
+                                    disabled={isLoading}
+                                >
+                                    <FcGoogle className="mr-2 h-4 w-4" /> Google
+                                </Button>
                             </div>
-                            <div className="relative flex justify-center text-xs uppercase">
-                                <span className="bg-background px-2 text-muted-foreground">
-                                    Or continue with
-                                </span>
+
+                            <div className="text-center text-sm">
+                                Don&apos;t have an account?{" "}
+                                <Link
+                                    href="/auth/register"
+                                    className="text-primary hover:underline"
+                                >
+                                    Sign up
+                                </Link>
                             </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => handleOAuthSignIn("github")}
-                                disabled={isLoading}
-                            >
-                                <FaGithub className="mr-2 h-4 w-4" /> GitHub
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="flex-1 items-center justify-center"
-                                onClick={() => handleOAuthSignIn("google")}
-                                disabled={isLoading}
-                            >
-                                <FcGoogle className="mr-2 h-4 w-4" /> Google
-                            </Button>
-                        </div>
-
-                        <div className="text-center text-sm">
-                            Don&apos;t have an account?{" "}
-                            <Link
-                                href="/auth/register"
-                                className="text-primary hover:underline"
-                            >
-                                Sign up
-                            </Link>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }
+

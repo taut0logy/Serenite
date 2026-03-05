@@ -3,7 +3,15 @@
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { ClusterProfile } from "@/lib/profiling";
-import { SeverityLevel } from "@prisma/client";
+type SeverityLevel = "MINIMAL" | "MILD" | "MODERATE" | "SEVERE";
+
+
+// T9: Per-user rate limiter for auto-saves (module-level, resets on server restart)
+const saveRateLimit = new Map<string, number>();
+const SAVE_MIN_INTERVAL_MS = 1000;
+
+// T8: Max payload size (~10 KB — real payload is < 1 KB for 57 answers)
+const MAX_ENCRYPTED_PAYLOAD_BYTES = 10_000;
 
 /**
  * Save encrypted questionnaire responses.
@@ -15,7 +23,7 @@ import { SeverityLevel } from "@prisma/client";
 export async function saveEncryptedResponses(
   encryptedData: string, // Base64 encoded encrypted data
   iv: string,            // Base64 encoded IV
-  salt: string           // Base64 encoded salt
+  salt: string           // Base64 encoded salt (empty string for MK-based encryption)
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await auth();
@@ -24,7 +32,19 @@ export async function saveEncryptedResponses(
       return { success: false, error: "User not authenticated" };
     }
 
-    // Convert Base64 strings to Buffers for storage
+    // T8: Payload size validation
+    if (encryptedData.length > MAX_ENCRYPTED_PAYLOAD_BYTES) {
+      return { success: false, error: "Payload too large" };
+    }
+
+    // T9: Rate limiting — max one save per second per user
+    const userId = session.user.id;
+    const lastSave = saveRateLimit.get(userId) ?? 0;
+    if (Date.now() - lastSave < SAVE_MIN_INTERVAL_MS) {
+      return { success: false, error: "Too many requests" };
+    }
+    saveRateLimit.set(userId, Date.now());
+
     const encryptedBuffer = Buffer.from(encryptedData, "base64");
     const ivBuffer = Buffer.from(iv, "base64");
     const saltBuffer = Buffer.from(salt, "base64");
@@ -109,9 +129,9 @@ export async function getEncryptedResponses(): Promise<{
       success: true,
       data: {
         id: response.id,
-        encryptedData: response.encryptedData.toString("base64"),
-        iv: response.iv?.toString("base64") ?? "",
-        salt: response.salt?.toString("base64") ?? "",
+        encryptedData: Buffer.from(response.encryptedData as Uint8Array).toString("base64"),
+        iv: response.iv ? Buffer.from(response.iv as Uint8Array).toString("base64") : "",
+        salt: response.salt ? Buffer.from(response.salt as Uint8Array).toString("base64") : "",
         isComplete: response.isComplete,
       },
     };

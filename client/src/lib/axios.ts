@@ -1,7 +1,4 @@
 import axiosBase, { AxiosInstance } from 'axios';
-import { auth } from '@/auth';
-import { getToken } from 'next-auth/jwt';
-import { headers } from 'next/headers';
 
 // Create the base Axios instance
 // Points to the Next.js proxy route for client-side calls,
@@ -20,8 +17,10 @@ axios.interceptors.request.use(
                 // ── Server-side (server components, actions, API routes) ──
                 // Read the raw DB token from the server-side JWT cookie.
                 // It never touches the client.
+                const { headers } = await import('next/headers');
                 const reqHeaders = await headers();
                 const cookieHeader = reqHeaders.get('cookie') ?? undefined;
+                const { getToken } = await import('next-auth/jwt');
                 const jwt = await getToken({
                     req: { headers: { cookie: cookieHeader } } as any,
                     secret: process.env.AUTH_SECRET!,

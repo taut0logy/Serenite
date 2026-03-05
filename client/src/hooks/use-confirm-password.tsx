@@ -5,9 +5,8 @@
  */
 
 import { useState } from "react";
-import { useMutation } from "@apollo/client";
 import { useAuth } from "@/providers/auth-provider";
-import { VERIFY_PASSWORD } from "@/graphql/operations/mutations";
+import { verifyPassword } from "@/actions/auth.actions";
 import {
     Dialog,
     DialogContent,
@@ -107,10 +106,10 @@ function PasswordConfirmDialog({
 export function useConfirmPassword() {
     const { user, isAuthenticated } = useAuth();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [pendingCallback, setPendingCallback] = useState<(() => void) | null>(
         null
     );
-    const [verifyPassword, { loading }] = useMutation(VERIFY_PASSWORD);
 
     const handlePasswordConfirm = async (password: string) => {
         if (!user?.id) {
@@ -119,21 +118,13 @@ export function useConfirmPassword() {
             return;
         }
 
+        setIsLoading(true);
         try {
-            const { data } = await verifyPassword({
-                variables: {
-                    userId: user.id,
-                    password: password,
-                },
-            });
-
-            const result = data?.verifyPassword;
+            const result = await verifyPassword(user.id, password);
 
             if (result?.success) {
                 toast.success("Password verified");
                 setIsDialogOpen(false);
-
-                // Execute the pending callback
                 if (pendingCallback) {
                     pendingCallback();
                     setPendingCallback(null);
@@ -144,6 +135,8 @@ export function useConfirmPassword() {
         } catch (error) {
             console.error("Password verification error:", error);
             toast.error("Failed to verify password");
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -165,13 +158,13 @@ export function useConfirmPassword() {
                 setPendingCallback(null);
             }}
             onConfirm={handlePasswordConfirm}
-            isLoading={loading}
+            isLoading={isLoading}
         />
     );
 
     return {
         confirmPassword,
         PasswordConfirmDialog: PasswordConfirmDialogComponent,
-        isLoading: loading,
+        isLoading,
     };
 }

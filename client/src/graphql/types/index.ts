@@ -26,21 +26,13 @@ enum NotificationStatus {
 type User {
   id: ID!
   email: String!
-  hashedPassword: String
   role: Role!
   createdAt: String!
   updatedAt: String!
   verified: Boolean!
-  verificationToken: String
-  resetToken: String
-  resetTokenExpiry: String
   twoFactorEnabled: Boolean!
   hasPassword: Boolean
   profile: Profile
-  trustedDevices: [TrustedDevice!]
-  sessions: [Session!]
-  twoFactorAuth: TwoFactorAuth
-  kycVerified: Boolean
   questionnaireCompleted: Boolean!
 }
 
@@ -57,38 +49,6 @@ type Profile {
   updatedAt: String!
 }
 
-type Session {
-  id: ID!
-  token: String!
-  userId: String!
-  expiresAt: String!
-  createdAt: String!
-  user: User
-}
-
-type TrustedDevice {
-  id: ID!
-  userId: String!
-  deviceToken: String!
-  deviceName: String!
-  deviceType: String
-  ipAddress: String
-  lastUsed: String!
-  expiresAt: String!
-  createdAt: String!
-  user: User
-}
-
-type TwoFactorAuth {
-  id: ID!
-  userId: String!
-  secret: String
-  otpBackupCodes: [String!]!
-  createdAt: String!
-  updatedAt: String!
-  user: User
-}
-
 type Notification {
   id: ID!
   userId: String!
@@ -101,90 +61,12 @@ type Notification {
   status: NotificationStatus!
 }
 
-# Auth response payloads
-type AuthPayload {
+type NotificationsPayload {
   success: Boolean!
   message: String!
-  user: User
-  token: String
-  requires2FA: Boolean
-  tempToken: String
-}
-
-type LoginPayload {
-  success: Boolean!
-  message: String!
-  user: User
-  token: String
-  requires2FA: Boolean
-  tempToken: String
-}
-
-type VerifyPayload {
-  valid: Boolean
-  user: User
-  token: String
-}
-
-type SimplePayload {
-  success: Boolean!
-  message: String!
-}
-
-type TwoFactorPayload {
-  success: Boolean!
-  message: String!
-  secret: String
-  backupCodes: [String!]
-}
-
-type TwoFactorStatusPayload {
-  success: Boolean!
-  twoFactorEnabled: Boolean
-}
-
-type OtpVerifyPayload {
-  success: Boolean!
-  message: String!
-  token: String
-  deviceToken: String
-  user: User
-}
-
-type BackupCodesPayload {
-  success: Boolean!
-  message: String!
-  backupCodes: [String!]
-}
-
-type TrustedDevicesPayload {
-  success: Boolean!
-  message: String!
-  devices: [TrustedDevice!]
-}
-
-type KycPayload {
-  success: Boolean!
-  message: String!
-  user: User
-}
-
-# Input types
-input RegisterInput {
-  email: String!
-  password: String!
-  firstName: String!
-  lastName: String!
-}
-
-input SocialAuthInput {
-  email: String!
-  provider: String!
-  providerId: String!
-  name: String!
-  firstName: String
-  lastName: String
-  avatarUrl: String
+  notifications: [Notification!]!
+  totalCount: Int!
+  hasMore: Boolean!
 }
 
 input UpdateProfileInput {
@@ -195,108 +77,22 @@ input UpdateProfileInput {
   dob: String
 }
 
-input DeviceInfoInput {
-  name: String!
-  type: String
-  ip: String
-}
-
-input KycVerifyInput {
-  userId: String!
-  kycVerified: Boolean!
+type SimplePayload {
+  success: Boolean!
+  message: String!
 }
 
 type Query {
+  # Current authenticated user
   me: User
-  user(id: String!): User
-  users: [User!]!
+  # User profile by ID
   profile(userId: String!): Profile
-  getTrustedDevices(userId: String!): TrustedDevicesPayload!
-  getUserTwoFactorStatus(userId: String!): TwoFactorStatusPayload!
-  verify2faToken(token: String!): VerifyPayload!
-  getBackupCodes(userId: String!): BackupCodesPayload!
-  notifications(userId: String!, offset: Int = 0, limit: Int = 10): NotificationsPayload!
-}
-
-type NotificationsPayload {
-  success: Boolean!
-  message: String!
-  notifications: [Notification!]!
-  totalCount: Int!
-  hasMore: Boolean!
+  # Paginated notifications
+  notifications(userId: String!, offset: Int, limit: Int): NotificationsPayload!
 }
 
 type Mutation {
-  verifySession(token: String): VerifyPayload!
-  # Account creation and verification
-  register(input: RegisterInput!): AuthPayload!
-  resendVerificationEmail(email: String!): SimplePayload!
-  verifyEmail(token: String!): SimplePayload!
-  setPassword(userId: String!, password: String!): SimplePayload!
-  verifyPassword(userId: String!, password: String!): SimplePayload!
-
-  # Authentication
-  login(email: String!, password: String!, deviceToken: String): LoginPayload!
-  logout(token: String): SimplePayload!
-
-  # Password management
-  forgotPassword(email: String!): SimplePayload!
-  resetPassword(token: String!, password: String!): SimplePayload!
-  changePassword(
-    userId: String!
-    currentPassword: String
-    newPassword: String!
-  ): SimplePayload!
-
-  # Social authentication
-  socialAuth(input: SocialAuthInput!): AuthPayload!
-  linkAccount(
-    userId: String!
-    provider: String!
-    providerId: String!
-  ): SimplePayload! # Two-factor authentication
-  enableTwoFactor(userId: String!): TwoFactorPayload!
-  disableTwoFactor(userId: String!): SimplePayload!
-  generateAndSendOtp(userId: String!): SimplePayload!
-  check2FARequired(
-    email: String!
-    password: String!
-    deviceToken: String
-  ): AuthPayload!
-  verifyOtp(
-    userId: String!
-    otp: String!
-    tempToken: String!
-    trustDevice: Boolean
-    deviceName: String
-    deviceType: String
-    ipAddress: String
-  ): OtpVerifyPayload!
-  verifyBackupCode(
-    userId: String!
-    backupCode: String!
-    tempToken: String!
-    trustDevice: Boolean
-    deviceName: String
-    deviceType: String
-    ipAddress: String
-  ): OtpVerifyPayload!
-  regenerateBackupCodes(userId: String!): BackupCodesPayload!
-
-  # KYC
-  verifyKyc(input: KycVerifyInput!): KycPayload!
-
-  # Trusted devices
-  trustDevice(
-    userId: String!
-    deviceName: String!
-    ipAddress: String
-    deviceType: String
-  ): SimplePayload!
-  removeTrustedDevice(userId: String!, deviceToken: String!): SimplePayload!
-
   # User profile management
   updateProfile(userId: String!, input: UpdateProfileInput!): SimplePayload!
-  deleteAccount(userId: String!): SimplePayload!
 }
-`
+`;

@@ -41,7 +41,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { UPDATE_PROFILE, DELETE_ACCOUNT } from "@/graphql/operations/mutations";
+import { UPDATE_PROFILE } from "@/graphql/operations/mutations";
+import { deleteAccount } from "@/actions/auth.actions";
 import { signOut } from "next-auth/react";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
@@ -80,7 +81,6 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
 
     // GraphQL mutations
     const [updateProfile] = useMutation(UPDATE_PROFILE);
-    const [deleteAccount] = useMutation(DELETE_ACCOUNT);
 
     // Profile form
     const profileForm = useForm<ProfileFormValues>({
@@ -132,25 +132,15 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
         }
     };
 
-    // Handle account deletion
+    // Handle account deletion — uses server action directly (no GQL needed)
     const handleDeleteAccount = async () => {
         if (!user?.id) return;
 
         try {
-            const response = await deleteAccount({
-                variables: {
-                    userId: user.id,
-                },
-            });
+            const result = await deleteAccount(user.id);
 
-            const result = response.data?.deleteAccount;
-
-            if (result && result?.success) {
-                toast.success(
-                    result?.message || "Account deleted successfully"
-                );
-
-                // Sign out user
+            if (result?.success) {
+                toast.success(result?.message || "Account deleted successfully");
                 await signOut({ redirect: false });
                 router.push("/auth/login");
             } else {
@@ -179,7 +169,7 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
     }, [user, profileForm]);
 
     return (
-        <div className="container mx-auto max-w-5xl py-8 px-4">
+        <div className="container mx-auto max-w-5xl py-6 px-4">
             <h1 className="mb-6 text-3xl font-bold">My Profile</h1>
 
             <Tabs

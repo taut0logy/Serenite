@@ -28,7 +28,7 @@ const DOMAIN_MAP: Record<string, string> = {
 interface DomainConfig {
   max: number;
   cutoffs: Array<[number, number, SeverityLevel]>; // [min, max, severity]
-  reversed?: boolean; // For self_esteem where higher is better
+  invertedItems?: string[]; // Question IDs that are positively framed (higher = healthier → invert before summing)
 }
 
 type SeverityLevel = "MINIMAL" | "MILD" | "MODERATE" | "SEVERE";
@@ -81,12 +81,17 @@ const DOMAIN_CONFIGS: Record<string, DomainConfig> = {
   },
   self_esteem: {
     max: 21,
-    reversed: true, // Higher score = better self-esteem
+    // self1/self2/self3/self7 are POSITIVE items (e.g. "I feel good about myself")
+    // → each is reversed at item level so 0=distressed, 3=healthy
+    // self4/self5/self6 are NEGATIVE items (e.g. "I feel worthless")
+    // → used as-is, 0=healthy, 3=distressed
+    // Result: domain sum 0=minimal distress / 21=severe distress (consistent with all other domains)
+    invertedItems: ['self1', 'self2', 'self3', 'self7'],
     cutoffs: [
-      [17, 21, "MINIMAL"], // High self-esteem
-      [12, 16, "MILD"],
-      [7, 11, "MODERATE"],
-      [0, 6, "SEVERE"], // Low self-esteem
+      [0, 4, "MINIMAL"],
+      [5, 9, "MILD"],
+      [10, 14, "MODERATE"],
+      [15, 21, "SEVERE"],
     ],
   },
   sleep_disruption: {
@@ -139,10 +144,17 @@ function aggregateDomainScores(responses: Record<string, number>): Record<string
     domainScores[domain] = 0;
   }
 
+  const MAX_ITEM_SCORE = 3; // 4-point Likert scale: 0, 1, 2, 3
+
   for (const [questionId, score] of Object.entries(responses)) {
     const domain = DOMAIN_MAP[questionId];
     if (domain && domain in domainScores) {
-      domainScores[domain] += score;
+      const config = DOMAIN_CONFIGS[domain];
+      // Item-level inversion: positively-framed items contribute 0 when max, 3 when min
+      const effectiveScore = config?.invertedItems?.includes(questionId)
+        ? MAX_ITEM_SCORE - score
+        : score;
+      domainScores[domain] += effectiveScore;
     }
   }
 
@@ -159,12 +171,8 @@ function normalizeDomainScores(domainScores: Record<string, number>): Record<str
   for (const [domain, score] of Object.entries(domainScores)) {
     const config = DOMAIN_CONFIGS[domain];
     if (config) {
-      if (config.reversed) {
-        // Invert: high raw score = low "distress-like" normalized value
-        normalized[domain] = 1 - score / config.max;
-      } else {
-        normalized[domain] = score / config.max;
-      }
+      // All domains are now uniformly directional: higher = more distressed
+      normalized[domain] = score / config.max;
       // Clamp to 0-1
       normalized[domain] = Math.max(0, Math.min(1, normalized[domain]));
     }

@@ -11,29 +11,16 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, Settings, User } from "lucide-react";
-//import { useMutation } from "@apollo/client";
 import { useRouter } from "next/navigation";
-//import { LOGOUT } from "@/graphql/operations";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 
 export function UserMenu({ user }: { user: UserType | null }) {
-    //const [logoutMutation] = useMutation(LOGOUT);
 
     const router = useRouter();
 
     const handleLogout = async () => {
         try {
-            // if (user) {
-            //     // Call GraphQL logout mutation
-            //     await logoutMutation({
-            //         variables: {
-            //             token: window.sessionStorage.getItem("token") || "",
-            //         },
-            //     });
-            // }
-
-            // Use NextAuth signOut
             await signOut({ redirect: false });
 
             toast.success("See you next time!");

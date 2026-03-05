@@ -2,27 +2,22 @@
 
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { 
-    saveEncryptedResponses, 
-    getEncryptedResponses, 
-    completeQuestionnaire 
+import {
+    saveEncryptedResponses,
+    getEncryptedResponses,
+    completeQuestionnaire
 } from '@/actions/questionnaire.actions';
-import { verifyPassword } from '@/actions/auth.actions';
 import { useQuestionnaireStore } from '@/stores/use-questionnaire-store';
 import { QuestionnaireResponses } from '@/types/questionnaire';
 import { computeProfile } from '@/lib/profiling';
-import { 
-    encryptResponses, 
-    decryptResponses, 
-    arrayBufferToBase64, 
-    base64ToArrayBuffer,
-    base64ToUint8Array 
-} from '@/lib/encryption';
+import { encryptWithMK, decryptWithMK, arrayBufferToBase64, base64ToArrayBuffer, base64ToUint8Array, isValidBase64 } from '@/lib/key-management';
+import { useEncryption } from '@/providers/encryption-provider';
 
 export function useQuestionnaire() {
-    const { data: session } = useSession();
-    
-    // Use stable references to store methods
+    const { data: session, update } = useSession();
+    const { masterKey, isUnlocked, unlockWithPassword, setupNewKey } = useEncryption();
+
+    // Store selectors
     const setResponses = useQuestionnaireStore(s => s.setResponses);
     const setIsSubmitting = useQuestionnaireStore(s => s.setIsSubmitting);
     const setState = useQuestionnaireStore(s => s.setState);
@@ -30,147 +25,134 @@ export function useQuestionnaire() {
     const isLoading = useQuestionnaireStore(s => s.isLoading);
     const isSubmitting = useQuestionnaireStore(s => s.isSubmitting);
     const getFirstUnansweredIndex = useQuestionnaireStore(s => s.getFirstUnansweredIndex);
-    
+
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [hasInitialized, setHasInitialized] = useState(false);
-    const [password, setPassword] = useState<string | null>(null);
-    const [isPasswordVerified, setIsPasswordVerified] = useState(false);
-    
-    // Ref to track if save is in progress (prevents double-saves)
+
+    // Ref to prevent concurrent saves
     const isSaving = useRef(false);
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     /**
-     * Verify and set the user's password for encryption/decryption.
+     * Unlock the vault using the user's password.
+     * Returns needsSetup=true if this is the user's first login (no MK yet).
      */
-    const verifyAndSetPassword = useCallback(async (pwd: string): Promise<{ success: boolean; error?: string }> => {
-        if (!session?.user?.id) {
-            return { success: false, error: 'User not authenticated' };
-        }
-
-        try {
-            const result = await verifyPassword(session.user.id, pwd);
-            
-            if (!result.success) {
-                return { success: false, error: result.message || 'Incorrect password' };
-            }
-
-            setPassword(pwd);
-            setIsPasswordVerified(true);
+    const unlockVault = useCallback(async (
+        password: string
+    ): Promise<{ success: boolean; needsSetup?: boolean; error?: string }> => {
+        const result = await unlockWithPassword(password);
+        // If no key exists yet, generate one
+        if (result.needsSetup) {
+            await setupNewKey(password);
             return { success: true };
-        } catch (error) {
-            console.error('Error verifying password:', error);
-            return { success: false, error: 'Failed to verify password' };
         }
-    }, [session?.user?.id]);
+        return result;
+    }, [unlockWithPassword, setupNewKey]);
 
     /**
      * Save encrypted responses to database.
      */
     const saveToDatabase = useCallback(async (responsesToSave: QuestionnaireResponses) => {
         if (!session?.user || Object.keys(responsesToSave).length === 0) {
-            return { success: false, error: 'User not authenticated or no responses' };
+            return { success: false, error: 'No session or responses' };
         }
-
-        if (!password || !isPasswordVerified) {
-            return { success: false, error: 'Password not verified' };
+        if (!masterKey) {
+            return { success: false, error: 'Vault is locked' };
         }
-
         if (isSaving.current) {
-            return { success: false, error: 'Save already in progress' };
+            return { success: false, error: 'Save in progress' };
         }
 
         isSaving.current = true;
         try {
-            const { encrypted, iv, salt } = await encryptResponses(responsesToSave, password);
+            const { encrypted, iv } = await encryptWithMK(responsesToSave, masterKey);
             const encryptedBase64 = arrayBufferToBase64(encrypted);
             const ivBase64 = arrayBufferToBase64(iv.buffer as ArrayBuffer);
-            const saltBase64 = arrayBufferToBase64(salt.buffer as ArrayBuffer);
-
-            const result = await saveEncryptedResponses(encryptedBase64, ivBase64, saltBase64);
+            // Salt is empty string — MK-based encryption doesn't use per-call PBKDF2
+            const result = await saveEncryptedResponses(encryptedBase64, ivBase64, '');
             return result;
-        } catch (error) {
-            console.error('Failed to encrypt and save:', error);
-            return { success: false, error: 'Failed to encrypt and save responses' };
+        } catch (err) {
+            console.error('Failed to encrypt and save:', err);
+            return { success: false, error: 'Failed to save responses' };
         } finally {
             isSaving.current = false;
         }
-    }, [session?.user, password, isPasswordVerified]);
+    }, [session?.user, masterKey]);
 
     /**
      * Load and decrypt responses from database.
+     * T2 fix: validates base64 before decoding to prevent InvalidCharacterError.
      */
     const loadFromDatabase = useCallback(async () => {
-        if (!session?.user) {
-            return { success: false, error: 'User not authenticated' };
-        }
-
-        if (!password || !isPasswordVerified) {
-            return { success: false, error: 'Password not verified' };
-        }
+        if (!session?.user) return { success: false, error: 'Not authenticated' };
+        if (!masterKey) return { success: false, error: 'Vault is locked' };
 
         try {
             const result = await getEncryptedResponses();
 
             if (result.success && result.data?.encryptedData) {
-                try {
-                    const encrypted = base64ToArrayBuffer(result.data.encryptedData);
-                    const iv = base64ToUint8Array(result.data.iv);
-                    const salt = base64ToUint8Array(result.data.salt);
+                const { encryptedData, iv } = result.data;
 
-                    const decryptedResponses = await decryptResponses(encrypted, iv, salt, password);
-                    setResponses(decryptedResponses);
-                    return { success: true, data: decryptedResponses };
-                } catch (decryptError) {
-                    console.error('Failed to decrypt responses:', decryptError);
+                // T2 fix: validate before decoding
+                if (!isValidBase64(encryptedData) || !isValidBase64(iv)) {
+                    console.warn('Invalid base64 in stored responses — starting fresh');
+                    setResponses({});
+                    return { success: true, data: null };
+                }
+
+                try {
+                    const encrypted = base64ToArrayBuffer(encryptedData);
+                    const ivBytes = base64ToUint8Array(iv);
+                    const decrypted = await decryptWithMK(encrypted, ivBytes, masterKey);
+                    setResponses(decrypted);
+                    return { success: true, data: decrypted };
+                } catch (decryptErr) {
+                    console.error('Decryption failed:', decryptErr);
+                    setResponses({});
                     return { success: false, error: 'Failed to decrypt responses' };
                 }
             } else {
-                // No encrypted data - start fresh
                 setResponses({});
                 return { success: true, data: null };
             }
-        } catch (error) {
-            console.error('Failed to load from database:', error);
+        } catch (err) {
+            console.error('Failed to load from database:', err);
             setResponses({});
-            return { success: false, error: 'Failed to load from database' };
+            return { success: false, error: 'Failed to load responses' };
         }
-    }, [session?.user, password, isPasswordVerified, setResponses]);
+    }, [session?.user, masterKey, setResponses]);
 
     /**
-     * Complete questionnaire: encrypt responses and compute profile locally.
+     * Complete questionnaire: compute profile + encrypt + call server action.
+     * T1 fix: calls session.update() before returning so middleware re-reads questionnaireCompleted=true.
+     * T4 fix: cancels pending auto-save before submitting.
      */
     const submitQuestionnaire = useCallback(async () => {
-        if (!session?.user) {
-            throw new Error('User not authenticated');
-        }
+        if (!session?.user) throw new Error('Not authenticated');
+        if (!masterKey) throw new Error('Vault is locked');
 
-        if (!password || !isPasswordVerified) {
-            throw new Error('Password not verified');
+        // T4 fix: Cancel any pending debounced auto-save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
         }
 
         setIsSubmitting(true);
         try {
-            // 1. Compute profile locally (deterministic, no LLM)
+            // 1. Compute profile locally
             const profile = computeProfile(responses);
 
-            // 2. Encrypt responses locally
-            const { encrypted, iv, salt } = await encryptResponses(responses, password);
+            // 2. Encrypt responses with MK (no PBKDF2 — much faster)
+            const { encrypted, iv } = await encryptWithMK(responses, masterKey);
             const encryptedBase64 = arrayBufferToBase64(encrypted);
             const ivBase64 = arrayBufferToBase64(iv.buffer as ArrayBuffer);
-            const saltBase64 = arrayBufferToBase64(salt.buffer as ArrayBuffer);
 
-            // 3. Send profile (plaintext) + encrypted responses to server
-            const result = await completeQuestionnaire(
-                profile,
-                encryptedBase64,
-                ivBase64,
-                saltBase64
-            );
+            // 3. Submit to server
+            const result = await completeQuestionnaire(profile, encryptedBase64, ivBase64, '');
 
             if (result.success) {
-                setResponses({});
-                setState('intro');
+                // T1 fix: Refresh JWT so middleware sees questionnaireCompleted=true
+                await update();
                 return result;
             } else {
                 throw new Error(result.error || 'Failed to complete questionnaire');
@@ -178,50 +160,52 @@ export function useQuestionnaire() {
         } finally {
             setIsSubmitting(false);
         }
-    }, [session?.user, password, isPasswordVerified, responses, setIsSubmitting, setResponses, setState]);
+    }, [session?.user, masterKey, responses, setIsSubmitting, update]);
 
-    // Initialize: Load from database when password is verified
+    // Initialize: load from DB when MK becomes available
     useEffect(() => {
-        if (!session?.user || hasInitialized || !password || !isPasswordVerified) return;
+        if (!session?.user || hasInitialized || !masterKey) return;
 
         setIsInitialLoading(true);
         loadFromDatabase().finally(() => {
             setIsInitialLoading(false);
             setHasInitialized(true);
         });
-    }, [session?.user, hasInitialized, loadFromDatabase, password, isPasswordVerified]);
+    }, [session?.user, hasInitialized, loadFromDatabase, masterKey]);
 
-    // Auto-save responses with debouncing (single effect, prevents race conditions)
+    // T5 fix: Reset store when user changes
     useEffect(() => {
-        if (!session?.user || !hasInitialized || !password || !isPasswordVerified) return;
+        if (!session?.user?.id) return;
+        setHasInitialized(false);
+        setResponses({});
+        setState('intro');
+    }, [session?.user?.id, setResponses, setState]);
+
+    // Auto-save with 2s debounce
+    useEffect(() => {
+        if (!session?.user || !hasInitialized || !masterKey) return;
         if (Object.keys(responses).length === 0) return;
 
-        // Clear any pending save
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-        // Debounce save
         saveTimeoutRef.current = setTimeout(() => {
             saveToDatabase(responses);
         }, 2000);
 
         return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
         };
-    }, [responses, session?.user, hasInitialized, password, isPasswordVerified, saveToDatabase]);
+    }, [responses, session?.user, hasInitialized, masterKey, saveToDatabase]);
 
     return {
         submitQuestionnaire,
-        verifyAndSetPassword,
+        unlockVault,
         isLoading,
         isSubmitting,
         isInitialLoading,
         hasInitialized,
-        needsPassword: !isPasswordVerified,
-        getFirstUnansweredIndex,
+        // needsUnlock: vault is locked — page must show a password prompt
+        needsUnlock: !isUnlocked,
     };
 }
 

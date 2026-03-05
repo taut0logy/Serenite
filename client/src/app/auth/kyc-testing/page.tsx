@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useMutation } from "@apollo/client";
+import { kycService } from "@/actions/kyc.actions";
+import { updateKycStatus } from "@/actions/kyc.server.actions";
 import {
     Shield,
     Eye,
@@ -26,12 +27,9 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { useKYC } from "@/hooks/use-kyc";
-import { kycService } from "@/actions/kyc.actions";
-import { UPDATE_KYC_STATUS } from "@/graphql/operations";
 
 export default function KYCTestingPage() {
     const { data: session, update } = useSession();
-    const [updateKycStatus] = useMutation(UPDATE_KYC_STATUS);
     const {
         kycStatus,
         verificationResult,
@@ -74,25 +72,14 @@ export default function KYCTestingPage() {
         if (!session?.user?.id) return;
 
         try {
-            const { data } = await updateKycStatus({
-                variables: {
-                    userId: session.user.id,
-                    kycVerified: verified,
-                },
-            });
+            const result = await updateKycStatus(session.user.id, verified);
 
-            if (data?.updateKycStatus?.success) {
+            if (result?.success) {
                 await update({
                     ...session,
-                    user: {
-                        ...session.user,
-                        kycVerified: verified,
-                    },
+                    user: { ...session.user, kycVerified: verified },
                 });
-
-                toast.success(
-                    `KYC status ${verified ? "enabled" : "disabled"}`
-                );
+                toast.success(`KYC status ${verified ? "enabled" : "disabled"}`);
                 getKYCStatus();
             } else {
                 toast.error("Failed to update KYC status");
@@ -317,9 +304,9 @@ export default function KYCTestingPage() {
                                             kycStatus.kyc_status === "verified"
                                                 ? "default"
                                                 : kycStatus.kyc_status ===
-                                                  "rejected"
-                                                ? "destructive"
-                                                : "secondary"
+                                                    "rejected"
+                                                    ? "destructive"
+                                                    : "secondary"
                                         }
                                     >
                                         {kycService.getStatusText(

@@ -7,6 +7,7 @@ datasource db {
   provider = "postgresql"
 }
 
+
 model User {
   id                String    @id @default(uuid())
   email             String    @unique
@@ -33,6 +34,7 @@ model User {
   profile                Profile?
   questionnaireResponses QuestionnaireResponse[]
   mentalHealthProfile    MentalHealthProfile?
+  encryptionKey          UserEncryptionKey?
   sessions               Session[]
   socialAccounts         SocialAccount[]
   supportGroups          SupportGroup[]          @relation("SupportGroupMembers")
@@ -111,6 +113,24 @@ enum SeverityLevel {
   MILD
   MODERATE
   SEVERE
+}
+
+model UserEncryptionKey {
+  id                         String   @id @default(uuid())
+  userId                     String   @unique
+  // Master Key wrapped by password-derived KEK (AES-KW)
+  wrappedMasterKey           Bytes
+  kekSalt                    Bytes    // 16-byte PBKDF2 salt
+  kekIterations              Int      @default(600000)
+  // Master Key wrapped by recovery (safe-word) key
+  wrappedMasterKeyByRecovery Bytes?
+  recoveryKeyHash            String?  // bcrypt hash of the safe words (for verification only)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model UserRecommendation {

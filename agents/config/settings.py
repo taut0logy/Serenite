@@ -7,7 +7,7 @@ from pydantic import field_validator
 class Settings(BaseSettings):
     # App settings
     APP_NAME: str = "Serenite API"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "0.2.0"
     DEBUG: bool = False  # Override with DEBUG=True in .env for development
 
     CLIENT_URL: str = "http://localhost:3000"

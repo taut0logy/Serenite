@@ -28,8 +28,6 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { useMutation } from "@apollo/client";
-import { LOGOUT } from "@/graphql/operations/mutations";
 import { toast } from "sonner";
 //import { NotificationMenu } from "@/components/notifications/notification-menu";
 import { UserMenu } from "./user-menu";
@@ -98,24 +96,11 @@ export function Navbar() {
     const pathname = usePathname();
     const navItems = getNavItems(user?.role);
 
-    const [logoutMutation] = useMutation(LOGOUT);
-
     const closeMenu = () => setIsMenuOpen(false);
 
     const handleLogout = async () => {
         try {
-            if (user) {
-                // Call GraphQL logout mutation
-                await logoutMutation({
-                    variables: {
-                        token: window.sessionStorage.getItem("token") || "",
-                    },
-                });
-            }
-
-            // Use NextAuth signOut
             await signOut({ redirect: false });
-
             toast.success("See you next time!");
             router.push("/auth/login");
         } catch (error) {
@@ -123,6 +108,7 @@ export function Navbar() {
             toast.error("Something went wrong during logout");
         }
     };
+
 
     // Handle responsive layout changes
     useEffect(() => {
@@ -142,9 +128,8 @@ export function Navbar() {
             if (user?.name) {
                 const nameParts = user.name.split(" ");
                 if (nameParts.length >= 2) {
-                    return `${nameParts[0][0]}${
-                        nameParts[nameParts.length - 1][0]
-                    }`.toUpperCase();
+                    return `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]
+                        }`.toUpperCase();
                 }
                 return user.name[0]?.toUpperCase() || "U";
             }
@@ -174,11 +159,10 @@ export function Navbar() {
                                 <Link
                                     key={item.href}
                                     href={item.href}
-                                    className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${
-                                        pathname === item.href
-                                            ? "text-primary font-bold"
-                                            : "text-muted-foreground"
-                                    }`}
+                                    className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${pathname === item.href
+                                        ? "text-primary font-bold"
+                                        : "text-muted-foreground"
+                                        }`}
                                 >
                                     {item.title}
                                 </Link>

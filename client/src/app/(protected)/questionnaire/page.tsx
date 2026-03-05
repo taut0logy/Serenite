@@ -29,11 +29,11 @@ export default function QuestionnairePage() {
 
     const {
         submitQuestionnaire,
-        verifyAndSetPassword,
+        unlockVault,
         isSubmitting,
         isInitialLoading,
         hasInitialized,
-        needsPassword,
+        needsUnlock,
     } = useQuestionnaire();
 
     const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -45,18 +45,18 @@ export default function QuestionnairePage() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     }, [state]);
 
-    // Handle password submission with server verification
+    // Handle password submission — unlocks the encryption vault
     const handlePasswordSubmit = useCallback(async (password: string) => {
         setIsVerifyingPassword(true);
         setPasswordError(null);
 
-        const result = await verifyAndSetPassword(password);
+        const result = await unlockVault(password);
         setIsVerifyingPassword(false);
 
         if (!result.success) {
             setPasswordError(result.error || 'Incorrect password');
         }
-    }, [verifyAndSetPassword]);
+    }, [unlockVault]);
 
     const handleSubmit = async () => {
         try {
@@ -64,20 +64,13 @@ export default function QuestionnairePage() {
 
             if (result.success) {
                 toast.success("Thanks a lot! Let your journey begin.");
-                // Navigate to dashboard — the middleware will pick up the completed
-                // questionnaire on next load and the session will refresh lazily.
-                // Do NOT call refreshSession() here: it triggers a JWT update mid-flight
-                // which causes the middleware to redirect while the server action is
-                // still in progress, producing "unexpected response from server".
+                // session.update() was called inside submitQuestionnaire — JWT is now fresh
+                // Hard navigate so middleware re-evaluates with updated token
                 router.push("/dashboard");
             }
         } catch (error) {
             console.error("Error submitting questionnaire:", error);
-            if (error instanceof Error && error.message.includes("Password")) {
-                toast.error("Password verification failed. Please refresh and try again.");
-            } else {
-                toast.error("Error submitting questionnaire. Please try again.");
-            }
+            toast.error("Error submitting questionnaire. Please try again.");
         }
     };
 
@@ -104,8 +97,8 @@ export default function QuestionnairePage() {
         setState("completion");
     };
 
-    // Show password prompt if password is needed (not yet verified)
-    if (needsPassword && session?.user) {
+    // Show unlock prompt if vault is locked (page refresh or social login without auto-unlock)
+    if (needsUnlock && session?.user) {
         return (
             <QuestionnairePasswordPrompt
                 onPasswordSubmit={handlePasswordSubmit}

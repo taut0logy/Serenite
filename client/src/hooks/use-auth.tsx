@@ -1,20 +1,7 @@
 // use-auth.tsx
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/providers/auth-provider";
-import { VERIFY_PASSWORD } from "@/graphql/operations/mutations";
-import { useMutation } from "@apollo/client";
-import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
 
 export function useAuth_({
     required = false,

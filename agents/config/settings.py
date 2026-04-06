@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Literal, Optional
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "Serenite API"
     APP_VERSION: str = "0.2.0"
     DEBUG: bool = False  # Override with DEBUG=True in .env for development
+    ENVIRONMENT: Literal["development", "staging", "production"] = "development"
+
 
     CLIENT_URL: str = "http://localhost:3000"
     TOKEN_VERIFY_ENDPOINT: str = f"{CLIENT_URL}/api/token/verify"  # Internal REST endpoint
@@ -43,6 +45,7 @@ class Settings(BaseSettings):
     COHERE_API_KEY: str = ""
 
     # AWS Rekognition for face detection/emotion/verification
+    AWS_ENDPOINT_URL: str = ""
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"

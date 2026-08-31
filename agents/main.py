@@ -100,4 +100,6 @@ if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 8000))
     reload = os.environ.get("ENVIRONMENT", "development") == "development"
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=reload)
+    # This module is main.py, so the import string has to name it. It said
+    # "app:app", which fails for anyone running the file directly.
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=reload)

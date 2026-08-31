@@ -310,6 +310,7 @@ async function main() {
 
   console.log('\n✅ Database seeding completed successfully!');
   console.log(`📊 Total support groups: ${supportGroups.length}`);
+  console.log(`📊 Groups requiring a facilitator: ${facilitated}`);
 }
 
 /**

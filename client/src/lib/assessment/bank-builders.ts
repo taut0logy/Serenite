@@ -11,7 +11,7 @@ export function thresholds(center: number, categories: number): number[] {
     );
 }
 
-function scaleForDomain(domain: DomainKey, categories: number): string {
+function scaleForDomain(domain: DomainKey, _categories: number): string {
     if (domain === "trauma") return "yesNo";
     if (domain === "depression" || domain === "anxiety") return "frequency4";
     if (domain === "sleep") return "severity4";

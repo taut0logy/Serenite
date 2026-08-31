@@ -21,7 +21,10 @@ axios.interceptors.request.use(
                 const reqHeaders = await headers();
                 const cookieHeader = reqHeaders.get('cookie') ?? undefined;
                 const { getToken } = await import('next-auth/jwt');
+                // getToken only reads the cookie header off req; the rest of
+                // the Next request shape is irrelevant here.
                 const jwt = await getToken({
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     req: { headers: { cookie: cookieHeader } } as any,
                     secret: process.env.AUTH_SECRET!,
                 });

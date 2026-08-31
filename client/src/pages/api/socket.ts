@@ -3,15 +3,6 @@ import { Server } from "socket.io"
 import { type NextApiResponseWithSocket } from "@/app/typings/platform";
 import { verifySession } from '@/actions/auth.actions';
 
-/**
- * Parse a specific cookie value from a raw Cookie header string.
- */
-function parseCookie(cookieHeader: string | undefined, name: string): string | undefined {
-    if (!cookieHeader) return undefined;
-    const match = cookieHeader.split(';').find(c => c.trim().startsWith(`${name}=`));
-    return match ? decodeURIComponent(match.trim().slice(name.length + 1)) : undefined;
-}
-
 import { getToken } from "next-auth/jwt"
 
 export const config = {
@@ -41,7 +32,10 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
             
             // Use getToken to extract the Auth.js JWT from the handshake request.
             // This automatically handles cookie parsing, decryption, and salt management.
+            // getToken wants a Next request; a raw socket request carries the
+            // same cookie header, which is all it reads here.
             const token = await getToken({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 req: socket.request as any,
                 secret: process.env.AUTH_SECRET || '',
             });

@@ -66,7 +66,7 @@ describe("nextStep", () => {
     });
 
     it("moves to anxiety once depression is exhausted", () => {
-        let s = answerDomain(createSession(), BANKS, "depression");
+        const s = answerDomain(createSession(), BANKS, "depression");
         const step = nextStep(BANKS, s);
         expect(step).toMatchObject({ type: "item", domain: "anxiety" });
     });

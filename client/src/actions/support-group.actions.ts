@@ -4,12 +4,9 @@ import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { computeCentroid, computeMatchScore, blendGroupProfile } from "@/lib/assessment/group-matching";
 import {
-  MAX_GROUPS_PER_MEMBER,
   checkEligibility,
   INELIGIBILITY_MESSAGE,
   explainMatch,
-  requiresFacilitator,
-  severityRank,
   type GroupFacts,
   type IneligibilityReason,
   type MemberFacts,

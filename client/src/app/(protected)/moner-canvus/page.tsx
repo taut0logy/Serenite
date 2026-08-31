@@ -266,7 +266,7 @@ export default function MonerCanvusPage() {
               <li>• Draw freely without judgment</li>
               <li>• Colors can express different moods</li>
               <li>• Enable camera for deeper insights</li>
-              <li>• Take your time - there's no rush</li>
+              <li>• Take your time - there&apos;s no rush</li>
             </ul>
           </div>
         </div>

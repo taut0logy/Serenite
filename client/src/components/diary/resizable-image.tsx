@@ -1,6 +1,6 @@
 "use client";
 
-import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
+import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
 import Image from "@tiptap/extension-image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -54,7 +54,7 @@ export const ResizableImageExtension = Image.extend({
 });
 
 // The React Component for the Node View
-const ResizableImage = ({ node, updateAttributes, selected }: any) => {
+const ResizableImage = ({ node, updateAttributes, selected }: NodeViewProps) => {
     const [width, setWidth] = useState(node.attrs.width);
     const [isResizing, setIsResizing] = useState(false);
     const imageRef = useRef<HTMLImageElement>(null);

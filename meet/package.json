@@ -1,0 +1,30 @@
+{
+    "name": "serenite-meet",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Selective forwarding unit and signaling for Serenite support group sessions",
+    "engines": {
+        "node": ">=22.6"
+    },
+    "imports": {
+        "#shared/*": "./src/shared/*.js",
+        "#lib/*": "./src/lib/*.js"
+    },
+    "scripts": {
+        "dev": "node --watch src/main.js",
+        "start": "node src/main.js",
+        "test": "node --test src/**/*.test.js"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dotenv": "^17.0.0",
+        "express": "^5.1.0",
+        "helmet": "^8.1.0",
+        "jose": "^6.0.0",
+        "mediasoup": "^3.24.0",
+        "pg": "^8.13.0",
+        "socket.io": "^4.8.1",
+        "zod": "^4.0.0"
+    }
+}

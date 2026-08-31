@@ -1,0 +1,104 @@
+// String-literal enums, kept identical to the values in server/prisma/schema.prisma.
+// Prisma enums generate as plain string unions in JS, so sharing these constants
+// keeps the client, the API, and the schema from drifting apart.
+
+export const MeetingKind = Object.freeze({
+  INSTANT: 'INSTANT',
+  SCHEDULED: 'SCHEDULED',
+});
+
+export const MeetingStatus = Object.freeze({
+  SCHEDULED: 'SCHEDULED',
+  LIVE: 'LIVE',
+  ENDED: 'ENDED',
+  CANCELLED: 'CANCELLED',
+});
+
+export const MeetingAccess = Object.freeze({
+  LINK: 'LINK',
+  AUTHENTICATED: 'AUTHENTICATED',
+  INVITED_ONLY: 'INVITED_ONLY',
+});
+
+export const WaitingRoomPolicy = Object.freeze({
+  OFF: 'OFF',
+  GUESTS_ONLY: 'GUESTS_ONLY',
+  EVERYONE: 'EVERYONE',
+});
+
+export const MemberRole = Object.freeze({
+  HOST: 'HOST',
+  COHOST: 'COHOST',
+  INVITEE: 'INVITEE',
+});
+
+export const ParticipantRole = Object.freeze({
+  HOST: 'HOST',
+  COHOST: 'COHOST',
+  PARTICIPANT: 'PARTICIPANT',
+  RECORDER: 'RECORDER',
+});
+
+export const OccurrenceStatus = Object.freeze({
+  SCHEDULED: 'SCHEDULED',
+  CANCELLED: 'CANCELLED',
+  MOVED: 'MOVED',
+});
+
+export const RecordingStatus = Object.freeze({
+  RECORDING: 'RECORDING',
+  PROCESSING: 'PROCESSING',
+  READY: 'READY',
+  FAILED: 'FAILED',
+});
+
+// API error codes. Every non-2xx JSON response (outside /api/auth/*, which Better
+// Auth owns) uses one of these in its `code` field — see architecture doc §7.2
+// and the Phase B spec §6.1/§7.
+export const ErrorCode = Object.freeze({
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  AUTH_REQUIRED: 'AUTH_REQUIRED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  INTERNAL: 'INTERNAL',
+
+  MEETING_NOT_FOUND: 'MEETING_NOT_FOUND',
+  MEETING_NOT_JOINABLE: 'MEETING_NOT_JOINABLE',
+  MEETING_LOCKED: 'MEETING_LOCKED',
+  NOT_INVITED: 'NOT_INVITED',
+  GUESTS_NOT_ALLOWED: 'GUESTS_NOT_ALLOWED',
+  DISPLAY_NAME_REQUIRED: 'DISPLAY_NAME_REQUIRED',
+  PATTERN_CHANGE_REQUIRES_SCOPE_ALL: 'PATTERN_CHANGE_REQUIRES_SCOPE_ALL',
+  MEMBER_NOT_FOUND: 'MEMBER_NOT_FOUND',
+
+  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
+  UNSUPPORTED_MEDIA_TYPE: 'UNSUPPORTED_MEDIA_TYPE',
+
+  JOIN_TOKEN_INVALID: 'JOIN_TOKEN_INVALID',
+  JOIN_TOKEN_EXPIRED: 'JOIN_TOKEN_EXPIRED',
+  JOIN_TOKEN_REUSED: 'JOIN_TOKEN_REUSED',
+  RECONNECT_TOKEN_INVALID: 'RECONNECT_TOKEN_INVALID',
+  RECONNECT_TOKEN_EXPIRED: 'RECONNECT_TOKEN_EXPIRED',
+
+  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
+
+  ROOM_LOCKED: 'ROOM_LOCKED',
+  ROOM_FULL: 'ROOM_FULL',
+  NOT_ADMITTED: 'NOT_ADMITTED',
+  ALREADY_IN_MEETING: 'ALREADY_IN_MEETING',
+  FORBIDDEN_ROLE_ACTION: 'FORBIDDEN_ROLE_ACTION',
+  SCREEN_SHARE_LIMIT_REACHED: 'SCREEN_SHARE_LIMIT_REACHED',
+  SCREEN_SHARE_DISABLED: 'SCREEN_SHARE_DISABLED',
+  DUPLICATE_PRODUCER_SOURCE: 'DUPLICATE_PRODUCER_SOURCE',
+
+  RECORDING_ALREADY_ACTIVE: 'RECORDING_ALREADY_ACTIVE',
+  RECORDING_NOT_ACTIVE: 'RECORDING_NOT_ACTIVE',
+  RECORDING_DISABLED: 'RECORDING_DISABLED',
+  INSUFFICIENT_DISK_SPACE: 'INSUFFICIENT_DISK_SPACE',
+});
+
+export const EditScope = Object.freeze({
+  THIS: 'this',
+  FOLLOWING: 'following',
+  ALL: 'all',
+});

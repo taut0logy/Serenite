@@ -5,11 +5,17 @@ from datetime import datetime
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
+from dotenv import load_dotenv
+
+# Before anything that reads the environment. The router modules below build
+# adapters and clients as they import, so loading .env after them left those
+# reading an environment that had not been populated yet.
+load_dotenv()
+
 from utils.logger import logger
 from config.settings import settings
 from services.llm import describe as describe_llm
 from config.limiter import limiter
-from dotenv import load_dotenv
 from api import (
     chat,
     diary,
@@ -21,8 +27,6 @@ from api import (
     moner_canvus,
 )
 import uvicorn
-
-load_dotenv()
 
 app = FastAPI(
     title=settings.APP_NAME,

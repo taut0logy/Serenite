@@ -24,7 +24,8 @@ from langchain_community.utilities import WikipediaAPIWrapper, ArxivAPIWrapper
 from langchain_tavily import TavilySearch
 from langgraph.graph.message import add_messages
 from config.settings import settings
-from services.llm import Task, chat_model
+from functools import lru_cache
+from services.llm import Task, lazy_chat_model
 from services.crisis import crisis_message, detect_risk_disclosure
 from utils.logger import logger
 from services.embeddings_adapter import get_embeddings
@@ -62,7 +63,7 @@ tavily_api_key = settings.TAVILY_API_KEY
 # structured output, so it runs on the CONVERSE model rather than the small
 # one used for labelling. Which model that is, and which provider serves it,
 # is decided in services/llm.py and nowhere else.
-llm = chat_model(Task.CONVERSE)
+llm = lazy_chat_model(Task.CONVERSE)
 
 # Set up embeddings (uses Cohere API in production, HuggingFace in dev)
 embeddings = get_embeddings()
@@ -142,7 +143,13 @@ wiki_tool = WikipediaQueryRun(api_wrapper=wiki_wrapper)
 arxiv_wrapper = ArxivAPIWrapper(top_k_results=2)
 arxiv_tool = ArxivQueryRun(api_wrapper=arxiv_wrapper)
 
-tavily_search_tool = TavilySearch(max_results=3, tavily_api_key=tavily_api_key)
+# Web search is optional. Without a key the assistant just does not reach for
+# it, rather than the service refusing to start over one tool.
+tavily_search_tool = (
+    TavilySearch(max_results=3, tavily_api_key=tavily_api_key) if tavily_api_key else None
+)
+if tavily_search_tool is None:
+    logger.warning("TAVILY_API_KEY is not set; the web search tool is disabled")
 youtube_search_tool = YouTubeSearchTool()
 
 
@@ -1530,7 +1537,10 @@ def select_and_use_tools(state: AgentState) -> Dict:
 
         try:
             if "web" in tool_name or "search" in tool_name or "internet" in tool_name:
-                tool_results["web_search"] = tavily_search_tool.invoke(latest_user_msg)
+                if tavily_search_tool is None:
+                    tool_results["web_search"] = "Web search is not configured."
+                else:
+                    tool_results["web_search"] = tavily_search_tool.invoke(latest_user_msg)
 
             elif "wikipedia" in tool_name or "wiki" in tool_name:
                 tool_results["wikipedia"] = wiki_tool.invoke({"query": latest_user_msg})
@@ -2544,9 +2554,16 @@ classifier_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-# Create the routers with structured output
-query_router = router_prompt | llm.with_structured_output(QueryRouter)
-content_classifier = classifier_prompt | llm.with_structured_output(ContentClassifier)
+# Built on first use, not at import. Composing these eagerly would resolve the
+# lazy model above and undo the whole point of it.
+@lru_cache(maxsize=1)
+def query_router():
+    return router_prompt | llm.with_structured_output(QueryRouter)
+
+
+@lru_cache(maxsize=1)
+def content_classifier():
+    return classifier_prompt | llm.with_structured_output(ContentClassifier)
 
 
 def classify_content(state: AgentState) -> Dict:
@@ -2563,7 +2580,7 @@ def classify_content(state: AgentState) -> Dict:
 
     # Classify the content using the content classifier
     try:
-        classification = content_classifier.invoke({"query": latest_user_msg})
+        classification = content_classifier().invoke({"query": latest_user_msg})
         return {
             "content_classification": {
                 "content_type": classification.content_type,
@@ -2617,7 +2634,7 @@ def route_query(state: AgentState) -> Dict:
     try:
         # Add context about the classification to help the router
         enhanced_query = f"{latest_user_msg}\n\nClassification context: {content_type} with {emotional_tone} tone."
-        routing_result = query_router.invoke({"query": enhanced_query})
+        routing_result = query_router().invoke({"query": enhanced_query})
         return {"query_route": routing_result.route_to}
     except:
         # Fallback routing based on classification if router fails

@@ -3,10 +3,10 @@ from pydantic import BaseModel
 import json
 from langgraph.graph import StateGraph, END
 from utils.logger import logger
-from services.llm import Task, chat_model
+from services.llm import Task, lazy_chat_model
 
 # Short, warm generation on whichever provider services/llm.py is pointed at.
-model = chat_model(Task.COMPOSE)
+model = lazy_chat_model(Task.COMPOSE)
 
 
 # Define state types

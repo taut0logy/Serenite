@@ -52,7 +52,9 @@ class Settings(BaseSettings):
     # Retained for the Gemini vision path (drawing analysis) and any provider
     # still configured directly. Optional now that llm.py owns model access.
     GROQ_API_KEY: str = ""
-    TAVILY_API_KEY: str
+    # Optional: enables the assistant's web-search tool. Absent, the tool is
+    # switched off and everything else still runs.
+    TAVILY_API_KEY: str = ""
 
     # Cohere API for embeddings (multilingual support for Bangla)
     COHERE_API_KEY: str = ""

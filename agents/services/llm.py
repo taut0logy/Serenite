@@ -201,6 +201,37 @@ def chat_model(task: Task = Task.CONVERSE, **overrides: Any):
     return ChatOpenAI(**params)
 
 
+class _LazyChatModel:
+    """A chat model that builds its provider client on first use.
+
+    Modules used to hold `chat_model(...)` at module scope, which meant a
+    missing or rejected credential raised while FastAPI was still importing
+    routers: the whole API went down over one endpoint's dependency, and the
+    traceback pointed at an import rather than at the call that needed a model.
+    Startup is the wrong place to find out about a provider.
+
+    Attribute access forwards to the real model, so call sites read exactly as
+    they did before.
+    """
+
+    __slots__ = ("_task", "_overrides", "_model")
+
+    def __init__(self, task: Task, **overrides: Any) -> None:
+        self._task = task
+        self._overrides = overrides
+        self._model = None
+
+    def __getattr__(self, name: str) -> Any:
+        if self._model is None:
+            self._model = chat_model(self._task, **self._overrides)
+        return getattr(self._model, name)
+
+
+def lazy_chat_model(task: Task = Task.CONVERSE, **overrides: Any) -> Any:
+    """`chat_model`, deferred to first use. Prefer this at module scope."""
+    return _LazyChatModel(task, **overrides)
+
+
 def describe() -> dict[str, str]:
     """What this process will actually call, for the health endpoint.
 

@@ -44,7 +44,7 @@ async def get_feedback(request: Request, limit: int = 50, user: dict = Depends(g
 
 
 @router.get("/analytics")
-async def get_feedback_analytics():
+async def get_feedback_analytics(user: dict = Depends(get_current_user)):
     """
     Get analytics about the feedback data.
 

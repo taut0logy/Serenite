@@ -231,37 +231,32 @@ async def get_kyc_status(user_id: str):
 
 
 @router.delete("/clear-data/{user_id}", response_model=Dict[str, str])
-async def clear_kyc_data(user_id: str):
+async def clear_kyc_data(
+    user_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+):
     """
-    Clear all KYC data for a user (for testing/development)
+    Clear all KYC data for a user.
 
-    Args:
-        user_id: Unique identifier for the user
+    Took no authentication and no ownership check, so any caller could name
+    any user id. It also answered "cleared" while deleting nothing, which is
+    the worse half: somebody asking for their documents to be removed was told
+    it had happened.
 
-    Returns:
-        Confirmation message
+    Cleanup is not implemented, so this now says so rather than confirming a
+    deletion that did not occur.
     """
-    try:
-        logger.info(f"Clearing KYC data for user: {user_id}")
-
-        # TODO: Implement data cleanup from database and file system
-        # For now, return a placeholder response
-
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "status": "success",
-                "message": f"KYC data cleared for user {user_id}",
-                "user_id": user_id,
-            },
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to clear KYC data for user {user_id}: {str(e)}")
+    if user.get("id") != user_id:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear KYC data: {str(e)}",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only clear your own KYC data",
         )
+
+    logger.warning(f"KYC data clearing requested by {user_id}, but cleanup is not implemented")
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="KYC data clearing is not implemented yet",
+    )
 
 
 # Health check endpoint for KYC service

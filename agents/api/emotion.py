@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from typing import Any
+
+from middleware.auth import get_current_user
 import io
 import numpy as np
 
@@ -83,7 +86,10 @@ async def detect_emotion(file: UploadFile = File(...)):
 
 
 @router.post("/analyze-voice", response_model=EmotionDetectionResult)
-async def analyze_voice_endpoint(file: UploadFile = File(...)):
+async def analyze_voice_endpoint(
+    file: UploadFile = File(...),
+    user: dict[str, Any] = Depends(get_current_user),
+):
     """
     Analyze voice tone from uploaded audio file
     """
@@ -151,7 +157,11 @@ async def analyze_voice_endpoint(file: UploadFile = File(...)):
 
 
 @router.post("/record-voice")
-async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
+async def record_voice_endpoint(
+    duration: int = 5,
+    sample_rate: int = 22050,
+    user: dict[str, Any] = Depends(get_current_user),
+):
     """
     Record voice directly on the server (for testing purposes)
     In production, voice should be recorded on client and uploaded
@@ -214,7 +224,11 @@ async def record_voice_endpoint(duration: int = 5, sample_rate: int = 22050):
 
 
 @router.get("/insights/{emotion_type}/{emotion}")
-async def get_emotion_insights(emotion_type: str, emotion: str):
+async def get_emotion_insights(
+    emotion_type: str,
+    emotion: str,
+    user: dict[str, Any] = Depends(get_current_user),
+):
     """
     Get detailed insights for a specific emotion
 

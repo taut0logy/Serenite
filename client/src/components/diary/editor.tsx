@@ -34,16 +34,43 @@ interface EditorProps {
     isSaving?: boolean;
 }
 
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Images live in the entry as data URIs, so they are encrypted with the rest
+ * of the text rather than uploaded somewhere the server could read.
+ */
+function readImageFile(file: File): Promise<string | null> {
+    if (!file.type.startsWith("image/")) return Promise.resolve(null);
+    if (file.size > MAX_IMAGE_BYTES) {
+        toast.error("Image too large. Please use an image under 5MB.");
+        return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) ?? null);
+        reader.onerror = () => {
+            toast.error("Could not read that image");
+            resolve(null);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
 export function Editor({ content, onChange, isSaving }: EditorProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // The drop and paste handlers live inside the editor's own config, so they
+    // cannot close over `editor` directly.
+    const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
 
     const editor = useEditor({
         extensions: [
             StarterKit,
             ResizableImageExtension, // Use our custom extension
             Placeholder.configure({
-                placeholder:
-                    "Write your thoughts here... (Drag & drop images or use the toolbar)",
+                // Plain and unhurried. The old text listed features in
+                // brackets, which is a toolbar's job, not a blank page's.
+                placeholder: "What's on your mind?",
             }),
             TextStyle,
             FontFamily,
@@ -60,10 +87,31 @@ export function Editor({ content, onChange, isSaving }: EditorProps) {
         editorProps: {
             attributes: {
                 className:
-                    "prose prose-sm sm:prose-base dark:prose-invert focus:outline-none max-w-none min-h-[300px] h-full",
+                    "prose prose-sm sm:prose-base dark:prose-invert focus:outline-none max-w-none min-h-full pb-24",
+            },
+            // The placeholder has always offered drag and drop; until now
+            // nothing handled either, so a dropped image replaced the whole
+            // page with the file.
+            handleDrop: (view, event) => {
+                const files = Array.from(event.dataTransfer?.files ?? []);
+                const images = files.filter((f) => f.type.startsWith("image/"));
+                if (images.length === 0) return false;
+                event.preventDefault();
+                void insertImageFiles(images);
+                return true;
+            },
+            handlePaste: (view, event) => {
+                const files = Array.from(event.clipboardData?.files ?? []);
+                const images = files.filter((f) => f.type.startsWith("image/"));
+                if (images.length === 0) return false;
+                event.preventDefault();
+                void insertImageFiles(images);
+                return true;
             },
         },
     });
+
+    editorRef.current = editor;
 
     // Update editor content when the content prop changes externally (e.g. loading a new entry)
     useEffect(() => {
@@ -76,24 +124,24 @@ export function Editor({ content, onChange, isSaving }: EditorProps) {
         fileInputRef.current?.click();
     }, []);
 
+    const insertImageFile = useCallback(
+        async (file: File) => {
+            const src = await readImageFile(file);
+            if (src) editorRef.current?.chain().focus().setImage({ src }).run();
+        },
+        []
+    );
+
+    const insertImageFiles = useCallback(
+        async (files: File[]) => {
+            for (const file of files) await insertImageFile(file);
+        },
+        [insertImageFile]
+    );
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                // 5MB limit
-                toast.error("Image too large. Please use an image under 5MB.");
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const result = e.target?.result as string;
-                if (result && editor) {
-                    editor.chain().focus().setImage({ src: result }).run();
-                }
-            };
-            reader.readAsDataURL(file);
-        }
+        if (file) insertImageFile(file);
         // Reset input
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
@@ -105,9 +153,9 @@ export function Editor({ content, onChange, isSaving }: EditorProps) {
     }
 
     return (
-        <div className="flex flex-col w-full h-full overflow-hidden border rounded-md bg-card">
+        <div className="flex h-full w-full flex-col overflow-hidden bg-background">
             {/* Toolbar - Fixed at top */}
-            <div className="flex-none flex items-center gap-1 p-2 border-b bg-muted/30 flex-wrap z-10">
+            <div className="z-10 flex flex-none items-center gap-1 overflow-x-auto border-b bg-muted/30 px-2 py-1.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
                     {/* Font Family Selector */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -270,7 +318,14 @@ export function Editor({ content, onChange, isSaving }: EditorProps) {
                 </div>
 
             {/* Content Area - Flex Grow and Scrollable */}
-            <div className="flex-1 overflow-y-auto p-4 min-h-[300px]">
+            <div
+                className="min-h-0 flex-1 cursor-text overflow-y-auto px-4 py-4 sm:px-6"
+                // Clicking the empty space below the text should put the cursor
+                // in it, which is what every editor people already use does.
+                onMouseDown={(e) => {
+                    if (e.target === e.currentTarget) editor.commands.focus("end");
+                }}
+            >
                 <EditorContent editor={editor} />
             </div>
         </div>

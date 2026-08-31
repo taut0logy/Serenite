@@ -1,188 +1,141 @@
 "use client";
 
 import {
-    LineChart,
-    Line,
+    Area,
+    AreaChart,
+    CartesianGrid,
+    ReferenceLine,
+    ResponsiveContainer,
+    Tooltip,
     XAxis,
     YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    Legend,
 } from "recharts";
 import { format } from "date-fns";
 
-// Define the data structure needed for the chart
-interface MoodData {
+import { moodMeta } from "@/lib/diary/mood";
+
+interface MoodPoint {
     date: Date;
     mood: string;
     confidence: number;
 }
 
 interface MoodChartProps {
-    data?: MoodData[];
+    data?: MoodPoint[];
     fullSize?: boolean;
 }
 
-// Map mood strings to numeric values for chart visualization
-const moodToValue = (mood: string): number => {
-    const moodMap: Record<string, number> = {
-        Happy: 1.0,
-        Excited: 0.8,
-        Calm: 0.6,
-        Content: 0.5,
-        Neutral: 0.5,
-        Mixed: 0.0,
-        Tired: -0.3,
-        Anxious: -0.6,
-        Sad: -0.8,
-        Angry: -0.9,
-        Depressed: -1.0,
-    };
+/**
+ * The mood trend.
+ *
+ * This used to fall back to five hardcoded points from January 2024 whenever
+ * it had no real data, so a member who had never written anything was shown a
+ * mood history that looked like theirs and was invented. In an app about
+ * somebody's mental state that is the worst possible default; an empty chart
+ * says the true thing.
+ */
+export function MoodChart({ data = [], fullSize = false }: MoodChartProps) {
+    const points = data
+        .filter((d) => d.date instanceof Date && !Number.isNaN(d.date.getTime()))
+        .map((d) => ({
+            time: d.date.getTime(),
+            label: format(d.date, "d MMM"),
+            mood: moodMeta(d.mood).label,
+            value: moodMeta(d.mood).value,
+            confidence: d.confidence,
+        }))
+        .sort((a, b) => a.time - b.time);
 
-    // Default to neutral if mood not found in map
-    // Convert to lowercase for case-insensitive matching
-    const normalizedMood = mood.toLowerCase();
-    for (const [key, value] of Object.entries(moodMap)) {
-        if (normalizedMood.includes(key.toLowerCase())) {
-            return value;
-        }
+    if (points.length === 0) {
+        return (
+            <div className="flex h-full min-h-[160px] flex-col items-center justify-center rounded-lg border border-dashed px-4 text-center">
+                <p className="text-sm font-medium">No trend yet</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Once a few entries have been scored, the shape of the last weeks shows here.
+                </p>
+            </div>
+        );
     }
 
-    return 0; // Default to neutral
-};
-
-export function MoodChart({ data = [], fullSize = false }: MoodChartProps) {
-    // Validate dates and filter out invalid ones
-    const validData = data.filter(
-        (item) => item.date instanceof Date && !isNaN(item.date.getTime())
-    );
-
-    // If no valid data is provided, use mock data
-    const chartData =
-        validData.length > 0
-            ? validData
-            : [
-                  {
-                      date: new Date("2024-01-01"),
-                      mood: "Neutral",
-                      confidence: 0.5,
-                  },
-                  {
-                      date: new Date("2024-01-02"),
-                      mood: "Happy",
-                      confidence: 0.7,
-                  },
-                  {
-                      date: new Date("2024-01-03"),
-                      mood: "Anxious",
-                      confidence: 0.4,
-                  },
-                  {
-                      date: new Date("2024-01-04"),
-                      mood: "Excited",
-                      confidence: 0.8,
-                  },
-                  {
-                      date: new Date("2024-01-05"),
-                      mood: "Calm",
-                      confidence: 0.6,
-                  },
-              ];
-
-    // Transform data for better visualization
-    const normalizedData = chartData.map((item) => {
-        const moodValue = moodToValue(item.mood);
-
-        // Ensure we have a valid date
-        const dateObj =
-            item.date instanceof Date && !isNaN(item.date.getTime())
-                ? item.date
-                : new Date();
-
-        return {
-            date: dateObj,
-            mood: item.mood,
-            moodValue,
-            confidence: item.confidence,
-            // Normalize to 0-1 range for the chart
-            normalizedMood: (moodValue + 1) / 2,
-            // Format date safely
-            formattedDate: format(dateObj, "MMM dd"),
-        };
-    });
-
-    // Sort by date
-    normalizedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    // Custom tooltip to show mood and confidence
-    const CustomTooltip = ({
-        active,
-        payload,
-    }: {
-        active?: boolean;
-        payload?: Array<{
-            payload: {
-                formattedDate: string;
-                mood: string;
-                confidence: number;
-            };
-        }>;
-    }) => {
-        if (active && payload && payload.length) {
-            const data = payload[0].payload;
-            return (
-                <div className="bg-background border rounded p-2 shadow-sm">
-                    <p className="font-medium">{data.formattedDate}</p>
-                    <p>Mood: {data.mood}</p>
-                    <p>Confidence: {Math.round(data.confidence)}%</p>
-                </div>
-            );
-        }
-        return null;
-    };
-
-    // Show a message if no data or all dates are invalid
-    if (normalizedData.length === 0) {
+    // A single point has no shape to read; a line between one dot and nothing
+    // implies a trend that has not been observed.
+    if (points.length === 1) {
+        const only = points[0];
         return (
-            <div className="flex items-center justify-center h-full">
-                <p className="text-muted-foreground">No mood data available</p>
+            <div className="flex h-full min-h-[160px] flex-col items-center justify-center rounded-lg border border-dashed px-4 text-center">
+                <p className="text-sm font-medium capitalize">{only.mood}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    One scored entry so far, on {only.label}. A trend needs at least two.
+                </p>
             </div>
         );
     }
 
     return (
-        <div className={fullSize ? "h-full" : "h-[200px]"}>
-            <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={normalizedData}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis dataKey="formattedDate" tick={{ fontSize: 12 }} />
-                    <YAxis
-                        domain={[0, 1]}
-                        tickFormatter={(value) => {
-                            // Convert back to -1 to 1 scale for display
-                            const moodValue = value * 2 - 1;
-                            if (moodValue > 0.7) return "Happy";
-                            if (moodValue > 0.3) return "Good";
-                            if (moodValue > -0.3) return "Neutral";
-                            if (moodValue > -0.7) return "Bad";
-                            return "Sad";
-                        }}
-                        tick={{ fontSize: 12 }}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend />
-                    <Line
-                        name="Mood"
-                        type="monotone"
-                        dataKey="normalizedMood"
-                        stroke="#8884d8"
-                        strokeWidth={2}
-                        dot={{ r: 4, fill: "#8884d8" }}
-                        activeDot={{ r: 6 }}
-                    />
-                </LineChart>
-            </ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={fullSize ? 320 : "100%"}>
+            <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -28 }}>
+                <defs>
+                    <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                </defs>
+
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11 }}
+                    className="fill-muted-foreground"
+                    minTickGap={16}
+                />
+                <YAxis
+                    domain={[-1, 1]}
+                    ticks={[-1, 0, 1]}
+                    tickFormatter={(v: number) => (v > 0 ? "good" : v < 0 ? "hard" : "even")}
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 10 }}
+                    className="fill-muted-foreground"
+                    width={56}
+                />
+                <ReferenceLine y={0} className="stroke-border" strokeDasharray="2 2" />
+                <Tooltip content={<MoodTooltip />} />
+                <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#moodFill)"
+                    dot={{ r: 3, strokeWidth: 0, fill: "hsl(var(--primary))" }}
+                    activeDot={{ r: 5 }}
+                    isAnimationActive={false}
+                />
+            </AreaChart>
+        </ResponsiveContainer>
+    );
+}
+
+function MoodTooltip({
+    active,
+    payload,
+}: {
+    active?: boolean;
+    payload?: Array<{ payload: { label: string; mood: string; confidence: number } }>;
+}) {
+    if (!active || !payload?.length) return null;
+    const point = payload[0].payload;
+
+    return (
+        <div className="rounded-lg border bg-background p-2.5 shadow-md">
+            <p className="text-xs text-muted-foreground">{point.label}</p>
+            <p className="text-sm font-medium capitalize">{point.mood}</p>
+            {/* Confidence is a 0-1 probability. It used to be rounded as if it
+                were already a percentage, so 0.9 rendered as "1%". */}
+            <p className="text-xs text-muted-foreground">
+                {Math.round(point.confidence * 100)}% confident
+            </p>
         </div>
     );
 }

@@ -1,17 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useDebounce } from "@/hooks/use-debounce";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { format } from "date-fns";
+import { toast } from "sonner";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { MoodChart } from "@/components/diary/mood-chart";
-import { ReflectionPrompts } from "@/components/diary/reflection-prompts";
+    BarChart3,
+    Check,
+    Loader2,
+    Lock,
+    Menu,
+    Save,
+    Trash2,
+} from "lucide-react";
+
+import { useDebounce } from "@/hooks/use-debounce";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useEncryption } from "@/providers/encryption-provider";
 import {
     deleteDiaryEntry,
     listDiaryEntries,
@@ -20,60 +24,80 @@ import {
 } from "@/actions/diary.actions";
 import { openEntries, sealEntry } from "@/lib/diary/crypto";
 import type { DiaryEntryView, MoodView } from "@/lib/diary/types";
-import { useEncryption } from "@/providers/encryption-provider";
+import { cn } from "@/lib/utils";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
-import { toast } from "sonner";
-import { format, parse } from "date-fns";
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Editor } from "@/components/diary/editor";
 import { DiarySidebar } from "@/components/diary/diary-sidebar";
 import { DiaryInsights } from "@/components/diary/diary-insights";
-import { PanelLeftClose, PanelLeftOpen, Save } from "lucide-react";
 
-// Function to safely parse date strings in "dd-MM-yyyy" format
-function parseDate(dateString: string): Date {
-    try {
-        console.log("Parsing date:", dateString);
-        // Try to parse using date-fns
-        const parsedDate = parse(dateString, "dd-MM-yyyy", new Date());
-        console.log("Parsed date result:", parsedDate);
-        return parsedDate;
-    } catch (error) {
-        console.error("Failed to parse date:", dateString, error);
-        // Return current date if parsing fails
-        return new Date();
-    }
+/** Rich text in, plain text out, for scoring and for the word count. */
+function stripHtml(html: string): string {
+    if (typeof document === "undefined") return html.replace(/<[^>]*>/g, " ");
+    const el = document.createElement("div");
+    el.innerHTML = html;
+    return el.textContent || el.innerText || "";
 }
 
-// Helper to strip HTML for analysis
-function stripHtml(html: string) {
-    const tmp = document.createElement("DIV");
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || "";
+function isEmptyEntry(html: string): boolean {
+    return !stripHtml(html).trim() && !html.includes("<img");
 }
+
+function countWords(html: string): number {
+    const text = stripHtml(html).trim();
+    return text ? text.split(/\s+/).length : 0;
+}
+
+/** What a click is waiting on, when it has to wait for a confirmation first. */
+type PendingAction =
+    | { kind: "delete"; entry: DiaryEntryView }
+    | { kind: "discard"; then: () => void };
 
 export default function DiaryPage() {
     // The key that opens the diary. Held only for this session, in this
     // browser; the server has no copy and cannot read an entry back.
     const { masterKey, isUnlocked } = useEncryption();
+    const isMobile = useIsMobile();
 
-    const [entry, setEntry] = useState<string>("");
-    const [isSaving, setIsSaving] = useState<boolean>(false);
-    const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [currentAnalysis, setCurrentAnalysis] = useState<MoodView | null>(null);
-    const [storedEntries, setStoredEntries] = useState<DiaryEntryView[]>([]);
+    const [entry, setEntry] = useState("");
+    const [savedContent, setSavedContent] = useState("");
     const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(undefined);
-    const [searchQuery, setSearchQuery] = useState<string>("");
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [selectedEntryDate, setSelectedEntryDate] = useState<Date | null>(null);
+
+    const [storedEntries, setStoredEntries] = useState<DiaryEntryView[]>([]);
+    const [currentAnalysis, setCurrentAnalysis] = useState<MoodView | null>(null);
+
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSearching, setIsSearching] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const [unreadable, setUnreadable] = useState(0);
 
+    const [searchQuery, setSearchQuery] = useState("");
+    const [navOpen, setNavOpen] = useState(false);
+    const [insightsOpen, setInsightsOpen] = useState(false);
+    const [pending, setPending] = useState<PendingAction | null>(null);
+
     const debouncedSearch = useDebounce(searchQuery, 400);
+
+    // Compared against the last saved text rather than tracked with a flag: a
+    // flag drifts out of step with what is actually on screen, and this is the
+    // thing that guards against losing writing.
+    const isDirty = entry !== savedContent && !isEmptyEntry(entry);
+    const wordCount = useMemo(() => countWords(entry), [entry]);
 
     const loadRecentEntries = useCallback(async () => {
         if (!masterKey) return;
@@ -102,9 +126,11 @@ export default function DiaryPage() {
 
         (async () => {
             if (debouncedSearch.trim().length === 0) {
+                setIsSearching(false);
                 await loadRecentEntries();
                 return;
             }
+            setIsSearching(true);
             const result = await searchDiaryEntries(debouncedSearch, 20);
             if (cancelled) return;
             if (result.success) {
@@ -113,6 +139,7 @@ export default function DiaryPage() {
             } else {
                 toast.error(result.error);
             }
+            setIsSearching(false);
         })();
 
         return () => {
@@ -120,14 +147,22 @@ export default function DiaryPage() {
         };
     }, [debouncedSearch, masterKey, loadRecentEntries]);
 
-    const saveEntry = async () => {
+    // Browser-level guard. Covers refresh and tab close, which no in-app
+    // confirmation can intercept.
+    useEffect(() => {
+        if (!isDirty) return;
+        const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+        window.addEventListener("beforeunload", onBeforeUnload);
+        return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    }, [isDirty]);
+
+    const saveEntry = useCallback(async () => {
         if (!masterKey) {
             toast.error("Unlock your vault before saving");
             return;
         }
-        const plainText = stripHtml(entry);
-        if (!plainText.trim() && !entry.includes("<img")) {
-            toast.error("Cannot save an empty entry");
+        if (isEmptyEntry(entry)) {
+            toast.error("Nothing to save yet");
             return;
         }
 
@@ -138,8 +173,11 @@ export default function DiaryPage() {
             const sealed = await sealEntry(entry, masterKey);
             const result = await saveDiaryEntry({
                 ...sealed,
-                plaintext: plainText,
-                entryDate: new Date().toISOString(),
+                plaintext: stripHtml(entry),
+                // Editing keeps the day it was written. Sending today's date on
+                // every save silently re-dated old entries, which moved them in
+                // the list and bent the mood trend they contribute to.
+                entryDate: (selectedEntryDate ?? new Date()).toISOString(),
                 entryId: selectedEntryId,
             });
 
@@ -158,11 +196,14 @@ export default function DiaryPage() {
             };
 
             setStoredEntries((prev) =>
-                selectedEntryId
+                prev.some((e) => e.id === saved.id)
                     ? prev.map((e) => (e.id === saved.id ? saved : e))
                     : [saved, ...prev]
             );
             setSelectedEntryId(saved.id);
+            setSelectedEntryDate(saved.entryDate);
+            setSavedContent(entry);
+            setLastSavedAt(new Date());
             setCurrentAnalysis(
                 saved.mood ? { mood: saved.mood, confidence: saved.confidence ?? 0 } : null
             );
@@ -173,129 +214,334 @@ export default function DiaryPage() {
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [entry, masterKey, selectedEntryDate, selectedEntryId]);
 
-    const removeEntry = async (entryId: string) => {
-        const result = await deleteDiaryEntry(entryId);
-        if (!result.success) {
-            toast.error(result.error);
-            return;
-        }
-        setStoredEntries((prev) => prev.filter((e) => e.id !== entryId));
-        if (selectedEntryId === entryId) handleCreateNew();
-        toast.success("Entry deleted");
-    };
+    // Ctrl/Cmd+S, because people who write reach for it without thinking, and
+    // in a browser it otherwise opens a save-page dialog over their diary.
+    const saveRef = useRef(saveEntry);
+    saveRef.current = saveEntry;
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+                e.preventDefault();
+                saveRef.current();
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, []);
 
-    const handleSelectEntry = (selectedEntry: DiaryEntryView) => {
-        setSelectedEntryId(selectedEntry.id);
-        setEntry(selectedEntry.content);
+    const openEntry = useCallback((selected: DiaryEntryView) => {
+        setSelectedEntryId(selected.id);
+        setSelectedEntryDate(selected.entryDate);
+        setEntry(selected.content);
+        setSavedContent(selected.content);
+        setLastSavedAt(null);
         setCurrentAnalysis(
-            selectedEntry.mood
-                ? { mood: selectedEntry.mood, confidence: selectedEntry.confidence ?? 0 }
-                : null
+            selected.mood ? { mood: selected.mood, confidence: selected.confidence ?? 0 } : null
         );
-    };
+    }, []);
 
-    const handleCreateNew = () => {
+    const startNewEntry = useCallback(() => {
         setSelectedEntryId(undefined);
+        setSelectedEntryDate(null);
         setEntry("");
+        setSavedContent("");
+        setLastSavedAt(null);
         setCurrentAnalysis(null);
-    };
+    }, []);
+
+    /** Runs `action`, but asks first if it would throw away unsaved writing. */
+    const guard = useCallback(
+        (action: () => void) => {
+            if (isDirty) setPending({ kind: "discard", then: action });
+            else action();
+        },
+        [isDirty]
+    );
+
+    const handleSelect = useCallback(
+        (selected: DiaryEntryView) => {
+            guard(() => {
+                openEntry(selected);
+                setNavOpen(false);
+            });
+        },
+        [guard, openEntry]
+    );
+
+    const handleCreateNew = useCallback(() => {
+        guard(() => {
+            startNewEntry();
+            setNavOpen(false);
+        });
+    }, [guard, startNewEntry]);
+
+    /**
+     * Deletes an entry, putting it back if the server refuses.
+     *
+     * Removed from the list first so the interface answers immediately, but
+     * the row is kept so a failure restores it in place instead of leaving
+     * somebody believing an entry is gone when it is not.
+     */
+    const confirmDelete = useCallback(
+        async (target: DiaryEntryView) => {
+            setDeletingId(target.id);
+            const snapshot = storedEntries;
+            setStoredEntries((prev) => prev.filter((e) => e.id !== target.id));
+
+            const result = await deleteDiaryEntry(target.id);
+            setDeletingId(null);
+
+            if (!result.success) {
+                setStoredEntries(snapshot);
+                toast.error(result.error ?? "Could not delete that entry");
+                return;
+            }
+
+            // Only clear the editor if the deleted entry is the one open in it.
+            if (selectedEntryId === target.id) startNewEntry();
+            toast.success("Entry deleted");
+        },
+        [selectedEntryId, startNewEntry, storedEntries]
+    );
 
     // Without the key there is nothing to show: entries on the server are
     // ciphertext, and this is the only place they can be opened.
     if (!isUnlocked) {
         return (
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center px-4">
+            <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
                 <Card className="w-full max-w-md">
                     <CardHeader>
-                        <CardTitle>Your diary is locked</CardTitle>
+                        <CardTitle className="flex items-center gap-2">
+                            <Lock className="h-4 w-4" />
+                            Your diary is locked
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm text-muted-foreground">
-                        Entries are encrypted with a key only this browser holds, so they cannot
-                        be shown until you unlock your vault with your password.
+                        Entries are encrypted with a key only this browser holds, so they cannot be
+                        shown until you unlock your vault with your password.
                     </CardContent>
                 </Card>
             </div>
         );
     }
 
+    const sidebar = (
+        <DiarySidebar
+            entries={storedEntries}
+            selectedId={selectedEntryId}
+            isLoading={isLoading}
+            isSearching={isSearching}
+            searchQuery={searchQuery}
+            unsavedId={isDirty ? (selectedEntryId ?? null) : null}
+            onSelect={handleSelect}
+            onCreateNew={handleCreateNew}
+            onSearchChange={setSearchQuery}
+            onRequestDelete={(target) => setPending({ kind: "delete", entry: target })}
+        />
+    );
+
+    const insights = (
+        <DiaryInsights
+            currentAnalysis={currentAnalysis}
+            recentEntries={storedEntries}
+            isAnalyzing={isSaving}
+            onSelectPrompt={(prompt) => {
+                setEntry((prev) => (isEmptyEntry(prev) ? `<p>${prompt}</p><p></p>` : prev));
+                setInsightsOpen(false);
+            }}
+        />
+    );
+
     return (
-        <div className="h-[calc(100vh-4rem)] w-full bg-background flex overflow-hidden">
-            {/* Sidebar - Collapsible */}
-            <div 
-                className={`flex-shrink-0 transition-all duration-300 ease-in-out border-r bg-card/50 backdrop-blur-sm ${
-                    sidebarOpen ? "w-80" : "w-0 opacity-0 overflow-hidden"
-                }`}
-            >
-                <DiarySidebar
-                    entries={storedEntries}
-                    selectedId={selectedEntryId}
-                    onSelect={handleSelectEntry}
-                    onCreateNew={handleCreateNew}
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                />
-            </div>
+        // dvh, not vh: on mobile browsers vh includes the collapsing address
+        // bar, which pushed the toolbar off the bottom of the screen.
+        <div className="flex h-[calc(100dvh-4rem)] w-full overflow-hidden bg-background">
+            {/* Entry list: a column on desktop, a drawer on smaller screens,
+                where a fixed 320px column left almost nothing for writing. */}
+            <aside className="hidden w-72 shrink-0 border-r lg:block xl:w-80">{sidebar}</aside>
 
-            {/* Main Editor Area */}
-            <div className="flex-1 flex flex-col min-w-0 bg-background/50 relative">
-                 {/* Toggle Sidebar Button */}
-                 <div className="absolute left-4 top-4 z-10">
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className="text-muted-foreground hover:text-foreground"
+            <Sheet open={navOpen} onOpenChange={setNavOpen}>
+                <SheetContent side="left" className="w-[85vw] max-w-sm p-0">
+                    <SheetTitle className="sr-only">Your entries</SheetTitle>
+                    {sidebar}
+                </SheetContent>
+            </Sheet>
+
+            <main className="flex min-w-0 flex-1 flex-col">
+                <header className="flex items-center gap-2 border-b px-3 py-2.5 sm:px-4">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="lg:hidden"
+                        onClick={() => setNavOpen(true)}
+                        aria-label="Open your entries"
                     >
-                        {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
+                        <Menu className="h-5 w-5" />
                     </Button>
-                </div>
 
-                <div className="flex-1 p-6 lg:p-10 flex flex-col max-w-4xl mx-auto w-full h-full">
-                    <div className="flex justify-between items-center mb-6 pl-10">
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">
-                                {selectedEntryId ? "Edit Entry" : "New Entry"}
-                            </h1>
-                             <p className="text-muted-foreground text-sm">
-                                {format(new Date(), "EEEE, MMMM do, yyyy")}
-                             </p>
-                        </div>
-                        <div className="flex gap-2">
-                             <Button onClick={saveEntry} disabled={isSaving}>
-                                {isSaving ? "Saving..." : "Save Entry"}
-                                <Save className="ml-2 h-4 w-4" />
-                             </Button>
-                        </div>
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-sm font-semibold sm:text-base">
+                            {selectedEntryId ? "Editing entry" : "New entry"}
+                        </h1>
+                        <p className="truncate text-xs text-muted-foreground">
+                            {format(selectedEntryDate ?? new Date(), "EEEE, d MMMM yyyy")}
+                            <span className="hidden sm:inline">
+                                {" · "}
+                                {wordCount} {wordCount === 1 ? "word" : "words"}
+                            </span>
+                        </p>
                     </div>
 
-                    {unreadable > 0 && (
-                        <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground">
-                            {unreadable} earlier {unreadable === 1 ? "entry" : "entries"} cannot be
-                            opened with your current key. That happens after a password reset, and
-                            the text cannot be recovered.
-                        </p>
+                    <SaveState isDirty={isDirty} isSaving={isSaving} lastSavedAt={lastSavedAt} />
+
+                    {selectedEntryId && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground hover:text-destructive"
+                            disabled={deletingId === selectedEntryId}
+                            onClick={() => {
+                                const open = storedEntries.find((e) => e.id === selectedEntryId);
+                                if (open) setPending({ kind: "delete", entry: open });
+                            }}
+                            aria-label="Delete this entry"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
                     )}
 
-                    <div className="flex-1 bg-card rounded-xl shadow-sm border overflow-hidden">
-                        <Editor 
-                            content={entry} 
-                            onChange={setEntry} 
-                            isSaving={isSaving}
-                        />
-                    </div>
-                </div>
-            </div>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="xl:hidden"
+                        onClick={() => setInsightsOpen(true)}
+                        aria-label="Show mood and prompts"
+                    >
+                        <BarChart3 className="h-5 w-5" />
+                    </Button>
 
-             {/* Right Sidebar - Insights */}
-             <div className="w-80 border-l bg-card/30 backdrop-blur-sm hidden xl:block p-4">
-                <DiaryInsights 
-                    currentAnalysis={currentAnalysis}
-                    recentEntries={storedEntries}
-                    isAnalyzing={isSaving}
-                />
-             </div>
+                    <Button onClick={saveEntry} disabled={isSaving || !isDirty} size="sm">
+                        {isSaving ? (
+                            <Loader2 className="h-4 w-4 animate-spin sm:mr-2" />
+                        ) : (
+                            <Save className="h-4 w-4 sm:mr-2" />
+                        )}
+                        <span className="hidden sm:inline">{isSaving ? "Saving" : "Save"}</span>
+                    </Button>
+                </header>
+
+                {unreadable > 0 && (
+                    <p className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-muted-foreground">
+                        {unreadable} earlier {unreadable === 1 ? "entry" : "entries"} cannot be
+                        opened with your current key. That happens after a password reset, and the
+                        text cannot be recovered.
+                    </p>
+                )}
+
+                <div className="min-h-0 flex-1 overflow-hidden">
+                    <Editor content={entry} onChange={setEntry} isSaving={isSaving} />
+                </div>
+            </main>
+
+            <aside className="hidden w-80 shrink-0 overflow-y-auto border-l p-4 xl:block">
+                {insights}
+            </aside>
+
+            <Sheet open={insightsOpen} onOpenChange={setInsightsOpen}>
+                <SheetContent
+                    side={isMobile ? "bottom" : "right"}
+                    className={cn("p-4", isMobile ? "h-[85dvh]" : "w-96")}
+                >
+                    <SheetTitle className="sr-only">Mood and prompts</SheetTitle>
+                    <div className="h-full overflow-y-auto pt-2">{insights}</div>
+                </SheetContent>
+            </Sheet>
+
+            <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
+                <AlertDialogContent>
+                    {pending?.kind === "delete" ? (
+                        <>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete this entry?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    The entry from{" "}
+                                    {format(pending.entry.entryDate, "d MMMM yyyy")} will be
+                                    removed for good. Because only your browser can decrypt it,
+                                    there is no copy anywhere to restore from.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Keep it</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={() => confirmDelete(pending.entry)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                    Delete
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </>
+                    ) : pending?.kind === "discard" ? (
+                        <>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    You have changes that have not been saved. Leaving this entry
+                                    now will discard them.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Keep writing</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={() => {
+                                        const run = pending.then;
+                                        setPending(null);
+                                        run();
+                                    }}
+                                >
+                                    Discard changes
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </>
+                    ) : null}
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
+}
+
+/** Quiet, and only says something when there is something to say. */
+function SaveState({
+    isDirty,
+    isSaving,
+    lastSavedAt,
+}: {
+    isDirty: boolean;
+    isSaving: boolean;
+    lastSavedAt: Date | null;
+}) {
+    if (isSaving) return null;
+
+    if (isDirty) {
+        return (
+            <span className="hidden text-xs text-muted-foreground sm:inline" role="status">
+                Unsaved
+            </span>
+        );
+    }
+
+    if (lastSavedAt) {
+        return (
+            <span
+                className="hidden items-center gap-1 text-xs text-muted-foreground sm:inline-flex"
+                role="status"
+            >
+                <Check className="h-3.5 w-3.5" />
+                Saved {format(lastSavedAt, "HH:mm")}
+            </span>
+        );
+    }
+
+    return null;
 }

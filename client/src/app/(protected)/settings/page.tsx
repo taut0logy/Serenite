@@ -8,7 +8,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
-import { User, Shield, Key, Bell, Layout } from "lucide-react";
+import { User, Shield, Key, Bell, Layout, FlaskConical } from "lucide-react";
 
 export default function SettingsPage() {
     const settingsCategories = [
@@ -35,6 +35,13 @@ export default function SettingsPage() {
             description: "Configure how you receive notifications",
             icon: <Bell className="h-6 w-6" />,
             href: "/settings/notifications",
+        },
+        {
+            title: "Research contribution",
+            description:
+                "Optionally contribute anonymised assessment answers to improve the questions",
+            icon: <FlaskConical className="h-6 w-6" />,
+            href: "/settings/research",
         },
         {
             title: "Display",

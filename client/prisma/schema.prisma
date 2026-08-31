@@ -39,6 +39,14 @@ model User {
   supportGroups          SupportGroup[]          @relation("SupportGroupMembers")
   facilitatedGroups      SupportGroup[]          @relation("SupportGroupFacilitator")
   diaryEntries           DiaryEntry[]
+
+  /// Opt-in, default off, asked for separately from account creation and from
+  /// the assessment itself. Contributing anonymised answers is what would let
+  /// the item bank's provisional parameters be replaced with empirical ones.
+  /// Only this flag is stored against the account: the responses themselves
+  /// carry a per-sitting key that cannot be traced back here.
+  calibrationConsent   Boolean   @default(false)
+  calibrationConsentAt DateTime?
   supportConversation    SupportConversation?    @relation("SupportSeeker")
   claimedConversations   SupportConversation[]   @relation("SupportResponder")
   meetings               Meeting[]               @relation("MeetingParticipants")

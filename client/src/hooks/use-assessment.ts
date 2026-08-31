@@ -10,6 +10,7 @@ import {
 import { useAssessmentStore } from '@/stores/use-assessment-store';
 import { createSession, type SessionState } from '@/lib/assessment/session';
 import { assembleResult } from '@/lib/assessment/assemble';
+import { contributeCalibrationResponses } from '@/actions/calibration.actions';
 import { BANKS_BY_DOMAIN, PARAMETER_SET_ID } from '@/lib/assessment/banks';
 import { encryptWithMK, decryptWithMK, arrayBufferToBase64, base64ToArrayBuffer, base64ToUint8Array, isValidBase64 } from '@/lib/key-management';
 import { useEncryption } from '@/providers/encryption-provider';
@@ -130,6 +131,14 @@ export function useAssessment() {
             const submitResult = await completeAssessment(result, encryptedBase64, ivBase64, '');
 
             if (submitResult.success) {
+                // After the member's own results are safely stored, never
+                // before. Returns quietly when they have not opted in, which
+                // is the default.
+                void contributeCalibrationResponses({
+                    session: assessmentSession,
+                    parameterSetId: PARAMETER_SET_ID,
+                    qualityFlagged: result.qualityFlagged,
+                });
                 // navigation is already safe via the claim override cookie; don't block on this
                 update().catch((err) => console.error('Background session refresh failed:', err));
                 return submitResult;

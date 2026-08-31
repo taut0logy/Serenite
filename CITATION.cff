@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+title: "Serenite: adaptive profiling and peer-matched online mental health support groups"
+message: "If you use this software, please cite it using these metadata."
+type: software
+version: 1.0.0
+license: Apache-2.0
+repository-code: "https://github.com/taut0logy/Serenite"
+abstract: >-
+  Serenite is an open-source web platform that places people into small peer
+  support groups and supports them between sessions. An adaptive assessment
+  administers a graded-response item bank under a computerized adaptive testing
+  policy, returning a six-domain latent trait vector used for matching and,
+  separately, severity statements drawn only from three public-domain screening
+  instruments with published cutoffs. Sessions run on a self-hosted mediasoup
+  selective forwarding unit. Responses and diary entries are encrypted in the
+  browser.
+keywords:
+  - computerized adaptive testing
+  - item response theory
+  - peer support
+  - WebRTC
+  - selective forwarding unit
+  - mental health informatics
+authors:
+  - given-names: Raufun
+    family-names: Ahsan
+    affiliation: "Department of Computer Science and Engineering, Khulna University of Engineering & Technology"
+  - given-names: "Md. Sakibur"
+    family-names: Rahman
+    affiliation: "Department of Computer Science and Engineering, Khulna University of Engineering & Technology"
+  - given-names: "Sk Imran"
+    family-names: Hossain
+    email: imran@cse.kuet.ac.bd
+    affiliation: "Department of Computer Science and Engineering, Khulna University of Engineering & Technology"

@@ -12,12 +12,10 @@ generated/
 demo/
 *.md
 !README.md
-!AGENTS.md
 models/
 .opencode/
 
-# Manuscript sources and build artefacts. Large, and not part of the software.
 docs/
 
-# Vendored mediasoup reference used while porting; not ours to redistribute.
 samples/
+

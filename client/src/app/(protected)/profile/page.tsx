@@ -59,14 +59,19 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 function ProfilePage() {
-    const searchParams = useSearchParams();
-    const tab = searchParams?.get("tab") || "details";
-
+    // The boundary has to sit above useSearchParams, not below it. Reading the
+    // params first and then rendering Suspense left the hook unguarded, which
+    // is what failed the build during prerender.
     return (
         <Suspense fallback={null}>
-            <ProfilePageContent tab={tab} />
+            <ProfileTab />
         </Suspense>
     );
+}
+
+function ProfileTab() {
+    const searchParams = useSearchParams();
+    return <ProfilePageContent tab={searchParams?.get("tab") || "details"} />;
 }
 
 const ProfilePageContent = ({ tab }: { tab: string }) => {

@@ -63,7 +63,7 @@ const VoiceEmotionCapture: React.FC<VoiceEmotionCaptureProps> = ({ isOpen, onClo
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
-    const dataArrayRef = useRef<Uint8Array | null>(null);
+    const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
     const animationFrameRef = useRef<number | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -76,7 +76,7 @@ const VoiceEmotionCapture: React.FC<VoiceEmotionCaptureProps> = ({ isOpen, onClo
                 analyserRef.current = audioContextRef.current.createAnalyser();
                 analyserRef.current.fftSize = 256;
                 const bufferLength = analyserRef.current.frequencyBinCount;
-                dataArrayRef.current = new Uint8Array(bufferLength);
+                dataArrayRef.current = new Uint8Array(new ArrayBuffer(bufferLength));
             } catch (err) {
                 console.error("Error setting up audio context:", err);
             }

@@ -5,6 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Heading } from "@/components/ui/heading";
 
+// Reads the session, so it cannot be prerendered. Without this the page
+// builds into a static error state instead of failing loudly.
+export const dynamic = "force-dynamic";
+
 export default async function CommunityPage({
     searchParams,
 }: {

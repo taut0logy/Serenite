@@ -327,7 +327,7 @@ const CanvasPane = forwardRef<CanvasPaneRef, CanvasPaneProps>(
       canvas.on("mouse:down", (opt) => {
         if (!isRunningRef.current || !sessionStartRef.current) return;
         
-        const pointer = canvas.getPointer(opt.e);
+        const pointer = canvas.getScenePoint(opt.e);
         const now = performance.now();
         const tool = activeToolRef.current;
         const c = colorRef.current;
@@ -396,7 +396,10 @@ const CanvasPane = forwardRef<CanvasPaneRef, CanvasPaneProps>(
         
         // Handle fill tool
         if (tool === "fill") {
-          const target = canvas.findTarget(opt.e);
+          // fabric v7 returns a targets-info wrapper, not the object itself.
+          // Reading .target off it matters: the wrapper is always truthy, so
+          // the old check passed even on empty canvas and filled nothing.
+          const { target } = canvas.findTarget(opt.e);
           if (target) {
             target.set("fill", getRGBA(c, op));
             canvas.renderAll();
@@ -420,7 +423,7 @@ const CanvasPane = forwardRef<CanvasPaneRef, CanvasPaneProps>(
 
       // Mouse move handler
       canvas.on("mouse:move", (opt) => {
-        const pointer = canvas.getPointer(opt.e);
+        const pointer = canvas.getScenePoint(opt.e);
         const tool = activeToolRef.current;
         
         // Handle shape drawing

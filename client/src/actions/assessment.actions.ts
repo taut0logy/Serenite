@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { openSupportConversation } from "./support-conversation.actions";
 import { auth } from "@/auth";
 import type { FinalAssessmentResult } from "@/lib/assessment/assemble";
 import type { DomainKey } from "@/lib/assessment/types";
@@ -130,6 +131,8 @@ export async function completeAssessment(
 
     const thetaData = thetaFieldsToPrisma(result.thetas);
 
+    let assessmentId: string | null = null;
+
     await prisma.$transaction(async (tx) => {
       const existing = await tx.assessment.findFirst({
         where: { userId, isComplete: false },
@@ -161,12 +164,30 @@ export async function completeAssessment(
             }
           : {};
 
-      if (existing) {
-        await tx.assessment.update({ where: { id: existing.id }, data: { ...baseData, ...encryptionData } });
-      } else {
-        await tx.assessment.create({ data: { userId, ...baseData, ...encryptionData } });
-      }
+      const saved = existing
+        ? await tx.assessment.update({
+            where: { id: existing.id },
+            data: { ...baseData, ...encryptionData },
+          })
+        : await tx.assessment.create({ data: { userId, ...baseData, ...encryptionData } });
+      assessmentId = saved.id;
+
+      // Cached match scores are stale the moment the profile changes. Done
+      // inside the transaction rather than after it, so a crash between the
+      // two writes cannot leave a recommendation built on a superseded theta.
+      await tx.userRecommendation.deleteMany({ where: { userId } });
     });
+
+    // Escalation bars peer placement, so the member needs somewhere to go.
+    // Outside the transaction on purpose: a failure to open the conversation
+    // must not roll back a completed assessment, and the member is shown
+    // crisis resources by the questionnaire regardless of what happens here.
+    if (result.riskEscalated) {
+      const opened = await openSupportConversation(userId, assessmentId ?? undefined);
+      if (!opened.success) {
+        console.error("Escalated assessment but could not open support conversation", { userId });
+      }
+    }
 
     console.log("Assessment completed for user:", userId, {
       severity: result.overallSeverity,
@@ -174,9 +195,6 @@ export async function completeAssessment(
     });
 
     await setClaimOverride({ questionnaireCompleted: true });
-
-    // Cached match scores are now stale - next recommendations view rebuilds them.
-    await prisma.userRecommendation.deleteMany({ where: { userId } });
 
     return { success: true };
   } catch (error) {

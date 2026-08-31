@@ -17,6 +17,8 @@ import {
     leaveSupportGroup,
     type SupportGroupRecommendation,
 } from "@/actions/support-group.actions";
+import type { DomainKey } from "@/lib/assessment/types";
+import Link from "next/link";
 import {
     Users,
     Calendar,
@@ -133,6 +135,23 @@ interface SupportGroupRecommendationsProps {
     limit?: number;
 }
 
+const REASON_LABELS: Record<DomainKey, string> = {
+    depression: "low mood",
+    anxiety: "anxiety",
+    trauma: "past experiences",
+    sleep: "sleep",
+    social: "social connection",
+    selfWorth: "self-perception",
+};
+
+/** "sleep and social connection", "sleep", or "" for an empty list. */
+function describeReasons(reasons: DomainKey[]): string {
+    const labels = reasons.map((r) => REASON_LABELS[r]);
+    if (labels.length === 0) return "";
+    if (labels.length === 1) return labels[0];
+    return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
 export function SupportGroupRecommendations({
     limit = 5,
 }: SupportGroupRecommendationsProps) {
@@ -141,12 +160,14 @@ export function SupportGroupRecommendations({
     >([]);
     const [loading, setLoading] = useState(true);
     const [joiningGroup, setJoiningGroup] = useState<string | null>(null);
+    const [riskEscalated, setRiskEscalated] = useState(false);
 
     const loadRecommendations = async () => {
         setLoading(true);
         const result = await getSupportGroupRecommendations(limit);
         if (result.success && result.recommendations) {
             setRecommendations(result.recommendations);
+            setRiskEscalated(result.riskEscalated ?? false);
         } else {
             toast.error("Failed to load recommendations");
         }
@@ -225,6 +246,33 @@ export function SupportGroupRecommendations({
                     ))}
                 </div>
             </div>
+        );
+    }
+
+    // Placement is paused, so the group list is replaced rather than shown
+    // empty. An escalated member should not be left looking at a blank panel
+    // wondering what happened.
+    if (riskEscalated) {
+        return (
+            <Card className="border-primary/40">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-primary" />
+                        We would like to talk with you first
+                    </CardTitle>
+                    <CardDescription className="leading-relaxed">
+                        Group joining is paused for now. We have opened a private conversation
+                        for you instead, and someone from the team will reply there. This is not
+                        an emergency service, so if you need help right away please use the
+                        crisis contacts on that page.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button asChild>
+                        <Link href="/support">Open your conversation</Link>
+                    </Button>
+                </CardContent>
+            </Card>
         );
     }
 
@@ -336,6 +384,12 @@ export function SupportGroupRecommendations({
                                         {group.name}
                                     </CardTitle>
                                 </div>
+                                {group.matchReasons.length > 0 && !group.isMember && (
+                                    <p className="text-sm font-medium text-primary mt-2">
+                                        Focuses on {describeReasons(group.matchReasons)}, which is
+                                        where you scored highest.
+                                    </p>
+                                )}
                                 <CardDescription className="line-clamp-2 leading-relaxed mt-2">
                                     {group.description}
                                 </CardDescription>

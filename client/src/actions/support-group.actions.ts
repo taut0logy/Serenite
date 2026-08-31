@@ -3,6 +3,19 @@
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
 import { computeCentroid, computeMatchScore, blendGroupProfile } from "@/lib/assessment/group-matching";
+import {
+  MAX_GROUPS_PER_MEMBER,
+  checkEligibility,
+  INELIGIBILITY_MESSAGE,
+  explainMatch,
+  requiresFacilitator,
+  severityRank,
+  type GroupFacts,
+  type IneligibilityReason,
+  type MemberFacts,
+} from "@/lib/assessment/eligibility";
+import type { SeverityLevel } from "@/lib/assessment/scoring";
+import type { DomainKey } from "@/lib/assessment/types";
 
 // Fixed dimension order used everywhere a theta vector is built or compared.
 type ThetaFields = {
@@ -82,6 +95,8 @@ export interface SupportGroupRecommendation {
   maxMembers: number;
   vacancy: number;
   matchScore: number;
+  /** Domains that made this a match, shown instead of a bare percentage. */
+  matchReasons: DomainKey[];
   isMember: boolean;
 }
 
@@ -126,33 +141,45 @@ async function generateRecommendations(
     },
   });
 
-  // Severity level ordering for comparison
-  const severityOrder = ['MINIMAL', 'MILD', 'MODERATE', 'SEVERE'] as const;
-  const getSeverityIndex = (s: string) => severityOrder.indexOf(s as typeof severityOrder[number]);
+  // An escalated profile is not placed in a peer group at all. Returning an
+  // empty list here is the same rule joinSupportGroup enforces, so the list
+  // and the gate cannot disagree.
+  if (userProfile?.riskEscalated) return [];
 
   const userVector = userProfile ? thetaVector(userProfile) : null;
 
-  // Filter groups with vacancy and severity match, then score by distance
-  // from the user's theta to the group's profile (seed blended toward its
-  // members' actual centroid - see group-matching.ts)
+  const memberFacts: MemberFacts = {
+    overallSeverity: (userProfile?.overallSeverity as SeverityLevel | undefined) ?? null,
+    riskEscalated: userProfile?.riskEscalated ?? false,
+    groupCount: currentGroupIds.length,
+    isMember: false,
+  };
+
   const recommendations = groups
-    .filter((g) => {
-      if (g._count.members >= g.maxMembers) return false;
-
-      if (userProfile) {
-        const userSeverityIndex = getSeverityIndex(userProfile.overallSeverity);
-        const minIndex = getSeverityIndex(g.minSeverity);
-        const maxIndex = getSeverityIndex(g.maxSeverity);
-        if (userSeverityIndex < minIndex || userSeverityIndex > maxIndex) return false;
-      }
-
-      return true;
-    })
+    .filter((g) => checkEligibility(memberFacts, groupFacts(g)) === null)
     .map((g) => ({ groupId: g.id, matchScore: scoreGroupForUser(userVector, g) }))
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, slotsAvailable);
 
   return recommendations;
+}
+
+type GroupRow = GroupSeedFields & {
+  minSeverity: string;
+  maxSeverity: string;
+  maxMembers: number;
+  facilitatorId: string | null;
+  _count: { members: number };
+};
+
+function groupFacts(g: GroupRow): GroupFacts {
+  return {
+    minSeverity: g.minSeverity as SeverityLevel,
+    maxSeverity: g.maxSeverity as SeverityLevel,
+    memberCount: g._count.members,
+    maxMembers: g.maxMembers,
+    hasFacilitator: g.facilitatorId !== null,
+  };
 }
 
 /**
@@ -164,6 +191,12 @@ async function fetchGroupDetails(
 ): Promise<SupportGroupRecommendation[]> {
   const groupIds = storedRecs.map((r) => r.groupId);
   const scoreMap = new Map(storedRecs.map((r) => [r.groupId, r.matchScore]));
+
+  const userProfile = await prisma.assessment.findFirst({
+    where: { userId, isComplete: true },
+    orderBy: { completedAt: "desc" },
+  });
+  const userVector = userProfile ? thetaVector(userProfile) : null;
 
   const groups = await prisma.supportGroup.findMany({
     where: { id: { in: groupIds } },
@@ -187,8 +220,16 @@ async function fetchGroupDetails(
     maxMembers: g.maxMembers,
     vacancy: g.maxMembers - g._count.members,
     matchScore: scoreMap.get(g.id) ?? 0,
+    matchReasons: userVector ? explainMatch(userVector, groupSeedVector(g)) : [],
     isMember: g.members.some((m) => m.id === userId),
   }));
+}
+
+function applyLimit(
+  recommendations: SupportGroupRecommendation[],
+  limit?: number
+): SupportGroupRecommendation[] {
+  return typeof limit === "number" ? recommendations.slice(0, limit) : recommendations;
 }
 
 /**
@@ -197,9 +238,11 @@ async function fetchGroupDetails(
  * - If none exist, generates new ones and saves to DB
  * - Returns the recommendations
  */
-export async function getSupportGroupRecommendations(): Promise<{
+export async function getSupportGroupRecommendations(limit?: number): Promise<{
   success: boolean;
   recommendations?: SupportGroupRecommendation[];
+  /** Peer placement is paused; the member is being handled one to one instead. */
+  riskEscalated?: boolean;
   error?: string;
 }> {
   try {
@@ -211,6 +254,17 @@ export async function getSupportGroupRecommendations(): Promise<{
 
     const userId = session.user.id;
 
+    // Checked before any cache read: an escalated member must never be shown a
+    // group list, including one cached from before the escalation.
+    const latest = await prisma.assessment.findFirst({
+      where: { userId, isComplete: true },
+      orderBy: { completedAt: "desc" },
+      select: { riskEscalated: true },
+    });
+    if (latest?.riskEscalated) {
+      return { success: true, recommendations: [], riskEscalated: true };
+    }
+
     // Check for saved recommendations
     const savedRecs = await prisma.userRecommendation.findUnique({
       where: { userId },
@@ -220,7 +274,7 @@ export async function getSupportGroupRecommendations(): Promise<{
       // Return saved recommendations
       const storedRecs = savedRecs.recommendations as { groupId: string; matchScore: number }[];
       const recommendations = await fetchGroupDetails(userId, storedRecs);
-      return { success: true, recommendations };
+      return { success: true, recommendations: applyLimit(recommendations, limit) };
     }
 
     // No saved recommendations - generate new ones
@@ -245,7 +299,7 @@ export async function getSupportGroupRecommendations(): Promise<{
 
     // Fetch and return full details
     const recommendations = await fetchGroupDetails(userId, generatedRecs);
-    return { success: true, recommendations };
+    return { success: true, recommendations: applyLimit(recommendations, limit) };
   } catch (error) {
     console.error("Error getting support group recommendations:", error);
     return { success: false, error: "Failed to get recommendations" };
@@ -361,6 +415,7 @@ export async function getAllSupportGroups(): Promise<{
       maxMembers: group.maxMembers,
       vacancy: group.maxMembers - group._count.members,
       matchScore: scoreGroupForUser(userVector, group),
+      matchReasons: userVector ? explainMatch(userVector, groupSeedVector(group)) : [],
       isMember: group.members.some((member) => member.id === userId),
     }));
 
@@ -409,6 +464,7 @@ export async function getUserGroups(): Promise<{
       maxMembers: group.maxMembers,
       vacancy: group.maxMembers - group._count.members,
       matchScore: 100, // Already a member, full match
+      matchReasons: [],
       isMember: true,
     }));
 
@@ -426,6 +482,8 @@ export async function getUserGroups(): Promise<{
 export async function joinSupportGroup(groupId: string): Promise<{
   success: boolean;
   error?: string;
+  /** Present when a rule refused the join, so the caller can route on it. */
+  reason?: IneligibilityReason;
 }> {
   try {
     const session = await auth();
@@ -434,28 +492,10 @@ export async function joinSupportGroup(groupId: string): Promise<{
       return { success: false, error: "User not authenticated" };
     }
 
-    // Use transaction to prevent race conditions
+    // Every check runs inside the transaction, against rows read inside it, so
+    // a concurrent join cannot slip past capacity. joinByShareableId calls
+    // through to here, which is what stops an invite link bypassing any of it.
     await prisma.$transaction(async (tx) => {
-      // 1. Check user's current group count (max 3)
-      const userGroupCount = await tx.supportGroup.count({
-        where: { members: { some: { id: session.user.id } } },
-      });
-      if (userGroupCount >= 3) {
-        throw new Error("MAX_GROUPS_REACHED");
-      }
-
-      // 2. Check if user is already a member
-      const existingMembership = await tx.supportGroup.findFirst({
-        where: {
-          id: groupId,
-          members: { some: { id: session.user.id } },
-        },
-      });
-      if (existingMembership) {
-        throw new Error("ALREADY_MEMBER");
-      }
-
-      // 3. Check group's current member count
       const group = await tx.supportGroup.findUnique({
         where: { id: groupId },
         include: { _count: { select: { members: true } } },
@@ -463,11 +503,33 @@ export async function joinSupportGroup(groupId: string): Promise<{
       if (!group) {
         throw new Error("GROUP_NOT_FOUND");
       }
-      if (group._count.members >= group.maxMembers) {
-        throw new Error("GROUP_FULL");
+
+      const [groupCount, existingMembership, assessment] = await Promise.all([
+        tx.supportGroup.count({ where: { members: { some: { id: session.user.id } } } }),
+        tx.supportGroup.findFirst({
+          where: { id: groupId, members: { some: { id: session.user.id } } },
+          select: { id: true },
+        }),
+        tx.assessment.findFirst({
+          where: { userId: session.user.id, isComplete: true },
+          orderBy: { completedAt: "desc" },
+          select: { overallSeverity: true, riskEscalated: true },
+        }),
+      ]);
+
+      const reason = checkEligibility(
+        {
+          overallSeverity: (assessment?.overallSeverity as SeverityLevel | undefined) ?? null,
+          riskEscalated: assessment?.riskEscalated ?? false,
+          groupCount,
+          isMember: existingMembership !== null,
+        },
+        groupFacts(group)
+      );
+      if (reason) {
+        throw new Error(reason);
       }
 
-      // 4. Add user to group (atomic operation)
       await tx.supportGroup.update({
         where: { id: groupId },
         data: { members: { connect: { id: session.user.id } } },
@@ -478,17 +540,15 @@ export async function joinSupportGroup(groupId: string): Promise<{
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     
-    if (message === "MAX_GROUPS_REACHED") {
-      return { success: false, error: "You've already joined the maximum of 3 groups" };
-    }
-    if (message === "ALREADY_MEMBER") {
-      return { success: false, error: "You're already a member of this group" };
-    }
-    if (message === "GROUP_FULL") {
-      return { success: false, error: "This group is full (max 12 members)" };
-    }
     if (message === "GROUP_NOT_FOUND") {
       return { success: false, error: "Group not found" };
+    }
+    if (message in INELIGIBILITY_MESSAGE) {
+      return {
+        success: false,
+        error: INELIGIBILITY_MESSAGE[message as IneligibilityReason],
+        reason: message as IneligibilityReason,
+      };
     }
 
     console.error("Error joining support group:", error);
@@ -502,6 +562,7 @@ export async function joinSupportGroup(groupId: string): Promise<{
 export async function joinByShareableId(shareableId: string): Promise<{
   success: boolean;
   error?: string;
+  reason?: IneligibilityReason;
 }> {
   try {
     const group = await prisma.supportGroup.findUnique({
@@ -607,6 +668,7 @@ export async function getGroupByShareableId(shareableId: string): Promise<{
         maxMembers: group.maxMembers,
         vacancy: group.maxMembers - group._count.members,
         matchScore: scoreGroupForUser(userVector, group),
+        matchReasons: userVector ? explainMatch(userVector, groupSeedVector(group)) : [],
         isMember: userId ? group.members.some((m) => m.id === userId) : false,
       },
     };

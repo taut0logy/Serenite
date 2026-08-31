@@ -37,6 +37,9 @@ model User {
   sessions               Session[]
   socialAccounts         SocialAccount[]
   supportGroups          SupportGroup[]          @relation("SupportGroupMembers")
+  facilitatedGroups      SupportGroup[]          @relation("SupportGroupFacilitator")
+  supportConversation    SupportConversation?    @relation("SupportSeeker")
+  claimedConversations   SupportConversation[]   @relation("SupportResponder")
   meetings               Meeting[]               @relation("MeetingParticipants")
   notifications          Notification[]
   messagesSent           Message[]               @relation("Sender")
@@ -237,6 +240,12 @@ model SupportGroup {
   // Capacity
   maxMembers Int @default(12)
 
+  // A group whose range reaches MODERATE or SEVERE cannot take members, or
+  // start an occurrence, without one. Nullable because a MINIMAL/MILD peer
+  // group legitimately runs without a facilitator.
+  facilitatorId String?
+  facilitator   User?   @relation("SupportGroupFacilitator", fields: [facilitatorId], references: [id], onDelete: SetNull)
+
   // Recurring meeting schedule fields
   meetingDayOfWeek  Weekday?  @default(FRIDAY)
   meetingDayOfMonth Int?
@@ -251,6 +260,7 @@ model SupportGroup {
   @@index([shareableId])
   @@index([name])
   @@index([nextMeetingDate])
+  @@index([facilitatorId])
 }
 
 model Meeting {
@@ -327,6 +337,7 @@ model Message {
   senderId    String
   meetingId   String?
   receiverId  String?
+  supportConversationId String?
   replyToId   String?
   replyTo     Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: Cascade)
   replies     Message[]    @relation("MessageReply")
@@ -337,10 +348,49 @@ model Message {
   sender      User         @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
   meeting     Meeting?     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   receiver    User?        @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  supportConversation SupportConversation? @relation(fields: [supportConversationId], references: [id], onDelete: Cascade)
   attachments Attachment[]
 
   @@index([meetingId])
   @@index([senderId])
+  @@index([supportConversationId])
+}
+
+/// Opened when an assessment escalates on risk, which also bars the member
+/// from peer group placement. Any HOST or MANAGER may claim an open
+/// conversation; claiming is what turns a queue entry into a responsibility.
+/// This is explicitly not an emergency channel, and the member is shown
+/// crisis numbers independently of it.
+model SupportConversation {
+  id       String @id @default(uuid())
+  /// One open conversation per member: a second escalation joins the first
+  /// rather than starting a parallel thread a responder might miss.
+  memberId String @unique
+  member   User   @relation("SupportSeeker", fields: [memberId], references: [id], onDelete: Cascade)
+
+  status SupportConversationStatus @default(OPEN)
+
+  claimedById String?
+  claimedBy   User?   @relation("SupportResponder", fields: [claimedById], references: [id], onDelete: SetNull)
+
+  /// The assessment that triggered the escalation, for context on open.
+  assessmentId String?
+
+  openedAt  DateTime  @default(now())
+  claimedAt DateTime?
+  closedAt  DateTime?
+  updatedAt DateTime  @updatedAt
+
+  messages Message[]
+
+  @@index([status, openedAt])
+  @@index([claimedById])
+}
+
+enum SupportConversationStatus {
+  OPEN
+  CLAIMED
+  CLOSED
 }
 
 model Attachment {

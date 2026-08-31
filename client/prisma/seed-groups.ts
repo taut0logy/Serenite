@@ -1,4 +1,4 @@
-import { PrismaClient, SupportGroupType, Weekday, SeverityLevel } from '../src/lib/generated/prisma';
+import { PrismaClient, SupportGroupType, Weekday, SeverityLevel, Role } from '../src/lib/generated/prisma';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { config } from 'dotenv';
 import { resolve } from 'path';
@@ -271,6 +271,22 @@ async function main() {
     },
   ];
 
+  // A group whose range reaches MODERATE or SEVERE cannot take members without
+  // a facilitator (see lib/assessment/eligibility.ts). Seeding groups without
+  // one would leave almost all of them unjoinable. The same account can work
+  // the one-to-one support queue, which also needs a HOST or MANAGER to exist.
+  const facilitator = await prisma.user.upsert({
+    where: { email: 'facilitator@serenite.test' },
+    update: { role: Role.HOST },
+    create: {
+      email: 'facilitator@serenite.test',
+      verified: true,
+      role: Role.HOST,
+      profile: { create: { firstName: 'Sam', lastName: 'Facilitator' } },
+    },
+  });
+  console.log('Facilitator account ready: ' + facilitator.email);
+
   // Create support groups
   console.log('Creating support groups with target clusters...');
 
@@ -278,12 +294,18 @@ async function main() {
   await prisma.supportGroup.deleteMany({});
   console.log('✓ Cleared existing support groups');
 
+  let facilitated = 0;
   for (const group of supportGroups) {
+    const needsFacilitator =
+      group.maxSeverity === SeverityLevel.MODERATE || group.maxSeverity === SeverityLevel.SEVERE;
+    if (needsFacilitator) facilitated++;
+
     const created = await prisma.supportGroup.create({
-      data: group,
+      data: { ...group, facilitatorId: needsFacilitator ? facilitator.id : null },
     });
     console.log(`✓ Created: ${created.name} (ID: ${created.shareableId})`);
     console.log(`   Theta seed: dep=${group.targetThetaDepression}, anx=${group.targetThetaAnxiety}, trauma=${group.targetThetaTrauma}`);
+    if (needsFacilitator) console.log('   facilitator: ' + facilitator.email);
   }
 
   console.log('\n✅ Database seeding completed successfully!');

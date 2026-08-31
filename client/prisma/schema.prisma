@@ -38,6 +38,7 @@ model User {
   socialAccounts         SocialAccount[]
   supportGroups          SupportGroup[]          @relation("SupportGroupMembers")
   facilitatedGroups      SupportGroup[]          @relation("SupportGroupFacilitator")
+  diaryEntries           DiaryEntry[]
   supportConversation    SupportConversation?    @relation("SupportSeeker")
   claimedConversations   SupportConversation[]   @relation("SupportResponder")
   meetings               Meeting[]               @relation("MeetingParticipants")
@@ -354,6 +355,42 @@ model Message {
   @@index([meetingId])
   @@index([senderId])
   @@index([supportConversationId])
+}
+
+/// A private journal entry.
+///
+/// `encryptedContent` is AES-GCM ciphertext produced in the browser under the
+/// member's master key, the same key the assessment uses. The server cannot
+/// read it back: nothing outside the member's session holds the key.
+///
+/// `mood` and the embedding are derived once, from plaintext that is sent for
+/// analysis and never persisted. They are not reversible into the entry, so
+/// they are safe to keep in clear. The embedding lives in the vector
+/// collection keyed by this row's id and carries no content of its own.
+///
+/// Entries previously existed only as rows in the langchain vector table,
+/// which meant no foreign key, no cascade on account deletion, and ownership
+/// expressed only as an unenforced metadata field.
+model DiaryEntry {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  encryptedContent Bytes
+  iv               Bytes
+
+  /// Derived label shown back to the member. Null until analysis returns, and
+  /// null forever if it failed: an entry is saved whether or not it is scored.
+  mood       String?
+  confidence Float?
+
+  /// The day the entry is about, which is not always the day it was written.
+  entryDate DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, entryDate])
+  @@index([userId, createdAt])
 }
 
 /// Opened when an assessment escalates on risk, which also bars the member

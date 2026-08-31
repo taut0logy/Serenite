@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import {
     Card,
@@ -11,13 +11,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MoodChart } from "@/components/diary/mood-chart";
-// import { MoodAnalysis } from '@/components/diary/mood-analysis';
 import { ReflectionPrompts } from "@/components/diary/reflection-prompts";
 import {
-    diaryApi,
-    StoredDiaryEntry,
-    MoodAnalysisResult,
-} from "@/lib/diary-api";
+    deleteDiaryEntry,
+    listDiaryEntries,
+    saveDiaryEntry,
+    searchDiaryEntries,
+} from "@/actions/diary.actions";
+import { openEntries, sealEntry } from "@/lib/diary/crypto";
+import type { DiaryEntryView, MoodView } from "@/lib/diary/types";
+import { useEncryption } from "@/providers/encryption-provider";
 import {
     Tabs,
     TabsContent,
@@ -56,140 +59,141 @@ function stripHtml(html: string) {
 }
 
 export default function DiaryPage() {
-    const userId = "1"; // Default user ID for testing
+    // The key that opens the diary. Held only for this session, in this
+    // browser; the server has no copy and cannot read an entry back.
+    const { masterKey, isUnlocked } = useEncryption();
 
     const [entry, setEntry] = useState<string>("");
     const [isSaving, setIsSaving] = useState<boolean>(false);
-    const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-    const [currentAnalysis, setCurrentAnalysis] =
-        useState<MoodAnalysisResult | null>(null);
-    const [storedEntries, setStoredEntries] = useState<StoredDiaryEntry[]>([]);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [currentAnalysis, setCurrentAnalysis] = useState<MoodView | null>(null);
+    const [storedEntries, setStoredEntries] = useState<DiaryEntryView[]>([]);
     const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(undefined);
     const [searchQuery, setSearchQuery] = useState<string>("");
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [unreadable, setUnreadable] = useState(0);
 
-    const debouncedEntry = useDebounce(entry, 1500); // Debounce for auto-save
+    const debouncedSearch = useDebounce(searchQuery, 400);
 
-    // Load recent entries on page load
+    const loadRecentEntries = useCallback(async () => {
+        if (!masterKey) return;
+        setIsLoading(true);
+        const result = await listDiaryEntries(30);
+        if (result.success) {
+            const { opened, unreadable: skipped } = await openEntries(result.data, masterKey);
+            setStoredEntries(opened);
+            setUnreadable(skipped);
+        } else {
+            toast.error(result.error);
+        }
+        setIsLoading(false);
+    }, [masterKey]);
+
     useEffect(() => {
         loadRecentEntries();
-    }, []);
+    }, [loadRecentEntries]);
 
-    // Auto-save effect
+    // Search runs on the server against embeddings and comes back as
+    // ciphertext, which is opened here. An empty box means "show me
+    // everything" rather than "search for nothing".
     useEffect(() => {
-        // Only auto-save if content exists and changed (rudimentary check via debounce)
-        // In a real app we'd check if it's dirty.
-        if (debouncedEntry && !selectedEntryId) {
-             // Optional: Implement better auto-save logic
-        }
-    }, [debouncedEntry, selectedEntryId]);
+        if (!masterKey) return;
+        let cancelled = false;
 
-    const loadRecentEntries = async () => {
-        try {
-            const results = await diaryApi.searchEntries({
-                query: "", // Empty query returns all entries
-                userId: userId,
-                limit: 20,
-            });
-            if (results && Array.isArray(results)) {
-                setStoredEntries(results);
+        (async () => {
+            if (debouncedSearch.trim().length === 0) {
+                await loadRecentEntries();
+                return;
             }
-        } catch (error) {
-            console.error("Error loading entries:", error);
-            toast.error("Failed to load entries");
-        }
-    };
+            const result = await searchDiaryEntries(debouncedSearch, 20);
+            if (cancelled) return;
+            if (result.success) {
+                const { opened } = await openEntries(result.data, masterKey);
+                setStoredEntries(opened);
+            } else {
+                toast.error(result.error);
+            }
+        })();
 
-    const handleSearch = async (query: string) => {
-        setSearchQuery(query);
-        
-        try {
-            const results = await diaryApi.searchEntries({
-                query, // Pass actual query, even if empty
-                userId,
-                limit: 20,
-            });
-            setStoredEntries(results);
-        } catch (error) {
-            console.error("Error searching:", error);
-        }
-    };
-
-     const analyzeEntry = async () => {
-        const plainText = stripHtml(entry);
-        if (!plainText.trim()) {
-            toast.error("Please write something before analyzing");
-            return;
-        }
-
-        setIsAnalyzing(true);
-        try {
-            const result = await diaryApi.analyzeEntry({
-                content: plainText,
-                date: format(new Date(), "dd-MM-yyyy"),
-                user_id: userId,
-            });
-
-            setCurrentAnalysis(result);
-            toast.success("Entry analyzed successfully");
-        } catch (error) {
-            console.error("Error analyzing entry:", error);
-            toast.error("Failed to analyze entry");
-        } finally {
-            setIsAnalyzing(false);
-        }
-    };
+        return () => {
+            cancelled = true;
+        };
+    }, [debouncedSearch, masterKey, loadRecentEntries]);
 
     const saveEntry = async () => {
+        if (!masterKey) {
+            toast.error("Unlock your vault before saving");
+            return;
+        }
         const plainText = stripHtml(entry);
         if (!plainText.trim() && !entry.includes("<img")) {
-             toast.error("Cannot save empty entry");
-             return;
+            toast.error("Cannot save an empty entry");
+            return;
         }
 
         setIsSaving(true);
         try {
-            const result = await diaryApi.storeEntry({
-                content: entry, // Save HTML content
-                date: format(new Date(), "dd-MM-yyyy"),
-                user_id: userId,
+            // Sealed here, in the browser. What crosses the wire is ciphertext
+            // plus one copy of the text for scoring, which is never stored.
+            const sealed = await sealEntry(entry, masterKey);
+            const result = await saveDiaryEntry({
+                ...sealed,
+                plaintext: plainText,
+                entryDate: new Date().toISOString(),
+                entryId: selectedEntryId,
             });
-            
-            // If we just saved a new entry, add it to the list and select it
-            if (!selectedEntryId) {
-                 setStoredEntries([result, ...storedEntries]);
-                 setSelectedEntryId(result.id);
-            } else {
-                 // Update existing in list
-                 setStoredEntries(storedEntries.map(e => e.id === result.id ? result : e));
+
+            if (!result.success) {
+                toast.error(result.error);
+                return;
             }
 
-            // Also analyze it if storing
-            const analysisResult = await diaryApi.analyzeEntry({
-                 content: plainText,
-                 date: format(new Date(), "dd-MM-yyyy"),
-                 user_id: userId,
-            });
-            setCurrentAnalysis(analysisResult);
+            const saved: DiaryEntryView = {
+                id: result.data.id,
+                content: entry,
+                mood: result.data.mood,
+                confidence: result.data.confidence,
+                entryDate: new Date(result.data.entryDate),
+                createdAt: new Date(result.data.createdAt),
+            };
 
-            toast.success("Entry saved successfully");
+            setStoredEntries((prev) =>
+                selectedEntryId
+                    ? prev.map((e) => (e.id === saved.id ? saved : e))
+                    : [saved, ...prev]
+            );
+            setSelectedEntryId(saved.id);
+            setCurrentAnalysis(
+                saved.mood ? { mood: saved.mood, confidence: saved.confidence ?? 0 } : null
+            );
+            toast.success(saved.mood ? "Entry saved" : "Entry saved, but it could not be scored");
         } catch (error) {
             console.error("Error saving entry:", error);
-            toast.error("Failed to save entry");
+            toast.error("Could not save your entry");
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleSelectEntry = (selectedEntry: StoredDiaryEntry) => {
-        console.log("Selected entry:", selectedEntry.id, "has_img:", selectedEntry.content?.includes("<img"), "content_len:", selectedEntry.content?.length);
+    const removeEntry = async (entryId: string) => {
+        const result = await deleteDiaryEntry(entryId);
+        if (!result.success) {
+            toast.error(result.error);
+            return;
+        }
+        setStoredEntries((prev) => prev.filter((e) => e.id !== entryId));
+        if (selectedEntryId === entryId) handleCreateNew();
+        toast.success("Entry deleted");
+    };
+
+    const handleSelectEntry = (selectedEntry: DiaryEntryView) => {
         setSelectedEntryId(selectedEntry.id);
         setEntry(selectedEntry.content);
-        setCurrentAnalysis({
-            mood: selectedEntry.mood,
-            analysis: selectedEntry.analysis,
-            confidence: selectedEntry.confidence,
-        });
+        setCurrentAnalysis(
+            selectedEntry.mood
+                ? { mood: selectedEntry.mood, confidence: selectedEntry.confidence ?? 0 }
+                : null
+        );
     };
 
     const handleCreateNew = () => {
@@ -197,6 +201,24 @@ export default function DiaryPage() {
         setEntry("");
         setCurrentAnalysis(null);
     };
+
+    // Without the key there is nothing to show: entries on the server are
+    // ciphertext, and this is the only place they can be opened.
+    if (!isUnlocked) {
+        return (
+            <div className="flex h-[calc(100vh-4rem)] items-center justify-center px-4">
+                <Card className="w-full max-w-md">
+                    <CardHeader>
+                        <CardTitle>Your diary is locked</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                        Entries are encrypted with a key only this browser holds, so they cannot
+                        be shown until you unlock your vault with your password.
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     return (
         <div className="h-[calc(100vh-4rem)] w-full bg-background flex overflow-hidden">
@@ -212,7 +234,7 @@ export default function DiaryPage() {
                     onSelect={handleSelectEntry}
                     onCreateNew={handleCreateNew}
                     searchQuery={searchQuery}
-                    onSearchChange={handleSearch}
+                    onSearchChange={setSearchQuery}
                 />
             </div>
 
@@ -241,19 +263,20 @@ export default function DiaryPage() {
                              </p>
                         </div>
                         <div className="flex gap-2">
-                             <Button
-                                onClick={analyzeEntry}
-                                variant="secondary"
-                                disabled={isAnalyzing}
-                             >
-                                {isAnalyzing ? "Analyzing..." : "Analyze Mood"}
-                             </Button>
                              <Button onClick={saveEntry} disabled={isSaving}>
                                 {isSaving ? "Saving..." : "Save Entry"}
                                 <Save className="ml-2 h-4 w-4" />
                              </Button>
                         </div>
                     </div>
+
+                    {unreadable > 0 && (
+                        <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground">
+                            {unreadable} earlier {unreadable === 1 ? "entry" : "entries"} cannot be
+                            opened with your current key. That happens after a password reset, and
+                            the text cannot be recovered.
+                        </p>
+                    )}
 
                     <div className="flex-1 bg-card rounded-xl shadow-sm border overflow-hidden">
                         <Editor 
@@ -270,7 +293,7 @@ export default function DiaryPage() {
                 <DiaryInsights 
                     currentAnalysis={currentAnalysis}
                     recentEntries={storedEntries}
-                    isAnalyzing={isAnalyzing}
+                    isAnalyzing={isSaving}
                 />
              </div>
         </div>

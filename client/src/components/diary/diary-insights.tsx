@@ -1,22 +1,13 @@
 "use client";
 
-import { MoodAnalysisResult, StoredDiaryEntry } from "@/lib/diary-api";
+import type { DiaryEntryView, MoodView } from "@/lib/diary/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoodChart } from "@/components/diary/mood-chart";
-import { parse } from "date-fns";
 
 interface DiaryInsightsProps {
-    currentAnalysis: MoodAnalysisResult | null;
-    recentEntries: StoredDiaryEntry[];
+    currentAnalysis: MoodView | null;
+    recentEntries: DiaryEntryView[];
     isAnalyzing: boolean;
-}
-
-function parseDate(dateString: string): Date {
-    try {
-        return parse(dateString, "dd-MM-yyyy", new Date());
-    } catch {
-        return new Date();
-    }
 }
 
 export function DiaryInsights({ currentAnalysis, recentEntries, isAnalyzing }: DiaryInsightsProps) {
@@ -50,7 +41,6 @@ export function DiaryInsights({ currentAnalysis, recentEntries, isAnalyzing }: D
                             </div>
 
                             <div className="p-3 bg-background/50 rounded-lg text-sm leading-relaxed border">
-                                {currentAnalysis.analysis}
                             </div>
                         </div>
                     </CardContent>
@@ -64,11 +54,17 @@ export function DiaryInsights({ currentAnalysis, recentEntries, isAnalyzing }: D
                 <CardContent className="px-0">
                     <div className="h-[200px] w-full">
                          <MoodChart
-                            data={recentEntries.slice(0, 7).map((entry) => ({
-                                date: parseDate(entry.date),
-                                mood: entry.mood,
-                                confidence: entry.confidence,
-                            }))}
+                            // Entries the analyser could not score have no
+                            // mood, and plotting them as "neutral" would show
+                            // a reading nobody took.
+                            data={recentEntries
+                                .filter((entry) => entry.mood !== null)
+                                .slice(0, 7)
+                                .map((entry) => ({
+                                    date: entry.entryDate,
+                                    mood: entry.mood as string,
+                                    confidence: entry.confidence ?? 0,
+                                }))}
                         />
                     </div>
                 </CardContent>

@@ -1,6 +1,7 @@
 "use client";
 
-import { StoredDiaryEntry } from "@/lib/diary-api";
+import type { DiaryEntryView } from "@/lib/diary/types";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,9 +9,9 @@ import { PlusCircle, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DiarySidebarProps {
-    entries: StoredDiaryEntry[];
+    entries: DiaryEntryView[];
     selectedId?: string;
-    onSelect: (entry: StoredDiaryEntry) => void;
+    onSelect: (entry: DiaryEntryView) => void;
     onCreateNew: () => void;
     searchQuery: string;
     onSearchChange: (query: string) => void;
@@ -62,20 +63,20 @@ export function DiarySidebar({
                             >
                                 {/* Header: Date and Mood Tag */}
                                 <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-sm font-semibold text-foreground">{entry.date}</span>
+                                    <span className="text-sm font-semibold text-foreground">{format(entry.entryDate, "d MMM yyyy")}</span>
                                     <span 
                                         className={cn(
                                             "text-[10px] px-1.5 py-0.5 rounded font-medium", 
                                             {
-                                                "text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/30": entry.mood.toLowerCase().includes("happy") || entry.mood.toLowerCase().includes("joy"),
-                                                "text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/30": entry.mood.toLowerCase().includes("calm") || entry.mood.toLowerCase().includes("neutral"),
-                                                "text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/30": entry.mood.toLowerCase().includes("angry") || entry.mood.toLowerCase().includes("stress"),
-                                                "text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-gray-800": !entry.mood.toLowerCase().includes("happy") && !entry.mood.toLowerCase().includes("joy") && !entry.mood.toLowerCase().includes("calm") && !entry.mood.toLowerCase().includes("neutral") && !entry.mood.toLowerCase().includes("angry") && !entry.mood.toLowerCase().includes("stress"),
+                                                "text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/30": (entry.mood ?? "").toLowerCase().includes("happy") || (entry.mood ?? "").toLowerCase().includes("joy"),
+                                                "text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/30": (entry.mood ?? "").toLowerCase().includes("calm") || (entry.mood ?? "").toLowerCase().includes("neutral"),
+                                                "text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/30": (entry.mood ?? "").toLowerCase().includes("angry") || (entry.mood ?? "").toLowerCase().includes("stress"),
+                                                "text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-gray-800": !(entry.mood ?? "").toLowerCase().includes("happy") && !(entry.mood ?? "").toLowerCase().includes("joy") && !(entry.mood ?? "").toLowerCase().includes("calm") && !(entry.mood ?? "").toLowerCase().includes("neutral") && !(entry.mood ?? "").toLowerCase().includes("angry") && !(entry.mood ?? "").toLowerCase().includes("stress"),
                                             }
                                         )} 
-                                        title={entry.mood}
+                                        title={entry.mood ?? "not scored"}
                                     >
-                                        {entry.mood.split("/")[0].slice(0, 7)}
+                                        {(entry.mood ?? "-").split("/")[0].slice(0, 7)}
                                     </span>
                                 </div>
                                 

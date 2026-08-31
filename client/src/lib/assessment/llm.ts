@@ -1,9 +1,17 @@
+// Server-only. Imports the OpenAI SDK, so nothing in a client component may
+// import this module. The risk detector deliberately lives in
+// risk-patterns.ts instead, where the browser can run it directly.
+//
+// The model has exactly one job here: map a free-text answer onto one of the
+// item's own option indices. It never sees theta, a severity band, or a
+// profile, and it never supplies item text. An answer it cannot map returns
+// UNCLEAR and the item is asked again, verbatim.
+
 import OpenAI from "openai";
-import type { DomainKey } from "./types";
 
 // Any OpenAI-compatible provider works here: set OPENAI_BASE_URL and
 // OPENAI_API_KEY. Defaults to OpenRouter with a low-cost model, since this
-// module only ever needs short transition text and closed-set classification.
+// module only ever needs closed-set classification.
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_MODEL = "ibm-granite/granite-4.0-h-micro";
 
@@ -37,21 +45,6 @@ export function parseClassification(raw: string, optionCount: number): Classific
     return n;
 }
 
-const RISK_PATTERNS: RegExp[] = [
-    /\bkill(ing)? myself\b/i,
-    /\bend(ing)? my life\b/i,
-    /\bwant(ed)? to die\b/i,
-    /\bbetter off dead\b/i,
-    /\bsuicid(e|al)\b/i,
-    /\b(cutting|hurting) myself\b/i,
-    /\bself[- ]harm\b/i,
-    /\bdon'?t want to (live|be here) (anymore|any more)\b/i,
-];
-
-export function detectRiskDisclosure(text: string): boolean {
-    return RISK_PATTERNS.some((pattern) => pattern.test(text));
-}
-
 const CLASSIFY_SYSTEM_PROMPT =
     "You map a free-text answer to one option index. Reply with only the " +
     "index number, or the word UNCLEAR if the answer does not clearly match " +
@@ -74,38 +67,4 @@ export async function classifyFreeText(
 
     const raw = completion.choices[0]?.message?.content ?? "";
     return parseClassification(raw, options.length);
-}
-
-const TRANSITION_SYSTEM_PROMPT =
-    "You write one short, warm sentence transitioning to the next part of a " +
-    "mental health check-in. Do not ask a question, do not state any item " +
-    "text or score, do not use emoji. One sentence only.";
-
-const FALLBACK_TRANSITION = "Let's continue.";
-
-export interface TransitionContext {
-    previousDomain?: DomainKey;
-    nextDomain: DomainKey;
-    isFirst: boolean;
-}
-
-export async function composeTransition(context: TransitionContext): Promise<string> {
-    const prompt = context.isFirst
-        ? `Starting the ${context.nextDomain} section.`
-        : `Moving from ${context.previousDomain} to ${context.nextDomain}.`;
-
-    try {
-        const completion = await getClient().chat.completions.create({
-            model: getModel(),
-            temperature: 0.7,
-            max_tokens: 60,
-            messages: [
-                { role: "system", content: TRANSITION_SYSTEM_PROMPT },
-                { role: "user", content: prompt },
-            ],
-        });
-        return completion.choices[0]?.message?.content?.trim() || FALLBACK_TRANSITION;
-    } catch {
-        return FALLBACK_TRANSITION;
-    }
 }

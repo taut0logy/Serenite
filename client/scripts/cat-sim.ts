@@ -19,6 +19,7 @@ import { join } from "node:path";
 
 import { BANKS_BY_DOMAIN, PARAMETER_SET_ID } from "../src/lib/assessment/banks";
 import { pickNext } from "../src/lib/assessment/cat";
+import { POLICY_BY_DOMAIN } from "../src/lib/assessment/policy";
 import { categoryProbabilities, estimateTheta } from "../src/lib/assessment/grm";
 import { computeMatchScore } from "../src/lib/assessment/group-matching";
 import { DOMAIN_ORDER } from "../src/lib/assessment/session";
@@ -242,7 +243,7 @@ function runRespondent(
         // Walk the real engine. It selects under the provisional parameters and
         // stores them on each response, which is what estimateTheta scores with.
         for (;;) {
-            const item = pickNext(provisional[domain], responses);
+            const item = pickNext(provisional[domain], responses, POLICY_BY_DOMAIN[domain]);
             if (!item) break;
 
             const truth = trueById.get(item.id)!;

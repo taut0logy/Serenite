@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { pickNext } from "@/lib/assessment/cat";
+import type { DomainPolicy } from "@/lib/assessment/policy";
 import type { AdministeredResponse, BankItem } from "@/lib/assessment/types";
 
 function item(id: string, opts: Partial<BankItem> = {}): BankItem {
@@ -32,16 +33,23 @@ const answered = (itemId: string, value = 1): AdministeredResponse => ({
     value,
 });
 
+const POLICY: DomainPolicy = {
+    targetSe: 0.32,
+    minAdaptiveItems: 4,
+    maxAdaptiveItems: 8,
+    routeOut: null,
+};
+
 describe("pickNext", () => {
     it("returns forced items before any adaptive item, in bank order", () => {
-        expect(pickNext(BANK, [])?.id).toBe("anchor1");
-        expect(pickNext(BANK, [answered("anchor1")])?.id).toBe("anchor2");
-        expect(pickNext(BANK, [answered("anchor1"), answered("anchor2")])?.id).toBe("safety");
+        expect(pickNext(BANK, [], POLICY)?.id).toBe("anchor1");
+        expect(pickNext(BANK, [answered("anchor1")], POLICY)?.id).toBe("anchor2");
+        expect(pickNext(BANK, [answered("anchor1"), answered("anchor2")], POLICY)?.id).toBe("safety");
     });
 
     it("moves to adaptive selection once all forced items are administered", () => {
         const administered = [answered("anchor1"), answered("anchor2"), answered("safety")];
-        const next = pickNext(BANK, administered);
+        const next = pickNext(BANK, administered, POLICY);
         expect(next).not.toBeNull();
         expect(next!.isAnchor).toBe(false);
     });
@@ -53,11 +61,11 @@ describe("pickNext", () => {
             answered("safety"),
             ...Array.from({ length: 8 }, (_, i) => answered(`own${i + 1}`)),
         ];
-        expect(pickNext(BANK, administered)).toBeNull();
+        expect(pickNext(BANK, administered, POLICY)).toBeNull();
     });
 
     it("returns null once the bank is fully exhausted", () => {
         const administered = BANK.map((i) => answered(i.id));
-        expect(pickNext(BANK, administered)).toBeNull();
+        expect(pickNext(BANK, administered, POLICY)).toBeNull();
     });
 });

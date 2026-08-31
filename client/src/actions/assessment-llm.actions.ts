@@ -1,20 +1,16 @@
 "use server";
 
 import { auth } from "@/auth";
-import { classifyFreeText, composeTransition, detectRiskDisclosure } from "@/lib/assessment/llm";
+import { classifyFreeText } from "@/lib/assessment/llm";
 import type { ClassificationResult } from "@/lib/assessment/llm";
-import type { TransitionContext } from "@/lib/assessment/llm";
 
-export async function getTransitionMessage(
-    context: TransitionContext
-): Promise<{ success: boolean; text?: string; error?: string }> {
-    const session = await auth();
-    if (!session?.user?.id) return { success: false, error: "User not authenticated" };
-
-    const text = await composeTransition(context);
-    return { success: true, text };
-}
-
+/**
+ * Maps a free-text answer onto one of the item's own option indices.
+ *
+ * Risk detection is deliberately not here. It runs in the browser against
+ * risk-patterns.ts, so a disclosure raises the crisis panel without waiting
+ * on this call and without depending on it succeeding.
+ */
 export async function classifyFreeTextResponse(
     text: string,
     options: string[]
@@ -24,15 +20,12 @@ export async function classifyFreeTextResponse(
 
     if (text.trim().length === 0) return { success: true, result: "UNCLEAR" };
 
-    const result = await classifyFreeText(text, options);
-    return { success: true, result };
-}
-
-export async function checkRiskDisclosure(
-    text: string
-): Promise<{ success: boolean; detected?: boolean; error?: string }> {
-    const session = await auth();
-    if (!session?.user?.id) return { success: false, error: "User not authenticated" };
-
-    return { success: true, detected: detectRiskDisclosure(text) };
+    try {
+        const result = await classifyFreeText(text, options);
+        return { success: true, result };
+    } catch {
+        // An unavailable classifier must not consume the answer. UNCLEAR
+        // re-presents the item, which is the same path a malformed reply takes.
+        return { success: true, result: "UNCLEAR" };
+    }
 }

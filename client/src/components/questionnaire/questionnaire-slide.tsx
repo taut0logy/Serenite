@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Loader2, Send } from "lucide-react";
 import { SCALES } from "@/lib/assessment/scales";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,9 +22,15 @@ interface QuestionnaireSlideProps {
     item: BankItem;
     domainIndex: number;
     totalDomains: number;
-    transitionMessage?: string;
     canGoBack: boolean;
+    /** A tapped option. Carries the option value directly. */
     onAnswer: (value: number) => void;
+    /** Free text, to be mapped onto an option by the caller. */
+    onFreeText: (text: string) => void;
+    /** A classification call is in flight. */
+    isClassifying: boolean;
+    /** The previous free-text answer could not be mapped to an option. */
+    unclear: boolean;
     onBack: () => void;
 }
 
@@ -31,12 +38,34 @@ export function QuestionnaireSlide({
     item,
     domainIndex,
     totalDomains,
-    transitionMessage,
     canGoBack,
     onAnswer,
+    onFreeText,
+    isClassifying,
+    unclear,
     onBack,
 }: QuestionnaireSlideProps) {
     const scale = SCALES[item.scaleId];
+    const [text, setText] = useState("");
+    const [writing, setWriting] = useState(false);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // A new item is a fresh answer: never carry typed text across items.
+    useEffect(() => {
+        setText("");
+        setWriting(false);
+    }, [item.id]);
+
+    useEffect(() => {
+        if (writing) textareaRef.current?.focus();
+    }, [writing]);
+
+    const submitText = () => {
+        const trimmed = text.trim();
+        if (trimmed.length === 0 || isClassifying) return;
+        onFreeText(trimmed);
+        setText("");
+    };
 
     return (
         <QuestionnaireLayout className="px-4 sm:px-6">
@@ -82,14 +111,16 @@ export function QuestionnaireSlide({
                             <span className="inline-block py-1.5 px-4 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-4 tracking-wide uppercase">
                                 {DOMAIN_LABELS[item.domain]}
                             </span>
-                            {transitionMessage && (
-                                <p className="text-sm text-muted-foreground mb-3 italic">
-                                    {transitionMessage}
-                                </p>
-                            )}
+                            {/* Item text is rendered from the bank, never from a model. */}
                             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-snug sm:leading-tight whitespace-normal break-words">
                                 {item.text}
                             </h2>
+                            {unclear && (
+                                <p className="text-sm text-muted-foreground mt-4">
+                                    Sorry, that one did not quite land for us. Could you pick an option below,
+                                    or put it another way?
+                                </p>
+                            )}
                         </div>
                     </motion.div>
                 </AnimatePresence>
@@ -109,9 +140,11 @@ export function QuestionnaireSlide({
                             <button
                                 key={option.value}
                                 onClick={() => onAnswer(option.value)}
+                                disabled={isClassifying}
                                 className={cn(
                                     "relative group flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 transition-all duration-200 active:scale-95 touch-manipulation",
-                                    "border-border/50 bg-card/50 hover:border-primary/50 hover:bg-card hover:shadow-lg backdrop-blur-sm"
+                                    "border-border/50 bg-card/50 hover:border-primary/50 hover:bg-card hover:shadow-lg backdrop-blur-sm",
+                                    "disabled:opacity-50 disabled:pointer-events-none"
                                 )}
                             >
                                 <span className="absolute top-2 right-3 text-[10px] font-bold text-muted-foreground/50 border border-border/50 rounded px-1.5 py-0.5 hidden md:block">
@@ -124,8 +157,47 @@ export function QuestionnaireSlide({
                         ))}
                     </div>
 
-                    <div className="text-center mt-4 text-xs text-muted-foreground/60 hidden md:block">
-                        Press numbers <kbd className="font-sans px-1 bg-muted rounded border">1</kbd>-<kbd className="font-sans px-1 bg-muted rounded border">{scale.options.length}</kbd> to select
+                    <div className="mt-4 max-w-2xl mx-auto">
+                        {writing ? (
+                            <div className="flex items-end gap-2">
+                                <textarea
+                                    ref={textareaRef}
+                                    value={text}
+                                    onChange={(e) => setText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" && !e.shiftKey) {
+                                            e.preventDefault();
+                                            submitText();
+                                        }
+                                        if (e.key === "Escape") setWriting(false);
+                                    }}
+                                    rows={2}
+                                    placeholder="Answer in your own words"
+                                    disabled={isClassifying}
+                                    className="flex-1 resize-none rounded-xl border-2 border-border/50 bg-card/50 p-3 text-sm text-foreground backdrop-blur-sm outline-none focus:border-primary/50 disabled:opacity-50"
+                                />
+                                <Button
+                                    size="icon"
+                                    onClick={submitText}
+                                    disabled={text.trim().length === 0 || isClassifying}
+                                    className="h-11 w-11 shrink-0"
+                                    aria-label="Send answer"
+                                >
+                                    {isClassifying ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Send className="w-4 h-4" />
+                                    )}
+                                </Button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setWriting(true)}
+                                className="mx-auto block text-xs text-muted-foreground/70 underline underline-offset-4 hover:text-foreground"
+                            >
+                                or answer in your own words
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

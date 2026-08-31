@@ -1,4 +1,5 @@
 import { pickNext } from "./cat";
+import { POLICY_BY_DOMAIN } from "./policy";
 import { estimateTheta } from "./grm";
 import type { AdministeredResponse, BankItem, DomainKey, ThetaEstimate } from "./types";
 
@@ -27,6 +28,12 @@ export interface SessionState {
     traumaExposed: boolean;
     priorities: PriorityKey[] | null;
     history: HistoryEntry[];
+    /**
+     * Latched the moment free text matches a risk pattern, and never cleared
+     * for the rest of the sitting. Undoing the answer that disclosed does not
+     * undo the disclosure.
+     */
+    riskDetected: boolean;
 }
 
 export type SessionStep =
@@ -36,7 +43,14 @@ export type SessionStep =
     | { type: "done" };
 
 export function createSession(): SessionState {
-    return { responses: {}, traumaGateAnswered: false, traumaExposed: false, priorities: null, history: [] };
+    return {
+        responses: {},
+        traumaGateAnswered: false,
+        traumaExposed: false,
+        priorities: null,
+        history: [],
+        riskDetected: false,
+    };
 }
 
 export function nextStep(banks: Record<DomainKey, BankItem[]>, session: SessionState): SessionStep {
@@ -46,7 +60,7 @@ export function nextStep(banks: Record<DomainKey, BankItem[]>, session: SessionS
             if (!session.traumaExposed) continue;
         }
         const administered = session.responses[domain] ?? [];
-        const item = pickNext(banks[domain], administered);
+        const item = pickNext(banks[domain], administered, POLICY_BY_DOMAIN[domain]);
         if (item) return { type: "item", domain, item };
     }
 
@@ -80,6 +94,15 @@ export function recordTraumaGate(session: SessionState, exposed: boolean): Sessi
 
 export function recordPriorities(session: SessionState, ranking: PriorityKey[]): SessionState {
     return { ...session, priorities: ranking, history: [...session.history, { kind: "priorities" }] };
+}
+
+/**
+ * Records a risk disclosure found in free text. Not part of `history`: this is
+ * not an action the respondent can take back, and `undoLast` must not clear it.
+ */
+export function recordRiskDisclosure(session: SessionState): SessionState {
+    if (session.riskDetected) return session;
+    return { ...session, riskDetected: true };
 }
 
 // Reverts the single most recent action. Arbitrary backward navigation isn't

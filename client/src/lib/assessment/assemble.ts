@@ -1,6 +1,7 @@
 import { scorePHQ9, scoreGAD7, scorePCPTSD5 } from "./anchors";
 import { deriveOverallSeverity, evaluateRisk, type SeverityLevel } from "./scoring";
-import { finalizeThetas, type PriorityKey, type SessionState } from "./session";
+import { computeQuality } from "./quality";
+import { DOMAIN_ORDER, finalizeThetas, type PriorityKey, type SessionState } from "./session";
 import type { BankItem, DomainKey, ThetaEstimate } from "./types";
 
 export interface FinalAssessmentResult {
@@ -34,12 +35,17 @@ export interface AssembleInput {
     banks: Record<DomainKey, BankItem[]>;
     session: SessionState;
     parameterSetId: string;
-    freeTextRiskDetected: boolean;
-    qualityFlagged: boolean;
 }
 
 export function assembleResult(input: AssembleInput): FinalAssessmentResult {
-    const { banks, session, parameterSetId, freeTextRiskDetected, qualityFlagged } = input;
+    const { banks, session, parameterSetId } = input;
+
+    // Both signals are read off the session rather than passed in, so a caller
+    // cannot forget to forward them. That is exactly how they were lost before:
+    // the hook hardcoded `false` for each and the detectors ran nowhere.
+    const freeTextRiskDetected = session.riskDetected;
+    const allResponses = DOMAIN_ORDER.flatMap((d) => session.responses[d] ?? []);
+    const qualityFlagged = computeQuality(allResponses).flagged;
 
     const phq9 = scorePHQ9(anchorRawValues(banks, session, "depression", "PHQ9"));
     const gad7 = scoreGAD7(anchorRawValues(banks, session, "anxiety", "GAD7"));

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { assembleResult } from "@/lib/assessment/assemble";
-import { createSession, recordResponse, recordTraumaGate, recordPriorities } from "@/lib/assessment/session";
+import { createSession, recordResponse, recordTraumaGate, recordPriorities,
+    recordRiskDisclosure,
+} from "@/lib/assessment/session";
 import type { BankItem, DomainKey } from "@/lib/assessment/types";
 
 function anchorItem(id: string, domain: DomainKey, provenance: "PHQ9" | "GAD7" | "PCPTSD5", isSafetyItem = false): BankItem {
@@ -42,8 +44,6 @@ describe("assembleResult", () => {
             banks: BANKS,
             session: s,
             parameterSetId: "ps-1",
-            freeTextRiskDetected: false,
-            qualityFlagged: false,
         });
 
         expect(result.phq9Raw).toBe(2);
@@ -62,8 +62,6 @@ describe("assembleResult", () => {
             banks: BANKS,
             session: s,
             parameterSetId: "ps-1",
-            freeTextRiskDetected: false,
-            qualityFlagged: false,
         });
 
         expect(result.riskFlag).toBe(true);
@@ -71,13 +69,11 @@ describe("assembleResult", () => {
     });
 
     it("carries the free-text risk signal through even with no other trigger", () => {
-        const s = createSession();
+        const s = recordRiskDisclosure(createSession());
         const result = assembleResult({
             banks: BANKS,
             session: s,
             parameterSetId: "ps-1",
-            freeTextRiskDetected: true,
-            qualityFlagged: false,
         });
 
         expect(result.riskEscalated).toBe(true);

@@ -7,6 +7,8 @@ export interface AdministeredResponse {
     b: number[];
     /** Selected category index, 0-based. */
     value: number;
+    /** Time from item render to submit. Absent for responses restored from storage. */
+    responseTimeMs?: number;
 }
 
 /** A point estimate of a latent trait with its standard error. */
@@ -35,9 +37,4 @@ export interface BankItem {
     isSafetyItem: boolean;
     status: "DRAFT" | "ACTIVE" | "RETIRED";
     params: ItemParams;
-}
-
-export interface StopConfig {
-    itemCount: number;
-    se: number;
 }

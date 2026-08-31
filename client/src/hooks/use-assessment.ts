@@ -114,12 +114,13 @@ export function useAssessment() {
 
         setIsSubmitting(true);
         try {
+            // Risk and quality are read off the session inside assembleResult.
+            // They used to be passed in here as literal `false`, which is how
+            // both detectors ended up wired to nothing.
             const result = assembleResult({
                 banks: BANKS_BY_DOMAIN,
                 session: assessmentSession,
                 parameterSetId: PARAMETER_SET_ID,
-                freeTextRiskDetected: false,
-                qualityFlagged: false,
             });
 
             const { encrypted, iv } = await encryptWithMK(assessmentSession, masterKey);

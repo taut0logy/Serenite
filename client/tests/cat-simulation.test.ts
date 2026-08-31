@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { pickNext } from "@/lib/assessment/cat";
 import { estimateTheta, categoryProbabilities } from "@/lib/assessment/grm";
 import { BANKS_BY_DOMAIN } from "@/lib/assessment/banks";
+import { POLICY_BY_DOMAIN } from "@/lib/assessment/policy";
+import type { DomainPolicy } from "@/lib/assessment/policy";
 import type { AdministeredResponse, BankItem } from "@/lib/assessment/types";
 
 // Deterministic PRNG so the simulated response draws are reproducible.
@@ -42,19 +44,20 @@ interface SimResult {
 // the engine scores with, for the misspecification study.
 function simulateRespondent(
     bank: BankItem[],
+    policy: DomainPolicy,
     thetaTrue: number,
     rng: () => number,
     distort: (a: number, b: number[]) => { a: number; b: number[] } = (a, b) => ({ a, b })
 ): SimResult {
     const administered: AdministeredResponse[] = [];
-    let item = pickNext(bank, administered);
+    let item = pickNext(bank, administered, policy);
 
     while (item) {
         const trueParams = distort(item.params.a, item.params.b);
         const probs = categoryProbabilities(thetaTrue, trueParams.a, trueParams.b);
         const value = sampleCategory(probs, rng);
         administered.push({ itemId: item.id, a: item.params.a, b: item.params.b, value });
-        item = pickNext(bank, administered);
+        item = pickNext(bank, administered, policy);
     }
 
     const { theta, se } = estimateTheta(administered);
@@ -93,7 +96,7 @@ describe("CAT simulation: theta recovery", () => {
             // Box-Muller for a standard normal true theta
             const u1 = rng(), u2 = rng();
             const thetaTrue = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-            results.push(simulateRespondent(BANKS_BY_DOMAIN.depression, thetaTrue, rng));
+            results.push(simulateRespondent(BANKS_BY_DOMAIN.depression, POLICY_BY_DOMAIN.depression, thetaTrue, rng));
         }
 
         const { bias, rmse, correlation, avgItems } = summarize(results);
@@ -111,7 +114,7 @@ describe("CAT simulation: theta recovery", () => {
         for (let i = 0; i < N_RESPONDENTS; i++) {
             const u1 = rng(), u2 = rng();
             const thetaTrue = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-            results.push(simulateRespondent(BANKS_BY_DOMAIN.sleep, thetaTrue, rng));
+            results.push(simulateRespondent(BANKS_BY_DOMAIN.sleep, POLICY_BY_DOMAIN.sleep, thetaTrue, rng));
         }
 
         const { correlation, avgItems } = summarize(results);
@@ -130,14 +133,14 @@ describe("CAT simulation: theta recovery", () => {
             const u1 = rng(), u2 = rng();
             const thetaTrue = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
             const administered: AdministeredResponse[] = [];
-            let item = pickNext(BANKS_BY_DOMAIN.sleep, administered);
+            let item = pickNext(BANKS_BY_DOMAIN.sleep, administered, POLICY_BY_DOMAIN.sleep);
             while (item) {
                 const probs = categoryProbabilities(thetaTrue, item.params.a, item.params.b);
                 const value = sampleCategory(probs, rng);
                 administered.push({ itemId: item.id, a: item.params.a, b: item.params.b, value });
                 exposure.set(item.id, (exposure.get(item.id) ?? 0) + 1);
                 totalAdaptive++;
-                item = pickNext(BANKS_BY_DOMAIN.sleep, administered);
+                item = pickNext(BANKS_BY_DOMAIN.sleep, administered, POLICY_BY_DOMAIN.sleep);
             }
         }
 
@@ -159,9 +162,9 @@ describe("CAT simulation: parameter misspecification", () => {
             const u1 = matched(), u2 = matched();
             const thetaTrue = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 
-            matchedResults.push(simulateRespondent(BANKS_BY_DOMAIN.anxiety, thetaTrue, matched));
+            matchedResults.push(simulateRespondent(BANKS_BY_DOMAIN.anxiety, POLICY_BY_DOMAIN.anxiety, thetaTrue, matched));
             misspecifiedResults.push(
-                simulateRespondent(BANKS_BY_DOMAIN.anxiety, thetaTrue, misspecified, (a, b) => ({
+                simulateRespondent(BANKS_BY_DOMAIN.anxiety, POLICY_BY_DOMAIN.anxiety, thetaTrue, misspecified, (a, b) => ({
                     a: a * 0.5, // true discrimination is half what the engine assumes
                     b: b.map((t) => t + 0.8), // true thresholds shifted higher
                 }))

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
     QuestionnaireIntro,
@@ -16,9 +16,11 @@ import {
 import { useAssessmentStore } from "@/stores/use-assessment-store";
 import { useAssessment } from "@/hooks/use-assessment";
 import { BANKS_BY_DOMAIN } from "@/lib/assessment/banks";
-import { nextStep, recordResponse, recordTraumaGate, recordPriorities, undoLast, DOMAIN_ORDER } from "@/lib/assessment/session";
+import { nextStep, recordResponse, recordRiskDisclosure, recordTraumaGate, recordPriorities, undoLast, DOMAIN_ORDER } from "@/lib/assessment/session";
 import { isSafetyItemEndorsed } from "@/lib/assessment/scoring";
-import { getTransitionMessage } from "@/actions/assessment-llm.actions";
+import { detectRiskDisclosure } from "@/lib/assessment/risk-patterns";
+import { SCALES } from "@/lib/assessment/scales";
+import { classifyFreeTextResponse } from "@/actions/assessment-llm.actions";
 import { getAssessmentComparison, type AssessmentComparison } from "@/actions/assessment.actions";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
@@ -46,7 +48,8 @@ export function QuestionnaireClient() {
 
     const [passwordError, setPasswordError] = useState<string | null>(null);
     const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
-    const [transitionMessage, setTransitionMessage] = useState<string | undefined>();
+    const [isClassifying, setIsClassifying] = useState(false);
+    const [unclear, setUnclear] = useState(false);
     const [comparison, setComparison] = useState<AssessmentComparison[] | null>(null);
 
     useEffect(() => {
@@ -54,27 +57,17 @@ export function QuestionnaireClient() {
     }, [uiState]);
 
     const step = nextStep(BANKS_BY_DOMAIN, assessmentSession);
+    const activeItemId = step.type === "item" ? step.item.id : null;
 
-    // Fetch a short transition line whenever the active domain changes.
-    // Best-effort: the slide renders fine with no message if this fails.
-    useEffect(() => {
-        if (step.type !== "item") {
-            setTransitionMessage(undefined);
-            return;
-        }
-        const domainIndex = DOMAIN_ORDER.indexOf(step.domain);
-        const isFirstOfDomain = (assessmentSession.responses[step.domain]?.length ?? 0) === 0;
-        if (!isFirstOfDomain) return;
-
-        getTransitionMessage({
-            previousDomain: domainIndex > 0 ? DOMAIN_ORDER[domainIndex - 1] : undefined,
-            nextDomain: step.domain,
-            isFirst: domainIndex === 0,
-        }).then((res) => {
-            if (res.success) setTransitionMessage(res.text);
-        });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [step.type === "item" ? step.domain : null]);
+    // Wall clock from the moment an item is first rendered. Feeds the
+    // response-time half of the careless-responding check. Re-presenting the
+    // same item after an UNCLEAR does not restart it: the respondent has been
+    // looking at that question the whole time.
+    const shownAt = useRef<{ itemId: string; at: number } | null>(null);
+    if (activeItemId && shownAt.current?.itemId !== activeItemId) {
+        shownAt.current = { itemId: activeItemId, at: Date.now() };
+    }
+    const elapsedMs = () => (shownAt.current ? Date.now() - shownAt.current.at : undefined);
 
     const handlePasswordSubmit = useCallback(async (password: string) => {
         setIsVerifyingPassword(true);
@@ -185,26 +178,62 @@ export function QuestionnaireClient() {
     }
 
     const domainIndex = DOMAIN_ORDER.indexOf(step.domain);
+    const item = step.item;
+    const domain = step.domain;
+
+    const commit = (value: number) => {
+        setUnclear(false);
+        setSession(
+            recordResponse(assessmentSession, domain, {
+                itemId: item.id,
+                a: item.params.a,
+                b: item.params.b,
+                value,
+                responseTimeMs: elapsedMs(),
+            })
+        );
+        if (isSafetyItemEndorsed(item, value)) setCrisisPanelOpen(true);
+    };
+
+    const handleFreeText = async (text: string) => {
+        // Runs first, in the browser, on every free-text turn. A disclosure
+        // must surface even if the classifier is slow, rate limited or down,
+        // so nothing here waits on the network.
+        if (detectRiskDisclosure(text)) {
+            setSession(recordRiskDisclosure(assessmentSession));
+            setCrisisPanelOpen(true);
+        }
+
+        setIsClassifying(true);
+        try {
+            const options = SCALES[item.scaleId].options.map((o) => o.label);
+            const res = await classifyFreeTextResponse(text, options);
+            // The model may only choose among the item's own options. Anything
+            // else re-presents the item verbatim rather than guessing a score.
+            if (res.success && typeof res.result === "number") {
+                commit(res.result);
+            } else {
+                setUnclear(true);
+            }
+        } finally {
+            setIsClassifying(false);
+        }
+    };
 
     return (
         <QuestionnaireSlide
-            item={step.item}
+            item={item}
             domainIndex={domainIndex}
             totalDomains={DOMAIN_ORDER.length}
-            transitionMessage={transitionMessage}
             canGoBack={assessmentSession.history.length > 0}
-            onAnswer={(value) => {
-                setSession(
-                    recordResponse(assessmentSession, step.domain, {
-                        itemId: step.item.id,
-                        a: step.item.params.a,
-                        b: step.item.params.b,
-                        value,
-                    })
-                );
-                if (isSafetyItemEndorsed(step.item, value)) setCrisisPanelOpen(true);
+            onAnswer={commit}
+            onFreeText={handleFreeText}
+            isClassifying={isClassifying}
+            unclear={unclear}
+            onBack={() => {
+                setUnclear(false);
+                setSession(undoLast(assessmentSession));
             }}
-            onBack={() => setSession(undoLast(assessmentSession))}
         />
     );
 }

@@ -1,10 +1,8 @@
 import { itemInformation, estimateTheta } from "./grm";
-import type { AdministeredResponse, BankItem, StopConfig } from "./types";
+import type { DomainPolicy } from "./policy";
+import type { AdministeredResponse, BankItem } from "./types";
 
 const EXPOSURE_POOL_SIZE = 5;
-const MIN_ITEMS = 4;
-const MAX_ITEMS = 8;
-const TARGET_SE = 0.32;
 
 // Picks the next item by max information at theta, among a randomized pool
 // (exposure control) and never repeating the previous item's content tag.
@@ -31,16 +29,27 @@ export function selectNextItem(
     return ranked[Math.floor(Math.random() * ranked.length)].item;
 }
 
-export function shouldStop(config: StopConfig): boolean {
-    if (config.itemCount >= MAX_ITEMS) return true;
-    if (config.itemCount < MIN_ITEMS) return false;
-    return config.se <= TARGET_SE;
+export function shouldStop(policy: DomainPolicy, itemCount: number, se: number): boolean {
+    if (itemCount >= policy.maxAdaptiveItems) return true;
+    if (itemCount < policy.minAdaptiveItems) return false;
+    return se <= policy.targetSe;
 }
 
-// Decides the next item for a domain: forced items (anchors, safety) first
-// in bank order, then adaptive selection once those are exhausted. Only
-// adaptive items count toward the stopping rule.
-export function pickNext(bank: BankItem[], administered: AdministeredResponse[]): BankItem | null {
+/** Adaptive items only. Anchors and safety items are administered outside the rules. */
+function countAdaptive(bank: BankItem[], administered: AdministeredResponse[]): number {
+    return administered.filter((r) => {
+        const item = bank.find((b) => b.id === r.itemId);
+        return item && !item.isAnchor && !item.isSafetyItem;
+    }).length;
+}
+
+// Decides the next item for a domain: forced items (anchors, safety) first in
+// bank order, then adaptive selection under the domain's own policy.
+export function pickNext(
+    bank: BankItem[],
+    administered: AdministeredResponse[],
+    policy: DomainPolicy
+): BankItem | null {
     const administeredIds = new Set(administered.map((r) => r.itemId));
 
     const forced = bank.find(
@@ -48,13 +57,10 @@ export function pickNext(bank: BankItem[], administered: AdministeredResponse[])
     );
     if (forced) return forced;
 
-    const adaptiveCount = administered.filter((r) => {
-        const item = bank.find((b) => b.id === r.itemId);
-        return item && !item.isAnchor && !item.isSafetyItem;
-    }).length;
+    const adaptiveCount = countAdaptive(bank, administered);
+    const estimate = estimateTheta(administered);
 
-    const { theta, se } = estimateTheta(administered);
-    if (shouldStop({ itemCount: adaptiveCount, se })) return null;
+    if (shouldStop(policy, adaptiveCount, estimate.se)) return null;
 
-    return selectNextItem(bank, administeredIds, theta);
+    return selectNextItem(bank, administeredIds, estimate.theta);
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseClassification, detectRiskDisclosure } from "@/lib/assessment/llm";
+import { parseClassification } from "@/lib/assessment/llm";
+import { detectRiskDisclosure } from "@/lib/assessment/risk-patterns";
 
 describe("parseClassification", () => {
     it("accepts a bare digit within range", () => {

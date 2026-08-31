@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { selectNextItem, shouldStop } from "@/lib/assessment/cat";
+import type { DomainPolicy } from "@/lib/assessment/policy";
 import type { BankItem } from "@/lib/assessment/types";
 
 function makeItem(id: string, contentTag: string, b: number[]): BankItem {
@@ -48,19 +49,32 @@ describe("selectNextItem", () => {
 });
 
 describe("shouldStop", () => {
+    const policy: DomainPolicy = {
+        targetSe: 0.32,
+        minAdaptiveItems: 4,
+        maxAdaptiveItems: 8,
+        routeOut: null,
+    };
+
     it("does not stop before the minimum item count", () => {
-        expect(shouldStop({ itemCount: 2, se: 0.1 })).toBe(false);
+        expect(shouldStop(policy, 2, 0.1)).toBe(false);
     });
 
     it("stops once precision target is met past the minimum", () => {
-        expect(shouldStop({ itemCount: 4, se: 0.3 })).toBe(true);
+        expect(shouldStop(policy, 4, 0.3)).toBe(true);
     });
 
     it("stops at the maximum item count regardless of precision", () => {
-        expect(shouldStop({ itemCount: 8, se: 5 })).toBe(true);
+        expect(shouldStop(policy, 8, 5)).toBe(true);
     });
 
     it("continues past the minimum when precision is not met", () => {
-        expect(shouldStop({ itemCount: 5, se: 0.5 })).toBe(false);
+        expect(shouldStop(policy, 5, 0.5)).toBe(false);
+    });
+
+    it("honours a domain's own target rather than a global constant", () => {
+        const matching: DomainPolicy = { ...policy, targetSe: 0.45 };
+        expect(shouldStop(policy, 4, 0.4)).toBe(false);
+        expect(shouldStop(matching, 4, 0.4)).toBe(true);
     });
 });

@@ -12,6 +12,7 @@ from models.chat import (
     TranslationResponse,
 )
 from middleware.auth import get_current_user
+from services.crisis import resources as crisis_resources
 from config.limiter import limiter
 
 
@@ -159,24 +160,23 @@ async def clear_chat_history(request: Request, user_id: str, user = Depends(get_
 @router.get("/resources")
 @limiter.limit("10/minute")
 async def get_mental_health_resources(request: Request):
-    """Get mental health resources for Bangladesh"""
+    """Mental health resources for Bangladesh.
+
+    Crisis numbers come from services/crisis.py, which reads the same file the
+    interface renders. This endpoint used to carry its own fourth copy, in
+    which 01688-709965 was labelled a government helpline; those are in fact
+    Kaan Pete Roi's Airtel carrier lines, and the list stated no hours at all,
+    so the one number here that closes overnight read as always available.
+    """
     return {
         "crisis_resources": [
             {
-                "name": "National Mental Health Helpline (Bangladesh)",
-                "contact": "01688-709965, 01688-709966",
-                "description": "Government helpline for mental health support",
-            },
-            {
-                "name": "Kaan Pete Roi (Emotional Support)",
-                "contact": "9612119911",
-                "description": "Emotional support and suicide prevention hotline",
-            },
-            {
-                "name": "Bangladesh Emergency Services",
-                "contact": "999",
-                "description": "National emergency services",
-            },
+                "name": entry["name"],
+                "contact": entry["number"],
+                "hours": entry["hours"],
+                "description": entry["purpose"],
+            }
+            for entry in crisis_resources()
         ],
         "organizations": [
             {

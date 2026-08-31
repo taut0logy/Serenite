@@ -25,6 +25,7 @@ from langchain_tavily import TavilySearch
 from langgraph.graph.message import add_messages
 from config.settings import settings
 from services.llm import Task, chat_model
+from services.crisis import crisis_message, detect_risk_disclosure
 from utils.logger import logger
 from services.embeddings_adapter import get_embeddings
 
@@ -1399,20 +1400,36 @@ def determine_response_strategy(state: AgentState) -> Dict:
     }
 
 
+def _latest_user_text(state: AgentState) -> str:
+    """The most recent thing the member actually typed."""
+    for message in reversed(state.get("messages", [])):
+        if isinstance(message, HumanMessage):
+            content = getattr(message, "content", "")
+            return content if isinstance(content, str) else ""
+    return ""
+
+
 def provide_crisis_resources(state: AgentState) -> Dict:
-    """Provide immediate crisis resources for high crisis situations."""
-    if state.get("immediate_resources_needed", False):
-        crisis_message = """
-        I notice that you might be going through something really difficult right now. Your wellbeing is important, and there are people available to talk to you right away:
+    """Surfaces crisis resources when the conversation needs them.
 
-        - National Suicide Prevention Lifeline: 988 or 1-800-273-8255 (Available 24/7)
-        - Crisis Text Line: Text HOME to 741741 (Available 24/7)
-        - If you're in immediate danger, please call emergency services (911 in the US)
+    Fires on either signal, not both. The model's own read of the message is
+    one; a deterministic match on the member's words is the other, and it does
+    not depend on the model being available, willing, or right. Relying on
+    judgement alone meant a provider outage or a differently-worded message
+    could let a disclosure through in silence.
 
-        Would you like me to continue providing support alongside these resources?
-        """
+    The numbers and their hours come from services/crisis.py, which reads the
+    same file the interface renders. They used to be written inline here, as
+    United States numbers that would not have connected anyone in Bangladesh.
+    """
+    disclosed = detect_risk_disclosure(_latest_user_text(state))
+    model_flagged = state.get("immediate_resources_needed", False)
 
-        state["messages"].append(AIMessage(content=crisis_message))
+    if disclosed or model_flagged:
+        state["messages"].append(AIMessage(content=crisis_message()))
+        # Recorded so later nodes can see this turn was handled as a crisis
+        # even when the model itself did not think so.
+        state["immediate_resources_needed"] = True
 
     return state
 

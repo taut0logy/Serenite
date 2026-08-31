@@ -1,20 +1,18 @@
 "use client";
 
 import { Phone } from "lucide-react";
+import { CRISIS_RESOURCES, dialable } from "@/lib/crisis";
 
 /**
  * Shown wherever the one-to-one channel is, unconditionally and without
- * waiting on anything. The channel is a queue a volunteer picks up; these are
- * the numbers that answer now. The distinction has to be visible, not implied.
+ * waiting on anything. That channel is a queue a volunteer picks up; these are
+ * numbers that answer now. The distinction has to be visible, not implied.
  *
- * TODO(sub-project 5): these are placeholders pending the regional crisis
- * table. Verify every number is live before this ships.
+ * Rendered from lib/crisis rather than a list written here. An earlier version
+ * of this file carried its own copy and had Kaan Pete Roi's hours wrong, so
+ * someone reading it at 6 AM would have been pointed at a line that does not
+ * open until 3 PM.
  */
-const CONTACTS = [
-    { name: "Kaan Pete Roi", detail: "09612 119 911", note: "Emotional support helpline, Bangladesh" },
-    { name: "National Emergency", detail: "999", note: "Police, fire and ambulance" },
-];
-
 export function CrisisContacts() {
     return (
         <div className="rounded-xl border-2 border-destructive/30 bg-destructive/5 p-4">
@@ -25,19 +23,24 @@ export function CrisisContacts() {
                 This conversation is not an emergency service and nobody may be reading it yet.
                 These lines are answered by people who can help immediately.
             </p>
-            <ul className="mt-3 space-y-2">
-                {CONTACTS.map((contact) => (
-                    <li key={contact.name} className="flex items-start gap-2 text-sm">
+            <ul className="mt-3 space-y-3">
+                {CRISIS_RESOURCES.map((resource) => (
+                    <li key={resource.id} className="flex items-start gap-2 text-sm">
                         <Phone className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                         <span>
-                            <span className="font-medium text-foreground">{contact.name}</span>{" "}
+                            <span className="font-medium text-foreground">{resource.name}</span>{" "}
                             <a
-                                href={`tel:${contact.detail.replace(/\s/g, "")}`}
+                                href={`tel:${dialable(resource.number)}`}
                                 className="font-mono text-foreground underline underline-offset-4"
                             >
-                                {contact.detail}
+                                {resource.number}
                             </a>
-                            <span className="block text-xs text-muted-foreground">{contact.note}</span>
+                            {/* Hours sit next to every number. Only one of these
+                                is a crisis line and it closes overnight, so
+                                leaving them implied is the dangerous option. */}
+                            <span className="block text-xs text-muted-foreground">
+                                {resource.hours} &middot; {resource.purpose}
+                            </span>
                         </span>
                     </li>
                 ))}

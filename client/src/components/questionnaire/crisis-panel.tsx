@@ -3,32 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HeartHandshake, Phone } from "lucide-react";
-
-interface Resource {
-    name: string;
-    number: string;
-    hours: string;
-}
-
-// Verified against each provider's own page, 2026-08-28. Re-check before any
-// production launch - these change, and a stale number here is worse than none.
-const RESOURCES: Resource[] = [
-    {
-        name: "Kaan Pete Roi",
-        number: "09612-119911",
-        hours: "Every day, 3:00 PM - 3:00 AM",
-    },
-    {
-        name: "DGHS Health Call Centre",
-        number: "16263",
-        hours: "24/7",
-    },
-    {
-        name: "National Emergency Service",
-        number: "999",
-        hours: "24/7 - immediate danger",
-    },
-];
+import { CRISIS_RESOURCES, dialable } from "@/lib/crisis";
 
 interface CrisisPanelProps {
     onAcknowledge: () => void;
@@ -59,9 +34,9 @@ export function CrisisPanel({ onAcknowledge }: CrisisPanelProps) {
                     </p>
 
                     <div className="space-y-3">
-                        {RESOURCES.map((resource) => (
+                        {CRISIS_RESOURCES.map((resource) => (
                             <div
-                                key={resource.name}
+                                key={resource.id}
                                 className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50"
                             >
                                 <Phone className="w-4 h-4 text-primary flex-shrink-0" />
@@ -70,7 +45,7 @@ export function CrisisPanel({ onAcknowledge }: CrisisPanelProps) {
                                     <div className="text-xs text-muted-foreground">{resource.hours}</div>
                                 </div>
                                 <a
-                                    href={`tel:${resource.number.replace(/[^0-9+]/g, "")}`}
+                                    href={`tel:${dialable(resource.number)}`}
                                     className="font-mono text-sm font-semibold text-primary whitespace-nowrap"
                                 >
                                     {resource.number}

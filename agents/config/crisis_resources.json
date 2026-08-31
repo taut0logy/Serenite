@@ -1,0 +1,49 @@
+{
+  "region": "BD",
+  "verifiedOn": "2026-09-01",
+  "note": "Canonical crisis data for the whole product. agents/config/crisis_resources.json is a byte-identical copy, and tests/crisis-resources.test.ts fails if the two drift. Order shown to a member is emergency, then crisis, then health: a general health line must never sit above the suicide-prevention line, even when it is the one open at 4 AM. Re-verify every number against its own source before any production launch: a stale crisis number is worse than none.",
+  "resources": [
+    {
+      "id": "emergency-999",
+      "name": "National Emergency Service",
+      "kind": "emergency",
+      "number": "999",
+      "hours": "24 hours, every day",
+      "alwaysOpen": true,
+      "purpose": "Police, fire and ambulance. Use this if someone is in immediate danger.",
+      "source": "https://999.gov.bd/"
+    },
+    {
+      "id": "kaan-pete-roi",
+      "name": "Kaan Pete Roi",
+      "kind": "crisis",
+      "number": "09612-119911",
+      "hours": "Every day, 3:00 PM to 3:00 AM",
+      "alwaysOpen": false,
+      "purpose": "Emotional support and suicide prevention, answered by trained volunteers.",
+      "source": "https://kaanpeteroi.org/helpline-service/"
+    },
+    {
+      "id": "shastho-batayon",
+      "name": "Shastho Batayon",
+      "kind": "health",
+      "number": "16263",
+      "hours": "24 hours, every day",
+      "alwaysOpen": true,
+      "purpose": "Government health line. General medical advice, not a crisis line.",
+      "source": "https://dashboard.dghs.gov.bd/"
+    }
+  ],
+  "riskPatterns": [
+    "\\bkill(ing)? myself\\b",
+    "\\bend(ing)? my life\\b",
+    "\\bwant(ed)? to die\\b",
+    "\\bbetter off dead\\b",
+    "\\bsuicid(e|al)\\b",
+    "\\b(cutting|hurting) myself\\b",
+    "\\bself[- ]harm\\b",
+    "\\bdon'?t want to (live|be here) (anymore|any more)\\b",
+    "\\btake my own life\\b",
+    "\\bno reason to (live|go on)\\b"
+  ]
+}

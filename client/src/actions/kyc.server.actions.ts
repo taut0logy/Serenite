@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { setClaimOverride } from "@/lib/set-claim-override";
 
 /**
  * Update user's KYC verification status in database
@@ -33,6 +34,8 @@ export async function updateKycStatus(userId: string, kycVerified: boolean) {
                 kycVerified,
             },
         });
+
+        await setClaimOverride({ kycVerified });
 
         return {
             success: true,

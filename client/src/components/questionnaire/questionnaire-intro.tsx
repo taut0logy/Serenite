@@ -3,7 +3,9 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, Shield, Heart, ChevronRight, Loader2 } from "lucide-react";
-import { questionnaire } from "@/data/questionnaire";
+
+const INTRO_TITLE = "Tell Us About How You've Been Feeling";
+const INTRO_TEXT = "Help us personalize the support we offer. Questions adjust as you go, so most people finish in well under the full set — there are no right or wrong answers.";
 
 interface QuestionnaireIntroProps {
     onStart: () => void;
@@ -27,10 +29,10 @@ export function QuestionnaireIntro({
                         <Heart className="w-8 h-8 text-primary" />
                     </div>
                     <CardTitle className="text-3xl font-bold text-foreground mb-4">
-                        {questionnaire.intro.title}
+                        {INTRO_TITLE}
                     </CardTitle>
                     <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-                        {questionnaire.intro.text}
+                        {INTRO_TEXT}
                     </p>
                 </CardHeader>
 

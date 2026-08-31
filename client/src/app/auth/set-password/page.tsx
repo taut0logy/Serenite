@@ -75,8 +75,7 @@ const SetPasswordForm = () => {
                 // Generate Master Key and safe words
                 const result = await setupNewKey(data.password);
                 setSafeWords(result.safeWords);
-                // Refresh session in background — navigation happens after user confirms safe words
-                await refreshSession();
+                refreshSession(); // don't block showing the safe-phrase modal on this
                 toast.success(response.message || "Password set successfully");
             } else {
                 setErrorMsg(response.message || "Failed to set password");

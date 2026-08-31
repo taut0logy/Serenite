@@ -10,7 +10,6 @@ from config.settings import settings
 from config.limiter import limiter
 from dotenv import load_dotenv
 from api import (
-    profiling,
     chat,
     diary,
     breathing,
@@ -46,7 +45,6 @@ app.add_middleware(SlowAPIMiddleware)
 
 # Include routers with prefix
 # app.include_router(test.router, prefix=settings.API_PREFIX)
-app.include_router(profiling.router, prefix=settings.API_PREFIX)
 app.include_router(chat.router, prefix=settings.API_PREFIX)
 app.include_router(diary.router, prefix=settings.API_PREFIX)
 app.include_router(breathing.router, prefix=settings.API_PREFIX)

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import NextAuth from 'next-auth';
 import { authConfig } from '@/auth.config';
+import { CLAIM_OVERRIDE_COOKIE, decodeClaimOverride, resolveClaim, type ClaimOverridePayload } from '@/lib/claim-overrides';
 
 const { auth } = NextAuth(authConfig);
 
@@ -53,13 +54,28 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-export default auth((req) => {
+export default auth(async (req) => {
   const isAuthenticated = !!req.auth?.user;
   const user = req.auth?.user;
 
-  const isVerified = user?.email_verified === true;
-  const hasPassword = user?.hasPassword === true;
-  const questionnaireCompleted = user?.questionnaireCompleted === true;
+  // Takes precedence over the (possibly stale) JWT claims below — see lib/claim-overrides.ts
+  let override: ClaimOverridePayload | null = null;
+  const overrideToken = req.cookies.get(CLAIM_OVERRIDE_COOKIE)?.value;
+  if (overrideToken && process.env.AUTH_SECRET) {
+    override = await decodeClaimOverride(overrideToken, process.env.AUTH_SECRET);
+  }
+
+  const userId = user?.id ?? '';
+  const isVerified = user
+    ? resolveClaim('email_verified', user.email_verified === true, override, userId)
+    : false;
+  const hasPassword = user
+    ? resolveClaim('hasPassword', user.hasPassword === true, override, userId)
+    : false;
+  const questionnaireCompleted = user
+    ? resolveClaim('questionnaireCompleted', user.questionnaireCompleted === true, override, userId)
+    : false;
+
   const path = req.nextUrl.pathname;
   const isApiRoute = path.startsWith('/api');
 
@@ -72,6 +88,7 @@ export default auth((req) => {
       questionnaireCompleted,
       isVerified,
       isApiRoute,
+      hadOverride: !!override,
     });
   }
 
@@ -123,9 +140,11 @@ export default auth((req) => {
       response = NextResponse.redirect(new URL('/questionnaire', req.url));
     }
 
-  // CASE 7: Questionnaire done + on /questionnaire → dashboard
-  } else if (isAuthenticated && questionnaireCompleted && path === '/questionnaire') {
-    response = NextResponse.redirect(new URL('/dashboard', req.url));
+  // CASE 7 removed: /questionnaire used to unconditionally redirect away
+  // once completed. Now that a completed user can legitimately need to
+  // revisit it for re-assessment, the finer-grained check (completed AND
+  // not due) needs a real DB read - done page-side in questionnaire/page.tsx
+  // rather than here, since middleware only has cheap JWT claims to work with.
   }
 
   // Apply security headers to both redirects and pass-throughs

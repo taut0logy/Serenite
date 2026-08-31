@@ -9,6 +9,7 @@ import {
     sendPasswordResetEmail,
     sendOtpEmail,
 } from "@/lib/email-api";
+import { setClaimOverride } from "@/lib/set-claim-override";
 
 // Constants
 const SALT_ROUNDS = 10;
@@ -164,6 +165,10 @@ export async function verifyEmail(token: string) {
                 verificationTokenExpiry: null,
             },
         });
+
+        // Best-effort: only helps if the user already has an active session
+        // (verifying via a link opened in the same logged-in browser).
+        await setClaimOverride({ email_verified: true }).catch(() => {});
 
         return {
             success: true,
@@ -505,7 +510,7 @@ export async function verifyOtp(
             where: { userId: user.id },
         });
 
-        const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+        const completedAssessment = await prisma.assessment.findFirst({
             where: { userId: user.id, isComplete: true },
         });
 
@@ -521,7 +526,7 @@ export async function verifyOtp(
                 verified: user.verified,
                 hasPassword: !!user.hashedPassword,
                 kycVerified: user.kycVerified,
-                questionnaireCompleted: !!questionnaireResponse,
+                questionnaireCompleted: !!completedAssessment,
                 profile
             },
         };
@@ -652,7 +657,7 @@ export async function check2FARequired(
             where: { userId: user.id },
         });
 
-        const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+        const completedAssessment = await prisma.assessment.findFirst({
             where: { userId: user.id, isComplete: true },
         });
 
@@ -668,7 +673,7 @@ export async function check2FARequired(
                 verified: user.verified,
                 hasPassword: !!user.hashedPassword,
                 kycVerified: user.kycVerified,
-                questionnaireCompleted: !!questionnaireResponse,
+                questionnaireCompleted: !!completedAssessment,
                 twoFactorEnabled: user.twoFactorEnabled,
                 profile: profile
                     ? {
@@ -800,7 +805,7 @@ export async function verifyBackupCode(
             where: { userId: user.id },
         });
 
-        const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+        const completedAssessment = await prisma.assessment.findFirst({
             where: { userId: user.id, isComplete: true },
         });
 
@@ -816,7 +821,7 @@ export async function verifyBackupCode(
                 verified: user.verified,
                 hasPassword: !!user.hashedPassword,
                 kycVerified: user.kycVerified,
-                questionnaireCompleted: !!questionnaireResponse,
+                questionnaireCompleted: !!completedAssessment,
                 twoFactorEnabled: user.twoFactorEnabled,
                 profile: profile
             },
@@ -1006,8 +1011,7 @@ export async function verifySession(token: string) {
                 user: {
                     include: {
                         profile: true,
-                        mentalHealthProfile: true,
-                        questionnaireResponses: {
+                        assessments: {
                             where: { isComplete: true },
                             take: 1,
                         },
@@ -1052,8 +1056,6 @@ export async function verifySession(token: string) {
             };
         }
 
-        // console.log("User Mental Health Profile:", session.user.mentalHealthProfile);
-
         return {
             valid: true,
             user: {
@@ -1065,7 +1067,7 @@ export async function verifySession(token: string) {
                 profile: session.user.profile,
                 twoFactorEnabled: session.user.twoFactorEnabled,
                 hasPassword: session.user.hashedPassword ? true : false,
-                questionnaireCompleted: !!(session.user.mentalHealthProfile)
+                questionnaireCompleted: session.user.assessments.length > 0
             },
         };
     } catch (error) {
@@ -1200,6 +1202,8 @@ export async function setPassword(
             },
         });
 
+        await setClaimOverride({ hasPassword: true });
+
         return {
             success: true,
             message: "Password set successfully",
@@ -1266,7 +1270,7 @@ export async function socialAuth(
                 user: {
                     include: {
                         profile: true,
-                        questionnaireResponses: { where: { isComplete: true }, take: 1 },
+                        assessments: { where: { isComplete: true }, take: 1 },
                     },
                 },
             },
@@ -1294,7 +1298,7 @@ export async function socialAuth(
                     verified: user.verified,
                     hasPassword: !!user.hashedPassword,
                     kycVerified: user.kycVerified,
-                    questionnaireCompleted: user.questionnaireResponses.length > 0,
+                    questionnaireCompleted: user.assessments.length > 0,
                     twoFactorEnabled: user.twoFactorEnabled,
                     profile: { ...user.profile, avatarUrl: user.profile?.avatarUrl || avatarUrl },
                 },
@@ -1306,7 +1310,7 @@ export async function socialAuth(
             where: { email },
             include: {
                 profile: true,
-                questionnaireResponses: { where: { isComplete: true }, take: 1 },
+                assessments: { where: { isComplete: true }, take: 1 },
             },
         });
 
@@ -1331,7 +1335,7 @@ export async function socialAuth(
                     verified: existingUser.verified,
                     hasPassword: !!existingUser.hashedPassword,
                     kycVerified: existingUser.kycVerified,
-                    questionnaireCompleted: existingUser.questionnaireResponses.length > 0,
+                    questionnaireCompleted: existingUser.assessments.length > 0,
                     twoFactorEnabled: existingUser.twoFactorEnabled,
                     profile: { ...existingUser.profile, avatarUrl: existingUser.profile?.avatarUrl || avatarUrl },
                 },
@@ -1353,7 +1357,7 @@ export async function socialAuth(
             },
             include: {
                 profile: true,
-                questionnaireResponses: { where: { isComplete: true }, take: 1 },
+                assessments: { where: { isComplete: true }, take: 1 },
             },
         });
 
@@ -1628,13 +1632,13 @@ export async function changePasswordWithReencryption(
                 const saltBuffer = Buffer.from(newSalt, "base64");
 
                 // Update the latest incomplete questionnaire response
-                const latestResponse = await tx.questionnaireResponse.findFirst({
+                const latestResponse = await tx.assessment.findFirst({
                     where: { userId, isComplete: false },
                     orderBy: { createdAt: 'desc' },
                 });
 
                 if (latestResponse) {
-                    await tx.questionnaireResponse.update({
+                    await tx.assessment.update({
                         where: { id: latestResponse.id },
                         data: {
                             encryptedData: encryptedBuffer,

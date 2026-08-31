@@ -4,3 +4,7 @@ export { QuestionnaireSlide } from './questionnaire-slide';
 export { QuestionnaireCompletion } from './questionnaire-completion';
 export { QuestionnaireReview } from './questionnaire-review';
 export { QuestionnairePasswordPrompt } from './questionnaire-password-prompt';
+export { TraumaGatePrompt } from './trauma-gate-prompt';
+export { PrioritiesRanking } from './priorities-ranking';
+export { CrisisPanel } from './crisis-panel';
+export { AssessmentResults } from './assessment-results';

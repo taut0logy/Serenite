@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useSession, signOut } from "next-auth/react";
 import { changePasswordWithReencryption, changePassword } from "@/actions/auth.actions";
-import { getEncryptedResponses } from "@/actions/questionnaire.actions";
+import { getEncryptedResponses } from "@/actions/assessment.actions";
 import {
     Card,
     CardContent,

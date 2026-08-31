@@ -82,19 +82,6 @@ function calculateSeverity(profile: typeof PROFILE_ARCHETYPES[0]): SeverityLevel
 }
 
 /**
- * Check if a user should be flagged for clinical review
- */
-function requiresClinicalReview(profile: typeof PROFILE_ARCHETYPES[0]): boolean {
-  // Flag if any single cluster is very high, or if trauma is elevated
-  return (
-    profile.distress >= 0.85 ||
-    profile.traumaStress >= 0.8 ||
-    profile.dailyFunctioning >= 0.85 ||
-    (profile.distress >= 0.7 && profile.traumaStress >= 0.6)
-  );
-}
-
-/**
  * Add some randomness to a profile to make it more diverse
  */
 function addVariation(profile: typeof PROFILE_ARCHETYPES[0]): typeof PROFILE_ARCHETYPES[0] {
@@ -106,27 +93,6 @@ function addVariation(profile: typeof PROFILE_ARCHETYPES[0]): typeof PROFILE_ARC
     cognitivePatterns: Math.max(0, Math.min(1, profile.cognitivePatterns + variation())),
     dailyFunctioning: Math.max(0, Math.min(1, profile.dailyFunctioning + variation())),
   };
-}
-
-/**
- * Calculate cosine similarity between user profile and group target
- */
-function cosineSimilarity(userProfile: typeof PROFILE_ARCHETYPES[0], groupTarget: typeof PROFILE_ARCHETYPES[0]): number {
-  const userVec = [userProfile.distress, userProfile.fearAvoidance, userProfile.traumaStress, userProfile.cognitivePatterns, userProfile.dailyFunctioning];
-  const groupVec = [groupTarget.distress, groupTarget.fearAvoidance, groupTarget.traumaStress, groupTarget.cognitivePatterns, groupTarget.dailyFunctioning];
-  
-  let dotProduct = 0;
-  let userMag = 0;
-  let groupMag = 0;
-  
-  for (let i = 0; i < 5; i++) {
-    dotProduct += userVec[i] * groupVec[i];
-    userMag += userVec[i] * userVec[i];
-    groupMag += groupVec[i] * groupVec[i];
-  }
-  
-  const magnitude = Math.sqrt(userMag) * Math.sqrt(groupMag);
-  return magnitude === 0 ? 0 : dotProduct / magnitude;
 }
 
 async function main() {
@@ -157,8 +123,7 @@ async function main() {
     const baseProfile = PROFILE_ARCHETYPES[i % PROFILE_ARCHETYPES.length];
     const profile = addVariation(baseProfile);
     const severity = calculateSeverity(profile);
-    const needsReview = requiresClinicalReview(profile);
-    
+
     // Generate user data
     const firstName = FIRST_NAMES[i % FIRST_NAMES.length];
     const lastName = LAST_NAMES[Math.floor(i / FIRST_NAMES.length) % LAST_NAMES.length];
@@ -178,56 +143,25 @@ async function main() {
               lastName,
             }
           },
-          questionnaireResponses: {
-            create: {
-              isComplete: true,
-              // No encrypted data - just mark as complete
-            }
-          },
-          mentalHealthProfile: {
-            create: {
-              distress: profile.distress,
-              fearAvoidance: profile.fearAvoidance,
-              traumaStress: profile.traumaStress,
-              cognitivePatterns: profile.cognitivePatterns,
-              dailyFunctioning: profile.dailyFunctioning,
-              overallSeverity: severity,
-              requiresClinicalReview: needsReview,
-            }
-          }
+          // Assessment seeding removed: the old 5-cluster profile this
+          // script generated no longer matches the schema (see the
+          // 2026-08-28 assessment redesign). Group matching is being
+          // rebuilt separately, so users are seeded without a profile for
+          // now; group assignment below is capacity-only, not score-based.
         }
       });
       
       createdUsers.push(user.id);
-      
-      // Find best matching groups (up to 2 per user for distribution)
-      const groupScores = groups
-        .map(g => ({
-          group: g,
-          score: cosineSimilarity(profile, {
-            distress: g.targetDistress,
-            fearAvoidance: g.targetFearAvoidance,
-            traumaStress: g.targetTraumaStress,
-            cognitivePatterns: g.targetCognitivePatterns,
-            dailyFunctioning: g.targetDailyFunctioning,
-          }),
-          currentMembers: groupMemberCounts.get(g.id) || 0,
-          maxMembers: g.maxMembers,
-        }))
-        .filter(gs => gs.currentMembers < gs.maxMembers) // Only groups with space
-        .filter(gs => {
-          // Check severity range
-          const severityOrder = ['MINIMAL', 'MILD', 'MODERATE', 'SEVERE'];
-          const userSeverityIndex = severityOrder.indexOf(severity);
-          const minIndex = severityOrder.indexOf(gs.group.minSeverity);
-          const maxIndex = severityOrder.indexOf(gs.group.maxSeverity);
-          return userSeverityIndex >= minIndex && userSeverityIndex <= maxIndex;
-        })
-        .sort((a, b) => b.score - a.score);
-      
-      // Join top 1-2 groups (randomly decide)
+
+      // Capacity-only assignment: no per-user profile to score against
+      // until the matching rebuild lands (see comment above).
+      const availableGroups = groups
+        .map(g => ({ group: g, currentMembers: groupMemberCounts.get(g.id) || 0 }))
+        .filter(gs => gs.currentMembers < gs.group.maxMembers)
+        .sort(() => Math.random() - 0.5);
+
       const numGroupsToJoin = Math.random() > 0.6 ? 2 : 1;
-      const groupsToJoin = groupScores.slice(0, numGroupsToJoin);
+      const groupsToJoin = availableGroups.slice(0, numGroupsToJoin);
       
       for (const gs of groupsToJoin) {
         await prisma.supportGroup.update({

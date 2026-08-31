@@ -175,27 +175,27 @@ export async function deriveSafeWordKey(rawBytes: Uint8Array): Promise<CryptoKey
 // ── Data Encryption with MK ───────────────────────────────────────────────────
 
 /**
- * Encrypt questionnaire responses with the Master Key.
+ * Encrypt a JSON-serializable value with the Master Key.
  * Much faster than the old approach — no PBKDF2 per call.
  */
 export async function encryptWithMK(
-  responses: Record<string, number>,
+  value: unknown,
   mk: CryptoKey
 ): Promise<{ encrypted: ArrayBuffer; iv: Uint8Array }> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = new TextEncoder().encode(JSON.stringify(responses));
+  const data = new TextEncoder().encode(JSON.stringify(value));
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, mk, data);
   return { encrypted, iv };
 }
 
 /**
- * Decrypt questionnaire responses with the Master Key.
+ * Decrypt a value previously encrypted with encryptWithMK.
  */
-export async function decryptWithMK(
+export async function decryptWithMK<T = unknown>(
   encrypted: ArrayBuffer,
   iv: Uint8Array,
   mk: CryptoKey
-): Promise<Record<string, number>> {
+): Promise<T> {
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
     mk,

@@ -168,8 +168,7 @@ export default function KYCVerificationPage() {
                         );
 
                         if (kycUpdateResult.success) {
-                            // Update the session to reflect the new KYC status
-                            await refreshSession();
+                            refreshSession(); // don't block navigation on this
 
                             toast.success("Identity verification successful!");
 

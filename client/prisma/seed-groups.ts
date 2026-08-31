@@ -11,13 +11,10 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log('Starting database seeding...');
 
-  // Create diverse support groups with target cluster scores
-  // Aligned with HiTOP transdiagnostic framework:
-  //   distress = depression (0.6) + low_self_esteem (0.4)
-  //   fearAvoidance = anxiety (0.5) + social_anxiety (0.5)
-  //   traumaStress = ptsd (1.0)
-  //   cognitivePatterns = cognitive_distortion (1.0)
-  //   dailyFunctioning = sleep_disruption (0.5) + functional_impairment (0.5)
+  // Create diverse support groups with theta seed profiles, in the same
+  // 6-domain space as Assessment (depression, anxiety, trauma, sleep,
+  // social, selfWorth). These are provisional hand-authored seeds, not
+  // measured - see docs/superpowers/specs for how they were derived.
 
   const supportGroups = [
     // === DEPRESSION & MOOD DISORDERS ===
@@ -28,8 +25,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["depression", "low-mood", "emotional-distress"],
       // High distress (depression), moderate cognitive (rumination common)
-      targetDistress: 0.85, targetFearAvoidance: 0.3, targetTraumaStress: 0.2,
-      targetCognitivePatterns: 0.55, targetDailyFunctioning: 0.5,
+      targetThetaDepression: 1.4, targetThetaAnxiety: -0.8, targetThetaTrauma: -1.2,
+      targetThetaSleep: 0, targetThetaSocial: -0.8, targetThetaSelfWorth: 0.2,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.SEVERE,
       maxMembers: 12, meetingDayOfWeek: Weekday.MONDAY, meetingTime: "18:00",
       nextMeetingDate: getNextMeetingDate(Weekday.MONDAY, "18:00"),
@@ -40,8 +37,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["depression-recovery", "hope", "rebuilding"],
       // Moderate-high distress (recovering), higher functioning focus
-      targetDistress: 0.65, targetFearAvoidance: 0.25, targetTraumaStress: 0.15,
-      targetCognitivePatterns: 0.45, targetDailyFunctioning: 0.6,
+      targetThetaDepression: 0.6, targetThetaAnxiety: -1, targetThetaTrauma: -1.4,
+      targetThetaSleep: 0.4, targetThetaSocial: -1, targetThetaSelfWorth: -0.2,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.THURSDAY, meetingTime: "19:00",
       nextMeetingDate: getNextMeetingDate(Weekday.THURSDAY, "19:00"),
@@ -55,8 +52,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["anxiety", "panic", "relaxation"],
       // Very high fearAvoidance (GAD/panic), moderate cognitive (worry)
-      targetDistress: 0.4, targetFearAvoidance: 0.9, targetTraumaStress: 0.15,
-      targetCognitivePatterns: 0.55, targetDailyFunctioning: 0.35,
+      targetThetaDepression: -0.4, targetThetaAnxiety: 1.6, targetThetaTrauma: -1.4,
+      targetThetaSleep: -0.6, targetThetaSocial: 1.6, targetThetaSelfWorth: 0.2,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.SEVERE,
       maxMembers: 12, meetingDayOfWeek: Weekday.TUESDAY, meetingTime: "19:00",
       nextMeetingDate: getNextMeetingDate(Weekday.TUESDAY, "19:00"),
@@ -67,8 +64,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["social-anxiety", "connection", "confidence"],
       // Very high fearAvoidance (social focus), elevated distress (shame/embarrassment)
-      targetDistress: 0.45, targetFearAvoidance: 0.92, targetTraumaStress: 0.1,
-      targetCognitivePatterns: 0.5, targetDailyFunctioning: 0.4,
+      targetThetaDepression: -0.2, targetThetaAnxiety: 1.68, targetThetaTrauma: -1.6,
+      targetThetaSleep: -0.4, targetThetaSocial: 1.68, targetThetaSelfWorth: 0,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.THURSDAY, meetingTime: "20:00",
       nextMeetingDate: getNextMeetingDate(Weekday.THURSDAY, "20:00"),
@@ -79,8 +76,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["anxiety", "cognitive", "ocd", "worry"],
       // High fearAvoidance + high cognitive (OCD/worry comorbidity)
-      targetDistress: 0.45, targetFearAvoidance: 0.8, targetTraumaStress: 0.15,
-      targetCognitivePatterns: 0.8, targetDailyFunctioning: 0.35,
+      targetThetaDepression: -0.2, targetThetaAnxiety: 1.2, targetThetaTrauma: -1.4,
+      targetThetaSleep: -0.6, targetThetaSocial: 1.2, targetThetaSelfWorth: 1.2,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.MONDAY, meetingTime: "20:00",
       nextMeetingDate: getNextMeetingDate(Weekday.MONDAY, "20:00"),
@@ -94,8 +91,8 @@ async function main() {
       type: SupportGroupType.BIWEEKLY,
       tags: ["trauma", "ptsd", "healing", "recovery"],
       // Very high trauma, elevated distress and fearAvoidance (common comorbidities)
-      targetDistress: 0.55, targetFearAvoidance: 0.5, targetTraumaStress: 0.92,
-      targetCognitivePatterns: 0.45, targetDailyFunctioning: 0.55,
+      targetThetaDepression: 0.2, targetThetaAnxiety: 0, targetThetaTrauma: 1.68,
+      targetThetaSleep: 0.2, targetThetaSocial: 0, targetThetaSelfWorth: -0.2,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.SEVERE,
       maxMembers: 10, meetingDayOfWeek: Weekday.WEDNESDAY, meetingTime: "17:30",
       nextMeetingDate: getNextMeetingDate(Weekday.WEDNESDAY, "17:30"),
@@ -106,8 +103,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["complex-trauma", "childhood", "healing"],
       // Very high trauma, higher distress (C-PTSD often has depression), elevated functioning
-      targetDistress: 0.7, targetFearAvoidance: 0.55, targetTraumaStress: 0.88,
-      targetCognitivePatterns: 0.55, targetDailyFunctioning: 0.65,
+      targetThetaDepression: 0.8, targetThetaAnxiety: 0.2, targetThetaTrauma: 1.52,
+      targetThetaSleep: 0.6, targetThetaSocial: 0.2, targetThetaSelfWorth: 0.2,
       minSeverity: SeverityLevel.MODERATE, maxSeverity: SeverityLevel.SEVERE,
       maxMembers: 8, meetingDayOfWeek: Weekday.SATURDAY, meetingTime: "14:00",
       nextMeetingDate: getNextMeetingDate(Weekday.SATURDAY, "14:00"),
@@ -121,8 +118,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["cognitive", "thinking-patterns", "cbt", "mindfulness"],
       // Very high cognitive, moderate distress (rumination → mood)
-      targetDistress: 0.5, targetFearAvoidance: 0.4, targetTraumaStress: 0.15,
-      targetCognitivePatterns: 0.88, targetDailyFunctioning: 0.35,
+      targetThetaDepression: 0, targetThetaAnxiety: -0.4, targetThetaTrauma: -1.4,
+      targetThetaSleep: -0.6, targetThetaSocial: -0.4, targetThetaSelfWorth: 1.52,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.FRIDAY, meetingTime: "18:30",
       nextMeetingDate: getNextMeetingDate(Weekday.FRIDAY, "18:30"),
@@ -133,8 +130,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["perfectionism", "self-criticism", "self-compassion"],
       // High cognitive + elevated distress (perfectionism often includes low self-esteem → distress)
-      targetDistress: 0.6, targetFearAvoidance: 0.5, targetTraumaStress: 0.1,
-      targetCognitivePatterns: 0.85, targetDailyFunctioning: 0.4,
+      targetThetaDepression: 0.4, targetThetaAnxiety: 0, targetThetaTrauma: -1.6,
+      targetThetaSleep: -0.4, targetThetaSocial: 0, targetThetaSelfWorth: 1.4,
       minSeverity: SeverityLevel.MINIMAL, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.WEDNESDAY, meetingTime: "19:00",
       nextMeetingDate: getNextMeetingDate(Weekday.WEDNESDAY, "19:00"),
@@ -148,8 +145,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["sleep", "routine", "functioning", "balance"],
       // Very high functioning issues, moderate distress
-      targetDistress: 0.45, targetFearAvoidance: 0.25, targetTraumaStress: 0.15,
-      targetCognitivePatterns: 0.35, targetDailyFunctioning: 0.88,
+      targetThetaDepression: -0.2, targetThetaAnxiety: -1, targetThetaTrauma: -1.4,
+      targetThetaSleep: 1.52, targetThetaSocial: -1, targetThetaSelfWorth: -0.6,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.SATURDAY, meetingTime: "10:00",
       nextMeetingDate: getNextMeetingDate(Weekday.SATURDAY, "10:00"),
@@ -160,8 +157,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["insomnia", "sleep", "rest", "wellness"],
       // Very high functioning (sleep focus), lower other clusters
-      targetDistress: 0.35, targetFearAvoidance: 0.3, targetTraumaStress: 0.1,
-      targetCognitivePatterns: 0.4, targetDailyFunctioning: 0.92,
+      targetThetaDepression: -0.6, targetThetaAnxiety: -0.8, targetThetaTrauma: -1.6,
+      targetThetaSleep: 1.68, targetThetaSocial: -0.8, targetThetaSelfWorth: -0.4,
       minSeverity: SeverityLevel.MINIMAL, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.TUESDAY, meetingTime: "21:00",
       nextMeetingDate: getNextMeetingDate(Weekday.TUESDAY, "21:00"),
@@ -174,8 +171,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["depression", "functioning", "holistic"],
       // High distress + high functioning (depression often impairs daily life)
-      targetDistress: 0.75, targetFearAvoidance: 0.35, targetTraumaStress: 0.25,
-      targetCognitivePatterns: 0.45, targetDailyFunctioning: 0.75,
+      targetThetaDepression: 1, targetThetaAnxiety: -0.6, targetThetaTrauma: -1,
+      targetThetaSleep: 1, targetThetaSocial: -0.6, targetThetaSelfWorth: -0.2,
       minSeverity: SeverityLevel.MODERATE, maxSeverity: SeverityLevel.SEVERE,
       maxMembers: 12, meetingDayOfWeek: Weekday.SUNDAY, meetingTime: "16:00",
       nextMeetingDate: getNextMeetingDate(Weekday.SUNDAY, "16:00"),
@@ -186,8 +183,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["intensive", "crisis", "professional", "recovery"],
       // High across all clusters (severe/complex presentations)
-      targetDistress: 0.82, targetFearAvoidance: 0.65, targetTraumaStress: 0.6,
-      targetCognitivePatterns: 0.65, targetDailyFunctioning: 0.75,
+      targetThetaDepression: 1.28, targetThetaAnxiety: 0.6, targetThetaTrauma: 0.4,
+      targetThetaSleep: 1, targetThetaSocial: 0.6, targetThetaSelfWorth: 0.6,
       minSeverity: SeverityLevel.MODERATE, maxSeverity: SeverityLevel.SEVERE,
       maxMembers: 8, meetingDayOfWeek: Weekday.FRIDAY, meetingTime: "17:00",
       nextMeetingDate: getNextMeetingDate(Weekday.FRIDAY, "17:00"),
@@ -200,8 +197,8 @@ async function main() {
       type: SupportGroupType.BIWEEKLY,
       tags: ["wellness", "prevention", "self-care", "resilience"],
       // Low across all clusters (minimal/mild severity)
-      targetDistress: 0.28, targetFearAvoidance: 0.28, targetTraumaStress: 0.1,
-      targetCognitivePatterns: 0.25, targetDailyFunctioning: 0.25,
+      targetThetaDepression: -0.88, targetThetaAnxiety: -0.88, targetThetaTrauma: -1.6,
+      targetThetaSleep: -1, targetThetaSocial: -0.88, targetThetaSelfWorth: -1,
       minSeverity: SeverityLevel.MINIMAL, maxSeverity: SeverityLevel.MILD,
       maxMembers: 15, meetingDayOfWeek: Weekday.WEDNESDAY, meetingTime: "19:30",
       nextMeetingDate: getNextMeetingDate(Weekday.WEDNESDAY, "19:30"),
@@ -212,8 +209,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["mindfulness", "meditation", "stress-reduction"],
       // Low-moderate, slight cognitive focus (mindfulness addresses thoughts)
-      targetDistress: 0.35, targetFearAvoidance: 0.35, targetTraumaStress: 0.15,
-      targetCognitivePatterns: 0.45, targetDailyFunctioning: 0.3,
+      targetThetaDepression: -0.6, targetThetaAnxiety: -0.6, targetThetaTrauma: -1.4,
+      targetThetaSleep: -0.8, targetThetaSocial: -0.6, targetThetaSelfWorth: -0.2,
       minSeverity: SeverityLevel.MINIMAL, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 15, meetingDayOfWeek: Weekday.SUNDAY, meetingTime: "09:00",
       nextMeetingDate: getNextMeetingDate(Weekday.SUNDAY, "09:00"),
@@ -226,8 +223,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["transitions", "change", "adjustment", "support"],
       // Moderate across distress/fear/functioning (adjustment-related)
-      targetDistress: 0.5, targetFearAvoidance: 0.5, targetTraumaStress: 0.2,
-      targetCognitivePatterns: 0.45, targetDailyFunctioning: 0.55,
+      targetThetaDepression: 0, targetThetaAnxiety: 0, targetThetaTrauma: -1.2,
+      targetThetaSleep: 0.2, targetThetaSocial: 0, targetThetaSelfWorth: -0.2,
       minSeverity: SeverityLevel.MINIMAL, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.MONDAY, meetingTime: "19:30",
       nextMeetingDate: getNextMeetingDate(Weekday.MONDAY, "19:30"),
@@ -238,8 +235,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["burnout", "work-stress", "boundaries", "recovery"],
       // High functioning (exhaustion), elevated distress (burnout often includes depression)
-      targetDistress: 0.65, targetFearAvoidance: 0.35, targetTraumaStress: 0.15,
-      targetCognitivePatterns: 0.5, targetDailyFunctioning: 0.8,
+      targetThetaDepression: 0.6, targetThetaAnxiety: -0.6, targetThetaTrauma: -1.4,
+      targetThetaSleep: 1.2, targetThetaSocial: -0.6, targetThetaSelfWorth: 0,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.THURSDAY, meetingTime: "18:00",
       nextMeetingDate: getNextMeetingDate(Weekday.THURSDAY, "18:00"),
@@ -252,8 +249,8 @@ async function main() {
       type: SupportGroupType.BIWEEKLY,
       tags: ["grief", "loss", "bereavement", "healing"],
       // High distress (grief depression), elevated trauma (loss as stressor), functioning impaired
-      targetDistress: 0.75, targetFearAvoidance: 0.25, targetTraumaStress: 0.65,
-      targetCognitivePatterns: 0.4, targetDailyFunctioning: 0.6,
+      targetThetaDepression: 1, targetThetaAnxiety: -1, targetThetaTrauma: 0.6,
+      targetThetaSleep: 0.4, targetThetaSocial: -1, targetThetaSelfWorth: -0.4,
       minSeverity: SeverityLevel.MILD, maxSeverity: SeverityLevel.SEVERE,
       maxMembers: 10, meetingDayOfWeek: Weekday.SATURDAY, meetingTime: "11:00",
       nextMeetingDate: getNextMeetingDate(Weekday.SATURDAY, "11:00"),
@@ -266,8 +263,8 @@ async function main() {
       type: SupportGroupType.WEEKLY,
       tags: ["young-adults", "peer-support", "college-age"],
       // Moderate across distress/fear (developmental challenges), moderate functioning
-      targetDistress: 0.5, targetFearAvoidance: 0.55, targetTraumaStress: 0.2,
-      targetCognitivePatterns: 0.5, targetDailyFunctioning: 0.5,
+      targetThetaDepression: 0, targetThetaAnxiety: 0.2, targetThetaTrauma: -1.2,
+      targetThetaSleep: 0, targetThetaSocial: 0.2, targetThetaSelfWorth: 0,
       minSeverity: SeverityLevel.MINIMAL, maxSeverity: SeverityLevel.MODERATE,
       maxMembers: 12, meetingDayOfWeek: Weekday.FRIDAY, meetingTime: "20:00",
       nextMeetingDate: getNextMeetingDate(Weekday.FRIDAY, "20:00"),
@@ -286,7 +283,7 @@ async function main() {
       data: group,
     });
     console.log(`✓ Created: ${created.name} (ID: ${created.shareableId})`);
-    console.log(`   Clusters: distress=${group.targetDistress}, fear=${group.targetFearAvoidance}, trauma=${group.targetTraumaStress}`);
+    console.log(`   Theta seed: dep=${group.targetThetaDepression}, anx=${group.targetThetaAnxiety}, trauma=${group.targetThetaTrauma}`);
   }
 
   console.log('\n✅ Database seeding completed successfully!');

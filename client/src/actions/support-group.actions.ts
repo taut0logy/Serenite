@@ -2,7 +2,71 @@
 
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
-import { computeCosineSimilarity } from "@/lib/profiling";
+import { computeCentroid, computeMatchScore, blendGroupProfile } from "@/lib/assessment/group-matching";
+
+// Fixed dimension order used everywhere a theta vector is built or compared.
+type ThetaFields = {
+  thetaDepression: number | null;
+  thetaAnxiety: number | null;
+  thetaTrauma: number | null;
+  thetaSleep: number | null;
+  thetaSocial: number | null;
+  thetaSelfWorth: number | null;
+};
+
+// Missing (null) domains default to 0 - theta's population mean, the same
+// value EAP itself returns for "no information" (see grm.ts's estimateTheta).
+function thetaVector(a: ThetaFields): number[] {
+  return [
+    a.thetaDepression ?? 0,
+    a.thetaAnxiety ?? 0,
+    a.thetaTrauma ?? 0,
+    a.thetaSleep ?? 0,
+    a.thetaSocial ?? 0,
+    a.thetaSelfWorth ?? 0,
+  ];
+}
+
+type GroupSeedFields = {
+  targetThetaDepression: number;
+  targetThetaAnxiety: number;
+  targetThetaTrauma: number;
+  targetThetaSleep: number;
+  targetThetaSocial: number;
+  targetThetaSelfWorth: number;
+};
+
+function groupSeedVector(g: GroupSeedFields): number[] {
+  return [
+    g.targetThetaDepression,
+    g.targetThetaAnxiety,
+    g.targetThetaTrauma,
+    g.targetThetaSleep,
+    g.targetThetaSocial,
+    g.targetThetaSelfWorth,
+  ];
+}
+
+type ScorableGroup = GroupSeedFields & {
+  _count: { members: number };
+  members: { assessments: ThetaFields[] }[];
+};
+
+// Shared by the recommendation engine, the browse-all list, and the public
+// group-info lookup, so "match score" means the same thing everywhere a
+// user sees one.
+function scoreGroupForUser(userVector: number[] | null, group: ScorableGroup): number {
+  if (!userVector) return 0;
+
+  const memberVectors = group.members
+    .map((m) => m.assessments[0])
+    .filter((a): a is ThetaFields => !!a)
+    .map(thetaVector);
+  const centroid = computeCentroid(memberVectors);
+  const groupProfile = blendGroupProfile(groupSeedVector(group), centroid, group._count.members);
+
+  return computeMatchScore(userVector, groupProfile);
+}
 
 export interface SupportGroupRecommendation {
   id: string;
@@ -28,9 +92,10 @@ async function generateRecommendations(
   userId: string,
   slotsAvailable: number
 ): Promise<{ groupId: string; matchScore: number }[]> {
-  // Get user's mental health profile
-  const userProfile = await prisma.mentalHealthProfile.findUnique({
-    where: { userId },
+  // Latest completed assessment - severity band and theta vector both come from this
+  const userProfile = await prisma.assessment.findFirst({
+    where: { userId, isComplete: true },
+    orderBy: { completedAt: "desc" },
   });
 
   // Get user's current group memberships
@@ -41,13 +106,23 @@ async function generateRecommendations(
 
   const currentGroupIds = currentMemberships.map((g) => g.id);
 
-  // Get all groups the user is not already a member of
+  // Get all groups the user is not already a member of, with enough of
+  // each member's profile to build a centroid
   const groups = await prisma.supportGroup.findMany({
     where: {
       id: { notIn: currentGroupIds },
     },
     include: {
       _count: { select: { members: true } },
+      members: {
+        select: {
+          assessments: {
+            where: { isComplete: true },
+            orderBy: { completedAt: "desc" },
+            take: 1,
+          },
+        },
+      },
     },
   });
 
@@ -55,45 +130,25 @@ async function generateRecommendations(
   const severityOrder = ['MINIMAL', 'MILD', 'MODERATE', 'SEVERE'] as const;
   const getSeverityIndex = (s: string) => severityOrder.indexOf(s as typeof severityOrder[number]);
 
-  // Filter groups with vacancy, severity match, and compute scores
+  const userVector = userProfile ? thetaVector(userProfile) : null;
+
+  // Filter groups with vacancy and severity match, then score by distance
+  // from the user's theta to the group's profile (seed blended toward its
+  // members' actual centroid - see group-matching.ts)
   const recommendations = groups
     .filter((g) => {
-      // Check vacancy
       if (g._count.members >= g.maxMembers) return false;
-      
-      // Check severity range if user has profile
+
       if (userProfile) {
         const userSeverityIndex = getSeverityIndex(userProfile.overallSeverity);
         const minIndex = getSeverityIndex(g.minSeverity);
         const maxIndex = getSeverityIndex(g.maxSeverity);
         if (userSeverityIndex < minIndex || userSeverityIndex > maxIndex) return false;
       }
-      
+
       return true;
     })
-    .map((g) => {
-      let matchScore = 0;
-
-      if (userProfile) {
-        const userClusters = [
-          userProfile.distress,
-          userProfile.fearAvoidance,
-          userProfile.traumaStress,
-          userProfile.cognitivePatterns,
-          userProfile.dailyFunctioning,
-        ];
-        const groupClusters = [
-          g.targetDistress,
-          g.targetFearAvoidance,
-          g.targetTraumaStress,
-          g.targetCognitivePatterns,
-          g.targetDailyFunctioning,
-        ];
-        matchScore = computeCosineSimilarity(userClusters, groupClusters);
-      }
-
-      return { groupId: g.id, matchScore };
-    })
+    .map((g) => ({ groupId: g.id, matchScore: scoreGroupForUser(userVector, g) }))
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, slotsAvailable);
 
@@ -268,9 +323,25 @@ export async function getAllSupportGroups(): Promise<{
       return { success: false, error: "User not authenticated" };
     }
 
+    const userId = session.user.id;
+    const userProfile = await prisma.assessment.findFirst({
+      where: { userId, isComplete: true },
+      orderBy: { completedAt: "desc" },
+    });
+    const userVector = userProfile ? thetaVector(userProfile) : null;
+
     const allGroups = await prisma.supportGroup.findMany({
       include: {
-        members: { select: { id: true } },
+        members: {
+          select: {
+            id: true,
+            assessments: {
+              where: { isComplete: true },
+              orderBy: { completedAt: "desc" },
+              take: 1,
+            },
+          },
+        },
         _count: { select: { members: true } },
       },
       orderBy: { name: "asc" },
@@ -289,8 +360,8 @@ export async function getAllSupportGroups(): Promise<{
       memberCount: group._count.members,
       maxMembers: group.maxMembers,
       vacancy: group.maxMembers - group._count.members,
-      matchScore: 0,
-      isMember: group.members.some((member) => member.id === session.user.id),
+      matchScore: scoreGroupForUser(userVector, group),
+      isMember: group.members.some((member) => member.id === userId),
     }));
 
     return { success: true, groups };
@@ -493,13 +564,31 @@ export async function getGroupByShareableId(shareableId: string): Promise<{
     const group = await prisma.supportGroup.findUnique({
       where: { shareableId },
       include: {
-        members: { select: { id: true } },
+        members: {
+          select: {
+            id: true,
+            assessments: {
+              where: { isComplete: true },
+              orderBy: { completedAt: "desc" },
+              take: 1,
+            },
+          },
+        },
         _count: { select: { members: true } },
       },
     });
 
     if (!group) {
       return { success: false, error: "Group not found" };
+    }
+
+    let userVector: number[] | null = null;
+    if (userId) {
+      const userProfile = await prisma.assessment.findFirst({
+        where: { userId, isComplete: true },
+        orderBy: { completedAt: "desc" },
+      });
+      userVector = userProfile ? thetaVector(userProfile) : null;
     }
 
     return {
@@ -517,7 +606,7 @@ export async function getGroupByShareableId(shareableId: string): Promise<{
         memberCount: group._count.members,
         maxMembers: group.maxMembers,
         vacancy: group.maxMembers - group._count.members,
-        matchScore: 0,
+        matchScore: scoreGroupForUser(userVector, group),
         isMember: userId ? group.members.some((m) => m.id === userId) : false,
       },
     };

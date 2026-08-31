@@ -118,8 +118,7 @@ const ProfilePageContent = ({ tab }: { tab: string }) => {
                     result?.message || "Profile updated successfully"
                 );
 
-                // Refresh the session to get the updated user data
-                await refreshSession();
+                refreshSession(); // don't block router.refresh() on this
                 router.refresh();
             } else {
                 toast.error("Failed to update profile");

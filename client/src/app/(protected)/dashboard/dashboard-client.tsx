@@ -39,6 +39,7 @@ import {
 } from "@/actions/support-group.actions";
 import { formatNextMeeting } from "@/lib/support-group-utils";
 import { TestMeetingCard } from "@/components/dashboard/test-meeting-card";
+import { ReassessmentBanner } from "@/components/dashboard/reassessment-banner";
 
 interface DashboardClientProps {
     userGroups: SupportGroupRecommendation[];
@@ -212,6 +213,8 @@ export function DashboardClient({
 
             <div className="container mx-auto max-w-5xl px-4 py-10 space-y-10">
 
+                <ReassessmentBanner />
+
                 {/* Hero Header */}
                 <motion.header
                     initial={{ opacity: 0, y: -30 }}
@@ -232,6 +235,12 @@ export function DashboardClient({
                             : "Stay connected with your support communities"
                         }
                     </p>
+                    <button
+                        onClick={() => router.push("/questionnaire/history")}
+                        className="text-sm text-muted-foreground hover:text-primary underline underline-offset-4"
+                    >
+                        View check-in history
+                    </button>
                 </motion.header>
 
                 {/* Upcoming Meetings - Prominent Card */}

@@ -32,8 +32,7 @@ model User {
   trustedDevices   TrustedDevice[]
 
   profile                Profile?
-  questionnaireResponses QuestionnaireResponse[]
-  mentalHealthProfile    MentalHealthProfile?
+  assessments            Assessment[]
   encryptionKey          UserEncryptionKey?
   sessions               Session[]
   socialAccounts         SocialAccount[]
@@ -70,42 +69,67 @@ model Profile {
   updatedAt DateTime  @updatedAt
 }
 
-model QuestionnaireResponse {
-  id            String   @id @default(uuid())
-  userId        String
-  encryptedData Bytes? // AES-GCM encrypted JSON of responses
-  iv            Bytes? // Initialization vector for AES-GCM
-  salt          Bytes? // PBKDF2 salt for key derivation
-  isComplete    Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+model Assessment {
+  id             String @id @default(uuid())
+  userId         String
+  parameterSetId String
+
+  // Raw responses, encrypted client-side. Server cannot read these.
+  encryptedData Bytes?
+  iv            Bytes?
+  salt          Bytes?
+
+  // Matching vector - theta and standard error per domain
+  thetaDepression Float?
+  seDepression    Float?
+  thetaAnxiety    Float?
+  seAnxiety       Float?
+  thetaTrauma     Float?
+  seTrauma        Float?
+  thetaSleep      Float?
+  seSleep         Float?
+  thetaSocial     Float?
+  seSocial        Float?
+  thetaSelfWorth  Float?
+  seSelfWorth     Float?
+
+  // Anchor scores - published cutoffs (PHQ-9, GAD-7, PC-PTSD-5)
+  phq9Raw         Int?
+  gad7Raw         Int?
+  pcptsd5Raw      Int?
+  traumaExposed   Boolean       @default(false)
+  overallSeverity SeverityLevel @default(MINIMAL)
+
+  priorities     String[]
+  riskFlag       Boolean @default(false)
+  riskEscalated  Boolean @default(false)
+  qualityFlagged Boolean @default(false)
+
+  isComplete  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([createdAt])
+  @@index([userId, isComplete])
+  @@index([overallSeverity])
 }
 
-model MentalHealthProfile {
-  id     String @id @default(uuid())
-  userId String @unique
+// Opt-in only. respondentKey is a random per-session id, not derivable from
+// userId, so this stays disconnected from end-to-end-encrypted user data.
+model CalibrationResponse {
+  id             String   @id @default(uuid())
+  respondentKey  String
+  itemId         String
+  value          Int
+  position       Int
+  responseTimeMs Int?
+  parameterSetId String
+  createdAt      DateTime @default(now())
 
-  // Cluster scores (plaintext, used for matching) - 0.0 to 1.0
-  distress          Float @default(0)
-  fearAvoidance     Float @default(0)
-  traumaStress      Float @default(0)
-  cognitivePatterns Float @default(0)
-  dailyFunctioning  Float @default(0)
-
-  // Computed severity
-  overallSeverity        SeverityLevel @default(MINIMAL)
-  requiresClinicalReview Boolean       @default(false)
-
-  timestamp DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([overallSeverity])
+  @@index([itemId])
+  @@index([respondentKey])
 }
 
 enum SeverityLevel {
@@ -196,12 +220,15 @@ model SupportGroup {
   type SupportGroupType @default(WEEKLY)
   tags String[] // Keep for display/search
 
-  // Target cluster profile (what kind of users this group is for) - 0.0 to 1.0
-  targetDistress          Float @default(0)
-  targetFearAvoidance     Float @default(0)
-  targetTraumaStress      Float @default(0)
-  targetCognitivePatterns Float @default(0)
-  targetDailyFunctioning  Float @default(0)
+  // Seed theta profile (what kind of users this group is for), same 6-domain
+  // space as Assessment. Blended toward the member centroid at match time;
+  // this is what a group with few or no members is scored against.
+  targetThetaDepression Float @default(0)
+  targetThetaAnxiety    Float @default(0)
+  targetThetaTrauma     Float @default(0)
+  targetThetaSleep      Float @default(0)
+  targetThetaSocial     Float @default(0)
+  targetThetaSelfWorth  Float @default(0)
 
   // Severity range this group is suitable for
   minSeverity SeverityLevel @default(MILD)

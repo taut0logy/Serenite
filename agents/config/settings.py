@@ -38,7 +38,20 @@ class Settings(BaseSettings):
             return v.replace("postgres://", "postgresql://", 1)
         return v
 
-    GROQ_API_KEY: str
+    # Language models. Any OpenAI-compatible provider: set the base URL and
+    # key and everything in services/llm.py follows. Defaults to OpenRouter.
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""
+
+    # Per-task overrides. Empty means the default in services/llm.py, which is
+    # chosen for cost against the work the task actually does.
+    LLM_CLASSIFY_MODEL: str = ""
+    LLM_CONVERSE_MODEL: str = ""
+    LLM_COMPOSE_MODEL: str = ""
+
+    # Retained for the Gemini vision path (drawing analysis) and any provider
+    # still configured directly. Optional now that llm.py owns model access.
+    GROQ_API_KEY: str = ""
     TAVILY_API_KEY: str
 
     # Cohere API for embeddings (multilingual support for Bangla)

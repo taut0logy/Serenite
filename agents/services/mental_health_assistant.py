@@ -3,7 +3,6 @@ from typing import List, Annotated, TypedDict, Union, Dict, Optional, Literal, A
 from typing_extensions import NotRequired
 
 # LangGraph and LangChain components
-from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import (
     HumanMessage,
@@ -25,6 +24,7 @@ from langchain_community.utilities import WikipediaAPIWrapper, ArxivAPIWrapper
 from langchain_tavily import TavilySearch
 from langgraph.graph.message import add_messages
 from config.settings import settings
+from services.llm import Task, chat_model
 from utils.logger import logger
 from services.embeddings_adapter import get_embeddings
 
@@ -55,12 +55,13 @@ class AgentState(TypedDict):
     combined_emotion_profile: NotRequired[Dict[str, Any]]
 
 
-# API Keys
-groq_api_key = settings.GROQ_API_KEY
 tavily_api_key = settings.TAVILY_API_KEY
 
-# Set up LLM
-llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile", temperature=0.7)
+# The assistant holds a conversation, chooses tools and is asked for
+# structured output, so it runs on the CONVERSE model rather than the small
+# one used for labelling. Which model that is, and which provider serves it,
+# is decided in services/llm.py and nowhere else.
+llm = chat_model(Task.CONVERSE)
 
 # Set up embeddings (uses Cohere API in production, HuggingFace in dev)
 embeddings = get_embeddings()

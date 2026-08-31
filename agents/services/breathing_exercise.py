@@ -1,20 +1,12 @@
 from typing import Dict, List, TypedDict, Optional, Any
 from pydantic import BaseModel
 import json
-from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from utils.logger import logger
-from config.settings import settings
+from services.llm import Task, chat_model
 
-# Initialize Groq chat model
-groq_api_key = settings.GROQ_API_KEY
-if not groq_api_key:
-    logger.error("GROQ_API_KEY not found in environment variables")
-    raise ValueError("GROQ_API_KEY not found in environment variables")
-
-model = ChatGroq(
-    groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile", temperature=0.7
-)
+# Short, warm generation on whichever provider services/llm.py is pointed at.
+model = chat_model(Task.COMPOSE)
 
 
 # Define state types

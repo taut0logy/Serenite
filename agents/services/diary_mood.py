@@ -13,20 +13,10 @@ the vector, which put back most of what encrypting the entry was for.
 import logging
 import re
 
-from langchain_groq import ChatGroq
-
-from config.settings import settings
 from services.diary_index import MoodResult
+from services.llm import Task, complete
 
 logger = logging.getLogger(__name__)
-
-# Low temperature on purpose. This is a labelling task, and the same entry
-# should not be cheerful on Tuesday and bleak on Wednesday.
-_model = ChatGroq(
-    groq_api_key=settings.GROQ_API_KEY,
-    model_name="llama-3.3-70b-versatile",
-    temperature=0.2,
-)
 
 # Closed set. A free-text mood cannot be charted over time, and the trend view
 # is the reason the label exists at all.
@@ -76,9 +66,9 @@ def analyze_mood(content: str) -> MoodResult:
     if not text:
         return NEUTRAL
 
-    try:
-        reply = _model.invoke(_PROMPT + text[:4000])
-        return _parse(getattr(reply, "content", "") or "")
-    except Exception as error:
-        logger.error("mood analysis failed: %s", error)
-        return NEUTRAL
+    # Labelling, so it runs on the classify model at temperature zero: the
+    # same entry should not read cheerful on Tuesday and bleak on Wednesday.
+    # `complete` returns "" rather than raising, and an unparseable reply is
+    # already the neutral fallback, so there is nothing to catch here.
+    reply = complete(_PROMPT + text[:4000], task=Task.CLASSIFY, max_tokens=32)
+    return _parse(reply)

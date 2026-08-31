@@ -7,6 +7,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from utils.logger import logger
 from config.settings import settings
+from services.llm import describe as describe_llm
 from config.limiter import limiter
 from dotenv import load_dotenv
 from api import (
@@ -82,6 +83,11 @@ async def health_check():
         "status": "healthy",
         "version": settings.APP_VERSION,
         "timestamp": datetime.now().isoformat(),
+        # Which provider and models this process will actually call. Reports
+        # whether a key is configured, never the key itself. Worth surfacing:
+        # a missing key degrades quietly by design, and this is where that
+        # shows up instead of as an unexplained absence of mood labels.
+        "llm": describe_llm(),
     }
 
 

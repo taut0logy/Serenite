@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { nextOccurrence, type Cadence, type Weekday } from "@/lib/meeting/recurrence";
 import { auth } from "@/auth";
 
 // Constants for meeting timing
@@ -532,12 +533,45 @@ export async function endMeeting(meetingId: string): Promise<{
       return { success: true }; // Already ended
     }
 
-    await prisma.meeting.update({
-      where: { id: meetingId },
-      data: {
-        status: "ENDED",
-        endTime: new Date(),
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.meeting.update({
+        where: { id: meetingId },
+        data: { status: "ENDED", endTime: new Date() },
+      });
+
+      if (!meeting.supportGroupId) return;
+
+      // Roll the group's slot forward. Without this a group holds exactly one
+      // session ever: getMeetingForGroup materialises an occurrence from
+      // nextMeetingDate and nothing ever advanced it.
+      const group = await tx.supportGroup.findUnique({
+        where: { id: meeting.supportGroupId },
+        select: {
+          type: true,
+          meetingDayOfWeek: true,
+          meetingDayOfMonth: true,
+          meetingTime: true,
+        },
+      });
+      if (!group) return;
+
+      const next = nextOccurrence(
+        {
+          dayOfWeek: group.meetingDayOfWeek as Weekday | null,
+          time: group.meetingTime,
+          cadence: group.type as Cadence,
+          dayOfMonth: group.meetingDayOfMonth,
+        },
+        // Advanced from the session's own start, not from now, so a session
+        // that overran does not push the whole series later.
+        meeting.startTime
+      );
+      if (!next) return;
+
+      await tx.supportGroup.update({
+        where: { id: meeting.supportGroupId },
+        data: { nextMeetingDate: next },
+      });
     });
 
     return { success: true };

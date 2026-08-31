@@ -1,361 +1,155 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/providers/auth-provider";
-import { StreamCall, StreamTheme } from "@stream-io/video-react-sdk";
-import MeetingSetup from "@/components/meeting/meeting-setup";
-import MeetingRoom from "@/components/meeting/meeting-room";
-import WaitingRoom from "@/components/meeting/waiting-room";
-import MeetingCountdown from "@/components/meeting/meeting-countdown";
-import { useGetCallById } from "@/hooks/useGetCallById";
-import Loader from "@/components/meeting/loader";
-import { Suspense } from "react";
-import { useParams } from "next/navigation";
-import {
-    canJoinMeeting,
-    startMeeting,
-    endMeeting,
-    joinMeetingAsParticipant,
-    type MeetingDetails,
-    type JoinCheckResult,
-} from "@/actions/meeting.actions";
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Clock, AlertTriangle, Home, RefreshCw } from "lucide-react";
+import { LiveRoom } from "@/components/meeting-room/live-room";
+import { requestJoinToken } from "@/actions/meeting-token.actions";
+import { canJoinMeeting, type JoinCheckResult } from "@/actions/meeting.actions";
 
-export default function MeetingPage() {
-    const params = useParams();
-    const id = params?.id as string;
+/**
+ * Gate, then lobby, then the live call.
+ *
+ * The join token is minted here and written to sessionStorage before the room
+ * mounts, because the connection hook reads it from there on connect and on
+ * every reload afterwards. Nothing about admission is decided in the browser;
+ * this only carries the answer the server already gave.
+ */
 
+type Phase = "checking" | "blocked" | "lobby" | "joining" | "live";
+
+function joinStorageKey(meetingId: string) {
+    return `meet:join:${meetingId}`;
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
     return (
-        <Suspense fallback={<Loader />}>
-            <MeetingPageContent id={id as string} />
-        </Suspense>
+        <div className="flex min-h-[60vh] items-center justify-center px-4">
+            <Card className="w-full max-w-md">
+                <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+                    {children}
+                </CardContent>
+            </Card>
+        </div>
     );
 }
 
-const MeetingPageContent = ({ id }: { id: string }) => {
+export default function MeetingPage() {
+    const params = useParams();
     const router = useRouter();
-    const { isLoading, user } = useAuth();
-    const { call, isCallLoading } = useGetCallById(id);
-    const [isSetupComplete, setIsSetupComplete] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const meetingId = params?.id as string;
 
-    // Meeting access state
-    const [joinCheck, setJoinCheck] = useState<JoinCheckResult | null>(null);
-    const [isCheckingAccess, setIsCheckingAccess] = useState(true);
-    const [meetingDetails, setMeetingDetails] = useState<MeetingDetails | null>(null);
-    const [showWaitingRoom, setShowWaitingRoom] = useState(false);
-    const [meetingEnded, setMeetingEnded] = useState(false);
+    const [phase, setPhase] = useState<Phase>("checking");
+    const [check, setCheck] = useState<JoinCheckResult | null>(null);
+    const [message, setMessage] = useState<string | null>(null);
 
-    // Per-device call enforcement
-    const meetingSessionIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const result = await canJoinMeeting(meetingId);
+            if (cancelled) return;
 
-    // Check if user can join meeting
-    const checkMeetingAccess = useCallback(async () => {
-        if (!id) return;
-
-        setIsCheckingAccess(true);
-        try {
-            const result = await canJoinMeeting(id);
-
-            if (!result.success) {
-                setError(result.error || "Failed to check meeting access");
+            if (!result.success || !result.result) {
+                setMessage(result.error ?? "This session could not be opened.");
+                setPhase("blocked");
                 return;
             }
 
-            setJoinCheck(result.result || null);
-
-            if (result.result?.canJoin) {
-                setMeetingDetails(result.result.meeting || null);
-                setShowWaitingRoom(result.result.waitingRoom);
-
-                // If meeting is starting (not waiting room), mark as running and join as participant
-                if (!result.result.waitingRoom && result.result.meeting?.status === "PENDING") {
-                    await startMeeting(id);
-                }
-
-                // Join as participant (DB record)
-                await joinMeetingAsParticipant(id);
-
-                // Per-device call enforcement: check with the server whether
-                // another device from this account is already in the call.
-                const joinRes = await fetch(`/api/meetings/${id}/join`, {
-                    method: 'POST',
-                    credentials: 'include',
-                });
-                if (joinRes.status === 409) {
-                    setError('Your account is already in this call on another device.');
-                    setIsCheckingAccess(false);
-                    return;
-                }
-                if (joinRes.ok) {
-                    const joinData = await joinRes.json();
-                    meetingSessionIdRef.current = joinData.meetingSessionId ?? null;
-                }
-            } else {
-                // Handle various rejection reasons
-                switch (result.result?.reason) {
-                    case "too_early":
-                        break; // Will show time until can join
-                    case "too_late":
-                    case "meeting_ended":
-                        setMeetingEnded(true);
-                        break;
-                    case "not_member":
-                        setError("You are not a member of this support group");
-                        break;
-                }
-            }
-        } catch (err) {
-            console.error("Error checking meeting access:", err);
-            setError("Failed to check meeting access");
-        } finally {
-            setIsCheckingAccess(false);
-        }
-    }, [id]);
-
-    useEffect(() => {
-        if (user && id) {
-            checkMeetingAccess();
-        }
-    }, [user, id, checkMeetingAccess]);
-
-    // Handle waiting room transition to meeting
-    const handleMeetingStart = useCallback(async () => {
-        setShowWaitingRoom(false);
-        // Start the meeting in the database
-        if (id) {
-            await startMeeting(id);
-        }
-    }, [id]);
-
-    // Heartbeat: keep the MeetingSession alive every 30 seconds while in the live call.
-    // If this stops (network failure, tab close, etc.) the join endpoint will
-    // consider the device inactive after SESSION_TIMEOUT_MS (~5 min).
-    useEffect(() => {
-        if (!isSetupComplete || !id) return;
-
-        const sendHeartbeat = async () => {
-            try {
-                await fetch(`/api/meetings/${id}/heartbeat`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        meetingSessionId: meetingSessionIdRef.current,
-                    }),
-                });
-            } catch {
-                // Non-critical — heartbeat failures are expected on flaky networks.
-                // The 5-minute inactivity window gives plenty of grace time.
-            }
+            setCheck(result.result);
+            setPhase(result.result.canJoin ? "lobby" : "blocked");
+        })();
+        return () => {
+            cancelled = true;
         };
+    }, [meetingId]);
 
-        sendHeartbeat(); // Immediate on setup complete
-        const interval = setInterval(sendHeartbeat, 30_000); // Every 30s
-        return () => clearInterval(interval);
-    }, [isSetupComplete, id]);
+    const join = useCallback(async () => {
+        setPhase("joining");
+        setMessage(null);
 
-    // Handle meeting end
-    const handleMeetingEnd = useCallback(async () => {
-        setMeetingEnded(true);
-        if (id) {
-            await endMeeting(id);
+        // The mint is the real gate. canJoinMeeting above only decides what to
+        // show; this decides whether anyone gets in, and re-checks membership,
+        // risk status, the facilitator requirement and overlap at this moment
+        // rather than when the page loaded.
+        const result = await requestJoinToken(meetingId);
+        if (!result.success) {
+            setMessage(result.error);
+            setPhase("blocked");
+            return;
         }
-    }, [id]);
 
-    // Error handling for GetStream call
-    useEffect(() => {
-        if (!isCallLoading && !call && joinCheck?.canJoin) {
-            setError(
-                "Meeting not found or you don't have access to this meeting"
-            );
-        }
-    }, [call, isCallLoading, joinCheck]);
+        sessionStorage.setItem(
+            joinStorageKey(meetingId),
+            JSON.stringify({ token: result.grant.token, wsUrl: result.grant.sfuUrl })
+        );
+        setPhase("live");
+    }, [meetingId]);
 
-    // Loading state
-    if (isLoading || isCheckingAccess) return <Loader />;
-
-    // Not authenticated
-    if (!user) {
+    if (phase === "checking") {
         return (
-            <div className="flex items-center justify-center min-h-[calc(100vh-65px)] bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-                <Card className="max-w-md">
-                    <CardContent className="p-8 text-center space-y-4">
-                        <AlertTriangle className="w-12 h-12 mx-auto text-amber-500" />
-                        <p className="text-lg text-slate-600 dark:text-slate-400">
-                            Please sign in to join the meeting
-                        </p>
-                        <Button onClick={() => router.push("/login")}>
-                            Sign In
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
+            <Centered>
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Checking the session…</p>
+            </Centered>
         );
     }
 
-    // Meeting has ended
-    if (meetingEnded) {
+    if (phase === "blocked") {
         return (
-            <div className="flex items-center justify-center min-h-[calc(100vh-65px)] bg-gradient-to-br from-slate-900 to-slate-800">
-                <Card className="max-w-md border-0 bg-slate-800/50">
-                    <CardContent className="p-8 text-center space-y-4">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-blue-600/20 flex items-center justify-center">
-                            <Clock className="w-8 h-8 text-blue-400" />
-                        </div>
-                        <h2 className="text-xl font-semibold text-white">
-                            Meeting Has Ended
-                        </h2>
-                        <p className="text-slate-400">
-                            Thank you for participating. The meeting has concluded.
-                        </p>
-                        <Button
-                            onClick={() => router.push("/dashboard")}
-                            className="bg-blue-600 hover:bg-blue-700"
-                        >
-                            <Home className="w-4 h-4 mr-2" />
-                            Return to Dashboard
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
+            <Centered>
+                <p className="text-sm text-foreground">
+                    {message ?? reasonMessage(check)}
+                </p>
+                <Button variant="outline" onClick={() => router.push("/dashboard")}>
+                    Back to dashboard
+                </Button>
+            </Centered>
         );
     }
 
-    // Too early to join
-    if (joinCheck && !joinCheck.canJoin && joinCheck.reason === "too_early") {
-        const waitTime = joinCheck.meetingStartsIn || 0;
-        const minutes = Math.ceil(waitTime / 60000);
-
+    if (phase === "lobby" || phase === "joining") {
         return (
-            <div className="flex items-center justify-center min-h-[calc(100vh-65px)] bg-gradient-to-br from-slate-900 to-slate-800">
-                <Card className="max-w-md border-0 bg-slate-800/50">
-                    <CardContent className="p-8 text-center space-y-4">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-amber-600/20 flex items-center justify-center">
-                            <Clock className="w-8 h-8 text-amber-400" />
-                        </div>
-                        <h2 className="text-xl font-semibold text-white">
-                            Meeting Not Yet Open
-                        </h2>
-                        <p className="text-slate-400">
-                            The waiting room opens {minutes} minute{minutes !== 1 ? "s" : ""} before the meeting starts.
-                        </p>
-                        <p className="text-sm text-slate-500">
-                            Please come back closer to the scheduled time.
-                        </p>
-                        <div className="flex gap-3 justify-center">
-                            <Button
-                                variant="outline"
-                                onClick={() => router.push("/dashboard")}
-                                className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                            >
-                                <Home className="w-4 h-4 mr-2" />
-                                Dashboard
-                            </Button>
-                            <Button
-                                onClick={checkMeetingAccess}
-                                className="bg-blue-600 hover:bg-blue-700"
-                            >
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Check Again
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    // Error state
-    if (error || !joinCheck?.canJoin) {
-        return (
-            <div className="flex items-center justify-center min-h-[calc(100vh-65px)] bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-                <Card className="max-w-md border-0 bg-slate-800/50">
-                    <CardContent className="p-8 text-center space-y-4">
-                        <AlertTriangle className="w-12 h-12 mx-auto text-red-500" />
-                        <p className="text-lg text-white">
-                            {error || joinCheck?.reason || "Cannot join meeting"}
-                        </p>
-                        <p className="text-sm text-slate-400">
-                            Please check your meeting link and try again
-                        </p>
-                        <div className="flex gap-3 justify-center">
-                            <Button
-                                variant="outline"
-                                onClick={() => router.push("/dashboard")}
-                                className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                            >
-                                Dashboard
-                            </Button>
-                            <Button
-                                onClick={() => window.location.reload()}
-                                className="bg-blue-600 hover:bg-blue-700"
-                            >
-                                Retry
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    // Waiting room
-    if (showWaitingRoom && meetingDetails) {
-        return (
-            <WaitingRoom
-                meeting={meetingDetails}
-                meetingStartsIn={joinCheck.meetingStartsIn || 0}
-                onMeetingStart={handleMeetingStart}
-            />
-        );
-    }
-
-    // Loading GetStream call
-    if (isCallLoading) return <Loader />;
-
-    // GetStream call not found
-    if (!call) {
-        return (
-            <div className="flex items-center justify-center min-h-[calc(100vh-65px)] bg-gradient-to-br from-slate-900 to-slate-800">
-                <Card className="max-w-md border-0 bg-slate-800/50">
-                    <CardContent className="p-8 text-center space-y-4">
-                        <AlertTriangle className="w-12 h-12 mx-auto text-amber-500" />
-                        <p className="text-lg text-white">
-                            Setting up meeting room...
-                        </p>
-                        <Loader />
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    // Main meeting UI
-    return (
-        <main className="w-full overflow-hidden relative">
-            {/* Countdown timer overlay */}
-            {meetingDetails && (
-                <MeetingCountdown
-                    meetingId={id}
-                    endTime={meetingDetails.endTime}
-                    onMeetingEnd={handleMeetingEnd}
-                />
-            )}
-
-            <StreamCall call={call}>
-                <StreamTheme className="h-full">
-                    {!isSetupComplete ? (
-                        <MeetingSetup setIsSetupComplete={setIsSetupComplete} />
+            <Centered>
+                <div>
+                    <h1 className="text-lg font-semibold">
+                        {check?.meeting?.groupName ?? "Support session"}
+                    </h1>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        {check?.waitingRoom
+                            ? "The session has not started yet. You will wait until the facilitator lets you in."
+                            : "Your facilitator will admit you once you join."}
+                    </p>
+                </div>
+                <Button onClick={join} disabled={phase === "joining"} className="w-full">
+                    {phase === "joining" ? (
+                        <>
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            Joining…
+                        </>
                     ) : (
-                        <MeetingRoom id={id} />
+                        "Join session"
                     )}
-                </StreamTheme>
-            </StreamCall>
-        </main>
-    );
-};
+                </Button>
+            </Centered>
+        );
+    }
 
+    return <LiveRoom meetingId={meetingId} onLeave={() => router.push("/dashboard")} />;
+}
+
+function reasonMessage(check: JoinCheckResult | null): string {
+    switch (check?.reason) {
+        case "not_member":
+            return "This session is for members of that group.";
+        case "meeting_ended":
+            return "This session has ended.";
+        case "too_early":
+            return "This session has not opened yet.";
+        case "too_late":
+            return "This session is over.";
+        default:
+            return "This session cannot be opened right now.";
+    }
+}

@@ -53,7 +53,6 @@ describe("shouldStop", () => {
         targetSe: 0.32,
         minAdaptiveItems: 4,
         maxAdaptiveItems: 8,
-        routeOut: null,
     };
 
     it("does not stop before the minimum item count", () => {

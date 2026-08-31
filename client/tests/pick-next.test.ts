@@ -37,7 +37,6 @@ const POLICY: DomainPolicy = {
     targetSe: 0.32,
     minAdaptiveItems: 4,
     maxAdaptiveItems: 8,
-    routeOut: null,
 };
 
 describe("pickNext", () => {

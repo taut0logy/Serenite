@@ -24,6 +24,25 @@ services:
             retries: 3
             start_period: 40s
 
+    meet:
+        image: taut0logy/serenite_meet:latest
+        container_name: serenite_meet
+        build: ./meet
+        # Host networking on purpose. mediasoup announces its RTC ports
+        # directly to browsers, and Docker's userland proxy rewrites the
+        # source address of UDP it forwards, which breaks ICE. Published
+        # port ranges are not an adequate substitute here.
+        network_mode: host
+        env_file:
+            - .env.meet
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 20s
+
     client:
         image: taut0logy/serenite_client:latest
         container_name: serenite_client
@@ -34,6 +53,7 @@ services:
             - .env.client
         depends_on:
             - agents
+            - meet
         restart: unless-stopped
 
 volumes:

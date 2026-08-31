@@ -3,7 +3,6 @@
 import { ReactNode } from "react";
 //import { useAuth } from "@/providers/auth-provider";
 //import { LoadingScreen } from "@/components/ui/loading-screen";
-import StreamVideoProvider from "@/providers/stream-video-provider";
 
 interface ProtectedLayoutProps {
     children: ReactNode;
@@ -29,7 +28,7 @@ export default function ProtectedLayout({ children }: ProtectedLayoutProps) {
     // (redirect to login is handled by the useAuth hook)
     return (
         <div className="mx-auto px-auto">
-            <StreamVideoProvider>{children}</StreamVideoProvider>
+            {children}
         </div>
     );
 }
